@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Architecture Blueprints for AI Coding Agents | Awesome Blueprints</title>
+<title>Architecture Blueprints and skills for AI Coding Agents | Awesome Blueprints</title>
 <meta name="description" content="Free, open-source architecture blueprints and skills for AI coding agents — Claude Code, Cursor, Copilot and the rest. Copy one file and your agent builds the feature the same correct way every time." />
 <link rel="canonical" href="https://awesomeblueprints.com/" />
 <meta property="og:type" content="website" />
@@ -1350,46 +1350,10 @@
     </div>
   </section>
 
-  <!-- ============= THE PROBLEM ============= -->
-  <section class="section" id="why" style="padding-top:40px">
-    <div class="container">
-      <div class="section-label"><span class="num">02 /</span> Why</div>
-      <h2 class="section-headline">
-        Ask an agent to “add payments” and the result <em>looks finished.</em>
-      </h2>
-      <p class="section-intro">
-        Then you notice it unlocks the product the second the browser hits the success page — anyone who guesses the URL gets your product for free. Nothing in the code looks wrong, so nobody catches it until a customer does. A blueprint is the <strong>missing half of that prompt</strong>: it tells the agent what correct looks like before it writes a line.
-      </p>
-
-      <div class="compare">
-        <div class="compare-head">Without a blueprint</div>
-        <div class="compare-head right">With one</div>
-
-        <div class="compare-cell">A new architecture every session, invented on the spot</div>
-        <div class="compare-cell right">One architecture, written down and reused</div>
-
-        <div class="compare-cell">It works from training data that can be two years out of date</div>
-        <div class="compare-cell right">It checks the current versions and APIs before writing a line</div>
-
-        <div class="compare-cell">Six questions before it starts — or none at all</div>
-        <div class="compare-cell right">It proposes one stack and asks you to confirm, once</div>
-
-        <div class="compare-cell">It rebuilds code you already have</div>
-        <div class="compare-cell right">It reads your project first and builds only what is missing</div>
-
-        <div class="compare-cell">“Done” means the code ran without an error</div>
-        <div class="compare-cell right">“Done” is a checklist you can check yourself, item by item</div>
-
-        <div class="compare-cell">You find the ways it breaks in production</div>
-        <div class="compare-cell right">The ways it breaks are listed up front, with symptom, cause and fix</div>
-      </div>
-    </div>
-  </section>
-
   <!-- ============= USE ONE ============= -->
   <section class="section" id="use" style="padding-top:40px">
     <div class="container">
-      <div class="section-label"><span class="num">03 /</span> Get it &amp; use it</div>
+      <div class="section-label"><span class="num">02 /</span> Get it &amp; use it</div>
       <h2 class="section-headline">
         Put them in the project. <em>Then let the agent pick.</em>
       </h2>
@@ -1434,6 +1398,42 @@ using, and why.</pre>
           <li><span class="sn">04</span><span><strong>Build in the given order.</strong> §7 sequences by risk — whatever is most likely to be wrong is built and tested first.</span></li>
           <li><span class="sn">05</span><span><strong>Check against §11.</strong> Every item is observable: run it, query it, or grep for it. If you cannot demonstrate an item, the feature is not done.</span></li>
         </ol>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============= THE PROBLEM ============= -->
+  <section class="section" id="why" style="padding-top:40px">
+    <div class="container">
+      <div class="section-label"><span class="num">03 /</span> Why</div>
+      <h2 class="section-headline">
+        Ask an agent to “add payments” and the result <em>looks finished.</em>
+      </h2>
+      <p class="section-intro">
+        Then you notice it unlocks the product the second the browser hits the success page — anyone who guesses the URL gets your product for free. Nothing in the code looks wrong, so nobody catches it until a customer does. A blueprint is the <strong>missing half of that prompt</strong>: it tells the agent what correct looks like before it writes a line.
+      </p>
+
+      <div class="compare">
+        <div class="compare-head">Without a blueprint</div>
+        <div class="compare-head right">With one</div>
+
+        <div class="compare-cell">A new architecture every session, invented on the spot</div>
+        <div class="compare-cell right">One architecture, written down and reused</div>
+
+        <div class="compare-cell">It works from training data that can be two years out of date</div>
+        <div class="compare-cell right">It checks the current versions and APIs before writing a line</div>
+
+        <div class="compare-cell">Six questions before it starts — or none at all</div>
+        <div class="compare-cell right">It proposes one stack and asks you to confirm, once</div>
+
+        <div class="compare-cell">It rebuilds code you already have</div>
+        <div class="compare-cell right">It reads your project first and builds only what is missing</div>
+
+        <div class="compare-cell">“Done” means the code ran without an error</div>
+        <div class="compare-cell right">“Done” is a checklist you can check yourself, item by item</div>
+
+        <div class="compare-cell">You find the ways it breaks in production</div>
+        <div class="compare-cell right">The ways it breaks are listed up front, with symptom, cause and fix</div>
       </div>
     </div>
   </section>
