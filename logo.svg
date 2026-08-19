@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 254 160" width="254" height="160" role="img" aria-label="Awesome Blueprints">
+  <g fill="#f5f5f5" fill-rule="evenodd">
+    <!-- A — italic, leaning into the B -->
+    <g transform="translate(36 0) skewX(-13)">
+      <path d="M0 142 L46 18 H74 L120 142 H88 L79 116 H41 L32 142 Z
+               M50 90 H70 L60 56 Z"/>
+    </g>
+    <!-- B -->
+    <path d="M140 18 h48 c26 0 42 13 42 33 0 12 -6 21 -17 26 12 4 21 14 21 28 0 22 -18 37 -47 37 h-47 Z
+             M172 44 v24 h16 c9 0 15 -5 15 -12 0 -7 -6 -12 -15 -12 Z
+             M172 92 v26 h18 c10 0 16 -5 16 -13 0 -8 -6 -13 -16 -13 Z"/>
+  </g>
+</svg>
