@@ -15,6 +15,16 @@
 <meta name="twitter:title" content="Architecture Blueprints for AI Coding Agents" />
 <meta name="twitter:description" content="Nine free blueprints and one skill for the things AI coding agents get wrong. MIT, any language, no setup." />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='-16 -30 286 220'%3E%3Crect x='-16' y='-30' width='286' height='220' fill='%23080808'/%3E%3Cg fill='%23f5f5f5' fill-rule='evenodd'%3E%3Cg transform='translate(36 0) skewX(-13)'%3E%3Cpath d='M0 142 L46 18 H74 L120 142 H88 L79 116 H41 L32 142 Z M50 90 H70 L60 56 Z'/%3E%3C/g%3E%3Cpath d='M140 18 h48 c26 0 42 13 42 33 0 12 -6 21 -17 26 12 4 21 14 21 28 0 22 -18 37 -47 37 h-47 Z M172 44 v24 h16 c9 0 15 -5 15 -12 0 -7 -6 -12 -15 -12 Z M172 92 v26 h18 c10 0 16 -5 16 -13 0 -8 -6 -13 -16 -13 Z'/%3E%3C/g%3E%3C/svg%3E">
+<meta name="theme-color" content="#080808" id="theme-color" />
+<script>
+  // Applied before first paint so there is no flash. Dark is the default.
+  (function () {
+    var t;
+    try { t = localStorage.getItem('ab-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -29,9 +39,46 @@
     --line-strong: rgba(255,255,255,0.18);
     --accent: #a3e635;          /* sharp lime — signals, live state */
     --accent-blue: #2a78d6;     /* blueprint blue — glow, structure */
+    --accent-rgb: 163,230,53;
+    --accent-blue-rgb: 42,120,214;
+    --on-accent: #0a0a0a;       /* text sitting on top of --accent */
+    --surface: #0a0a0a;         /* raised panels: chat, terminal */
+    --surface-2: #101010;       /* hover / chip surfaces */
+    --surface-glass: rgba(10,10,10,0.55);
+    --surface-ghost: rgba(16,16,16,0.92);
+    --nav-bg: rgba(8,8,8,0.6);
+    --grid-line: rgba(255,255,255,0.025);
+    --noise-opacity: 0.5;
+    --noise-blend: overlay;
+    --glow-opacity: 1;
     --display: "DM Sans", system-ui, sans-serif;
     --body: "Inter", system-ui, sans-serif;
     --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  /* ---------- Light theme ---------- */
+  :root[data-theme="light"] {
+    --bg: #fbfbf9;
+    --bg-2: #f2f2ee;
+    --fg: #0c0c0c;
+    --muted: #5f5f5c;
+    --muted-2: #96968f;
+    --line: rgba(0,0,0,0.10);
+    --line-strong: rgba(0,0,0,0.22);
+    --accent: #4d7c0f;
+    --accent-blue: #1d5fb0;
+    --accent-rgb: 77,124,15;
+    --accent-blue-rgb: 29,95,176;
+    --on-accent: #ffffff;
+    --surface: #ffffff;
+    --surface-2: #f4f4f0;
+    --surface-glass: rgba(255,255,255,0.7);
+    --surface-ghost: rgba(255,255,255,0.94);
+    --nav-bg: rgba(251,251,249,0.72);
+    --grid-line: rgba(0,0,0,0.05);
+    --noise-opacity: 0;
+    --noise-blend: normal;
+    --glow-opacity: 0.55;
   }
 
   *, *::before, *::after { box-sizing: border-box; }
@@ -52,8 +99,8 @@
     position: fixed; inset: 0;
     pointer-events: none;
     background-image:
-      linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+      linear-gradient(var(--grid-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
     background-size: 80px 80px, 80px 80px;
     mask-image: radial-gradient(ellipse at 50% 30%, black 30%, transparent 75%);
     -webkit-mask-image: radial-gradient(ellipse at 50% 30%, black 30%, transparent 75%);
@@ -65,8 +112,8 @@
     position: fixed; inset: 0;
     pointer-events: none;
     background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.06 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
-    opacity: 0.5;
-    mix-blend-mode: overlay;
+    opacity: var(--noise-opacity);
+    mix-blend-mode: var(--noise-blend);
     z-index: 2;
   }
 
@@ -85,7 +132,7 @@
     position: fixed;
     top: 0; left: 0; right: 0;
     z-index: 50;
-    background: rgba(8,8,8,0.6);
+    background: var(--nav-bg);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     transition: border-color 200ms ease, background 200ms ease;
@@ -115,6 +162,39 @@
   .brand .mark svg { width: 30px; height: 19px; display: block; }
   .brand:hover .mark { color: var(--accent); }
   .nav-right { display: inline-flex; align-items: center; gap: 28px; }
+
+  /* ---------- Theme toggle ---------- */
+  .theme-toggle {
+    position: relative;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 32px; height: 32px;
+    flex: none;
+    padding: 0;
+    background: none;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    color: var(--muted);
+    cursor: pointer;
+    transition: color 160ms ease, border-color 160ms ease, background 160ms ease;
+  }
+  .theme-toggle:hover { color: var(--fg); border-color: var(--line-strong); }
+  .theme-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .theme-toggle svg {
+    position: absolute;
+    width: 15px; height: 15px;
+    transition: opacity 200ms ease, transform 300ms cubic-bezier(.2,.7,.2,1);
+  }
+  .theme-toggle .i-sun  { opacity: 1; transform: rotate(0deg) scale(1); }
+  .theme-toggle .i-moon { opacity: 0; transform: rotate(-90deg) scale(0.6); }
+  :root[data-theme="light"] .theme-toggle .i-sun  { opacity: 0; transform: rotate(90deg) scale(0.6); }
+  :root[data-theme="light"] .theme-toggle .i-moon { opacity: 1; transform: rotate(0deg) scale(1); }
+
+  /* Smooth the swap between palettes */
+  html.theme-anim, html.theme-anim body,
+  html.theme-anim .nav, html.theme-anim .demo, html.theme-anim .release,
+  html.theme-anim .terminal, html.theme-anim .d-chat, html.theme-anim .d-chip {
+    transition: background-color 260ms ease, color 260ms ease, border-color 260ms ease;
+  }
   .nav-link {
     font-family: var(--body);
     font-size: 14px;
@@ -154,12 +234,13 @@
     transform: translate(-50%, -50%);
     width: 1200px; height: 1200px;
     background: radial-gradient(circle at center,
-      rgba(42,120,214,0.20) 0%,
-      rgba(42,120,214,0.09) 25%,
-      rgba(42,120,214,0.02) 45%,
+      rgba(var(--accent-blue-rgb),0.20) 0%,
+      rgba(var(--accent-blue-rgb),0.09) 25%,
+      rgba(var(--accent-blue-rgb),0.02) 45%,
       transparent 65%);
     pointer-events: none;
     filter: blur(10px);
+    opacity: var(--glow-opacity);
     z-index: 0;
   }
   .hero-inner { position: relative; z-index: 1; }
@@ -230,7 +311,7 @@
     height: 300px;
     transform-origin: top left;
     border: 1px solid var(--line);
-    background: rgba(10,10,10,0.55);
+    background: var(--surface-glass);
     font-family: var(--mono);
     font-size: 11.5px;
     color: var(--muted);
@@ -245,11 +326,11 @@
     border-bottom: 1px solid var(--line);
     font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
     color: var(--muted-2);
-    background: rgba(8,8,8,0.6);
+    background: var(--nav-bg);
   }
   .d-cap .live {
     width: 5px; height: 5px; border-radius: 50%;
-    background: var(--accent); box-shadow: 0 0 8px rgba(163,230,53,0.6);
+    background: var(--accent); box-shadow: 0 0 8px rgba(var(--accent-rgb),0.6);
     animation: pulse 2.2s ease-in-out infinite;
   }
   @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
@@ -295,14 +376,14 @@
     text-overflow: ellipsis;
     transition: background 240ms ease, color 240ms ease;
   }
-  .d-row.is-lift { background: rgba(163,230,53,0.08); color: var(--fg); }
+  .d-row.is-lift { background: rgba(var(--accent-rgb),0.12); color: var(--fg); }
 
   /* chat box */
   .d-chat {
     position: absolute; left: 268px; top: 121px;
     width: 262px;
     border: 1px solid var(--line);
-    background: #0a0a0a;
+    background: var(--surface);
     padding: 12px;
     opacity: 0;
     transition: opacity 500ms ease,
@@ -311,13 +392,13 @@
                 top 1000ms cubic-bezier(.45,0,.2,1);
   }
   .d-chat.is-center { left: 50%; margin-left: -131px; }
-  .d-chat.is-drop { border-color: rgba(163,230,53,0.45); }
+  .d-chat.is-drop { border-color: rgba(var(--accent-rgb),0.45); }
 
   .d-chip {
     display: none;
     align-items: center; gap: 7px;
     border: 1px solid var(--line-strong);
-    background: #101010;
+    background: var(--surface-2);
     color: var(--fg);
     padding: 5px 8px;
     margin-bottom: 10px;
@@ -352,19 +433,20 @@
     transition: color 200ms ease, border-color 200ms ease, background 200ms ease;
   }
   .d-send svg { width: 12px; height: 12px; }
-  .d-send.is-hot { color: #0a0a0a; background: var(--accent); border-color: var(--accent); }
+  .d-send.is-hot { color: var(--on-accent); background: var(--accent); border-color: var(--accent); }
 
   /* dragged ghost + cursor */
   .d-ghost {
     position: absolute; left: 0; top: 0;
     padding: 6px 10px;
     border: 1px solid var(--line-strong);
-    background: rgba(16,16,16,0.92);
+    background: var(--surface-ghost);
     color: var(--fg);
     opacity: 0;
     pointer-events: none;
     transition: opacity 260ms ease, transform 900ms cubic-bezier(.4,.1,.2,1);
   }
+  .d-cursor path { fill: var(--fg); stroke: var(--bg); }
   .d-cursor {
     position: absolute; left: 0; top: 0;
     width: 15px; height: 17px;
@@ -392,14 +474,31 @@
   .d-bot svg { width: 28px; height: 28px; }
   .d-ring {
     position: absolute; inset: -7px;
-    border: 1px dashed rgba(42,120,214,0.55);
+    border: 1px dashed rgba(var(--accent-blue-rgb),0.55);
     border-radius: 50%;
     animation: spin 3.4s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
 
+  /* flow and the done line share one grid cell, so they can never
+     push each other around or overlap mid-transition */
+  .d-outcome {
+    display: grid;
+    justify-items: center;
+    align-items: center;
+  }
+  .d-outcome > * { grid-area: 1 / 1; }
+  /* one class drives both halves of the swap, so the step box can never
+     be left behind under the done line */
+  .d-outcome.is-done .d-flow {
+    opacity: 0 !important;
+    visibility: hidden;
+    transition: opacity 400ms ease, visibility 0s linear 400ms;
+  }
+  .d-outcome.is-done .d-done { opacity: 1; transform: none; transition-delay: 420ms; }
   .d-flow {
     display: flex; flex-direction: column; align-items: center;
+    align-self: start;
     opacity: 0;
     transition: opacity 400ms ease;
   }
@@ -416,13 +515,15 @@
   .d-step.is-swap span { opacity: 0; transform: translateY(4px); }
 
   .d-done {
-    display: none;
-    align-items: center; gap: 10px;
-    margin-top: 22px;
+    display: flex;
+    align-items: center; justify-content: center; gap: 10px;
     color: var(--accent);
-    animation: chipIn 400ms cubic-bezier(.2,.7,.2,1);
+    opacity: 0;
+    transform: translateY(6px);
+    pointer-events: none;
+    transition: opacity 400ms ease, transform 400ms cubic-bezier(.2,.7,.2,1);
   }
-  .d-done.is-on { display: flex; }
+
   .d-done svg { width: 18px; height: 18px; }
 
   .demo .is-in { opacity: 1; }
@@ -568,11 +669,11 @@
   .chip:hover { color: var(--fg); border-color: var(--line-strong); }
   .chip .c { color: var(--muted-2); font-size: 10px; }
   .chip.is-on {
-    color: #0a0a0a;
+    color: var(--on-accent);
     background: var(--accent);
     border-color: var(--accent);
   }
-  .chip.is-on .c { color: rgba(10,10,10,0.55); }
+  .chip.is-on .c { color: color-mix(in srgb, var(--on-accent) 62%, transparent); }
 
   .empty {
     color: var(--muted);
@@ -593,13 +694,13 @@
     letter-spacing: 0.16em;
     text-transform: uppercase;
     color: var(--accent);
-    border: 1px solid rgba(163,230,53,0.35);
+    border: 1px solid rgba(var(--accent-rgb),0.35);
     border-radius: 2px;
     padding: 3px 7px;
     line-height: 1;
     white-space: nowrap;
   }
-  .tier.paid { color: var(--accent-blue); border-color: rgba(42,120,214,0.45); }
+  .tier.paid { color: var(--accent-blue); border-color: rgba(var(--accent-blue-rgb),0.45); }
 
   .release-id + .tier { display: inline-block; margin-top: 10px; }
 
@@ -630,7 +731,7 @@
   .release:hover {
     border-color: var(--line-strong);
     transform: translateY(-2px);
-    background: #101010;
+    background: var(--surface-2);
   }
   .release.featured { grid-column: span 4; min-height: 420px; padding: 32px; }
   @media (max-width: 1240px) { .release.featured { grid-column: span 3; } }
@@ -668,7 +769,7 @@
   }
   .release-status .dot {
     width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
-    box-shadow: 0 0 10px rgba(163,230,53,0.55);
+    box-shadow: 0 0 10px rgba(var(--accent-rgb),0.55);
   }
   .release-status.queued .dot { background: var(--muted-2); box-shadow: none; }
   .release-status.queued { color: var(--muted-2); }
@@ -745,7 +846,7 @@
   }
   .terminal {
     border: 1px solid var(--line);
-    background: #0a0a0a;
+    background: var(--surface);
     padding: 18px 20px;
     font-family: var(--mono);
     font-size: 12.5px;
@@ -926,7 +1027,7 @@
     transition: color 160ms ease, border-color 160ms ease;
   }
   .copy:hover { color: var(--fg); border-color: var(--line-strong); }
-  .copy.done { color: var(--accent); border-color: rgba(163,230,53,0.4); }
+  .copy.done { color: var(--accent); border-color: rgba(var(--accent-rgb),0.4); }
 
   /* ---------- Manifesto strip ---------- */
   .manifesto {
@@ -987,7 +1088,7 @@
     .footer-meta a { margin-left: 0; margin-right: 16px; }
   }
 
-  ::selection { background: var(--accent); color: #0a0a0a; }
+  ::selection { background: var(--accent); color: var(--on-accent); }
 
   /* ---------- Responsive ---------- */
   @media (max-width: 1080px) {
@@ -1061,6 +1162,15 @@
         <a class="nav-link" href="https://github.com/ysz7/awesome-ai-blueprints" target="_blank" rel="noopener">
           GitHub<span class="arrow">↗</span>
         </a>
+        <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch to light theme" title="Switch theme">
+          <svg class="i-sun" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="12" cy="12" r="4.2" stroke="currentColor" stroke-width="1.7"/>
+            <path d="M12 2.4v2.4M12 19.2v2.4M2.4 12h2.4M19.2 12h2.4M5.2 5.2l1.7 1.7M17.1 17.1l1.7 1.7M18.8 5.2l-1.7 1.7M6.9 17.1l-1.7 1.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+          </svg>
+          <svg class="i-moon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M20 13.6A8.2 8.2 0 1 1 10.4 4a6.6 6.6 0 0 0 9.6 9.6z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+          </svg>
+        </button>
       </div>
     </div>
   </nav>
@@ -1120,8 +1230,8 @@
 
           <div class="d-ghost" data-el="ghost">agent-loop.md</div>
 
-          <svg class="d-cursor" data-el="cursor" viewBox="0 0 16 18" fill="none">
-            <path d="M1 1l12 7-5 1.4L5.6 15 1 1z" fill="#f5f5f5" stroke="#0a0a0a" stroke-width="1" stroke-linejoin="round"/>
+          <svg class="d-cursor" data-el="cursor" viewBox="0 0 16 18">
+            <path d="M1 1l12 7-5 1.4L5.6 15 1 1z" stroke-width="1" stroke-linejoin="round"/>
           </svg>
 
           <div class="d-agent" data-el="agent">
@@ -1137,6 +1247,7 @@
               </svg>
             </div>
 
+            <div class="d-outcome">
             <div class="d-flow" data-el="flow">
               <svg class="d-arrow" viewBox="0 0 10 34" fill="none">
                 <path d="M5 1v25" stroke="currentColor" stroke-width="1.2" stroke-dasharray="3 3"/>
@@ -1148,6 +1259,7 @@
             <div class="d-done" data-el="done">
               <svg viewBox="0 0 20 20" fill="none"><path d="M4 10.6l4 3.9L16 5.6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
               <span>Done — the agent loop is built and working</span>
+            </div>
             </div>
           </div>
 
@@ -1470,6 +1582,35 @@ using, and why.</pre>
 </div>
 
 <script>
+  // Theme toggle — dark by default, choice remembered in localStorage
+  (function () {
+    const root = document.documentElement;
+    const btn = document.getElementById('theme-toggle');
+    const meta = document.getElementById('theme-color');
+    const colors = { dark: '#080808', light: '#fbfbf9' };
+
+    const apply = (theme, animate) => {
+      if (animate) {
+        root.classList.add('theme-anim');
+        window.setTimeout(() => root.classList.remove('theme-anim'), 320);
+      }
+      root.setAttribute('data-theme', theme);
+      if (meta) meta.setAttribute('content', colors[theme]);
+      if (btn) {
+        btn.setAttribute('aria-label', theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme');
+        btn.setAttribute('aria-pressed', String(theme === 'light'));
+      }
+    };
+
+    apply(root.getAttribute('data-theme') === 'light' ? 'light' : 'dark', false);
+
+    if (btn) btn.addEventListener('click', () => {
+      const next = root.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+      apply(next, true);
+      try { localStorage.setItem('ab-theme', next); } catch (e) {}
+    });
+  })();
+
   // Nav border on scroll
   const nav = document.getElementById('nav');
   const onScroll = () => {
@@ -1499,6 +1640,7 @@ using, and why.</pre>
           send = el('send'), ghost = el('ghost'), cursor = el('cursor'),
           agent = el('agent'), flow = el('flow'), step = el('step'), done = el('done');
     const stepBox = step.parentElement;
+    const outcome = flow.parentElement;
     const row = root.querySelector('.d-row.is-pick');
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
 
@@ -1537,10 +1679,12 @@ using, and why.</pre>
       [list, chat, agent].forEach(n => n.classList.remove('is-in'));
       chat.classList.remove('is-center', 'is-drop');
       chip.classList.remove('is-on');
-      done.classList.remove('is-on');
+      outcome.classList.remove('is-done');
       send.classList.remove('is-hot');
       row.classList.remove('is-lift');
-      flow.style.opacity = 0; flow.style.display = '';
+      stepBox.classList.remove('is-swap');
+      flow.classList.remove('is-in');
+      flow.style.opacity = ''; flow.style.visibility = '';
       typed.textContent = '';
       ghost.style.opacity = 0; cursor.style.opacity = 0;
       ghost.style.transition = 'none'; cursor.style.transition = 'none';
@@ -1593,17 +1737,22 @@ using, and why.</pre>
 
       // 6 — the agent works through the blueprint
       at(8200, () => { show(agent, true); });
-      at(8900, () => { flow.style.opacity = 1; step.textContent = STEPS[0]; });
+      at(8900, () => { show(flow, true); step.textContent = STEPS[0]; });
       STEPS.slice(1).forEach((txt, i) => {
         const t = 10400 + i * 1500;
         at(t, () => { stepBox.classList.add('is-swap'); });
         at(t + 250, () => { step.textContent = txt; stepBox.classList.remove('is-swap'); });
       });
 
-      // 7 — done, then start over
-      at(14900, () => { flow.style.opacity = 0; });
-      at(15320, () => { flow.style.display = 'none'; });
-      at(15400, () => { done.classList.add('is-on'); });
+      // 7 — one atomic callback: the flow goes away and the done line comes in.
+      //      Class + inline styles together, so no cascade or dropped timer can
+      //      leave the step box sitting under the done line.
+      at(14900, () => {
+        outcome.classList.add('is-done');
+        flow.classList.remove('is-in');
+        flow.style.opacity = '0';
+        flow.style.visibility = 'hidden';
+      });
       at(18100, () => { show(agent, false); });
       at(18900, run);
     }
@@ -1623,7 +1772,7 @@ using, and why.</pre>
     if (reduce.matches) {
       reset();
       show(agent, true);
-      done.classList.add('is-on');
+      outcome.classList.add('is-done');
       return;
     }
 
