@@ -245,13 +245,18 @@
     display: flex;
     flex-direction: column;
     justify-content: center;
-    padding: 124px 0 64px;
+    padding: 96px 0 44px;
     overflow: hidden;
   }
   .hero-glow {
     position: absolute;
     left: 46%; top: 58%;
-    transform: translate(-50%, -50%);
+    /* Lifted off its centre. The hero clips its overflow, and the gradient
+       fades out at roughly 390px from the centre - so with the centre any
+       lower than this the tail met the bottom edge and cut off in a straight
+       line. Moving the element rather than its `top` keeps the offset the
+       same on every screen height. */
+    transform: translate(-50%, calc(-50% - 80px));
     width: 1200px; height: 1200px;
     background: radial-gradient(circle at center,
       rgba(var(--accent-blue-rgb),0.20) 0%,
@@ -292,9 +297,9 @@
   }
 
   .hero-meta {
-    margin-top: 52px;
-    padding-top: 36px;
-    border-top: 1px solid var(--line);
+    /* No rule between the headline and the copy: they are one statement, and a
+       line across the middle made it read as two stacked sections. */
+    margin-top: 30px;
     display: flex;
     align-items: stretch;
     justify-content: space-between;
@@ -304,7 +309,7 @@
     animation: lineRise 800ms cubic-bezier(.2,.7,.2,1) 750ms forwards;
   }
   .subline {
-    max-width: 480px;
+    max-width: none;
     margin: 0;
     color: var(--muted);
     font-size: 16px;
@@ -312,10 +317,10 @@
   }
   .subline strong { color: var(--fg); font-weight: 500; }
 
-  .hero-actions { display: inline-flex; align-items: center; gap: 32px; flex-wrap: wrap; margin-top: 36px; }
+  .hero-actions { display: inline-flex; align-items: center; gap: 32px; flex-wrap: wrap; margin-top: 24px; }
   .hero-copy {
-    flex: 0 1 440px;
-    max-width: 440px;
+    flex: 1 1 420px;
+    max-width: none;
   }
 
   /* ---------- Hero workflow animation ---------- */
@@ -586,7 +591,7 @@
   /* ---------- Section frame ---------- */
   .section {
     position: relative;
-    padding: 140px 0 120px;
+    padding: 84px 0 120px;
   }
   .section-label {
     font-family: var(--mono);
@@ -594,7 +599,7 @@
     letter-spacing: 0.22em;
     text-transform: uppercase;
     color: var(--muted);
-    margin-bottom: 60px;
+    margin-bottom: 40px;
     display: flex; align-items: center; gap: 16px;
     opacity: 0; transform: translateY(8px);
     transition: opacity 700ms ease, transform 700ms ease;
@@ -1181,8 +1186,8 @@
     .section-intro { margin-bottom: 56px; }
   }
   @media (max-width: 768px) {
-    .hero { padding: 92px 0 48px; }
-    .hero-meta { margin-top: 40px; padding-top: 28px; gap: 36px; }
+    .hero { padding: 72px 0 32px; }
+    .hero-meta { margin-top: 22px; gap: 32px; }
     .hero-copy { flex: 1 1 100%; max-width: none; }
     .hero-actions { gap: 24px; margin-top: 28px; }
     .cta { font-size: 16px; }
