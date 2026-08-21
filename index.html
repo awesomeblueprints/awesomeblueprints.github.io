@@ -1371,7 +1371,8 @@
 
       <div class="releases" id="grid">
         <!-- CATALOGUE:START - generated, do not edit by hand -->
-        <!-- generated 2026-08-21 from catalogue.json -->
+        <!-- generated 2026-08-21T08:24:13+00:00 from catalogue.json -->
+        <meta name="ab-generated" content="2026-08-21T08:24:13+00:00" data-baked>
         <div data-tier="free" data-type="blueprint" class="release featured">
           <a class="release-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/agent-loop" target="_blank" rel="noopener" aria-label="The Agent Loop on GitHub"></a>
           <div class="release-head">
@@ -2597,11 +2598,23 @@ using, and why.</pre>
     index();
     apply();
 
+    // What is already on screen was baked by the build, from the same feed.
+    // Re-render only when the feed is genuinely newer: a feed that is older —
+    // or the same age but missing fields the build added — would otherwise
+    // silently undo the markup, and it does so after paint, so it reads as
+    // "the button never appeared" rather than as an error.
+    const bakedAt = (document.querySelector('meta[name="ab-generated"]') || {}).content || '';
+
     fetch(FEED, { cache: 'no-cache' })
       .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .then(data => {
         const items = (data.items || []);
         if (!items.length) throw new Error('empty catalogue');
+        const feedAt = data.generated || '';
+        // Both stamps are ISO-8601 in UTC, so a string comparison is a time
+        // comparison. An empty baked stamp means nothing was baked, and then
+        // the feed is the only thing there is.
+        if (bakedAt && !(feedAt > bakedAt)) return;
         render(items);
       })
       .catch(() => {
