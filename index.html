@@ -622,6 +622,20 @@
     margin: 0 0 80px;
   }
   .section-intro strong { color: var(--fg); font-weight: 500; }
+  /* Prose links had no styling, so the browser used its own violet - and
+     changed it again once visited, which reads as a bug in this palette. */
+  .section-intro a, .subline a, .compare-cell a {
+    color: var(--fg);
+    text-decoration: none;
+    border-bottom: 1px solid var(--accent);
+    padding-bottom: 1px;
+    transition: color 160ms ease, border-color 160ms ease;
+  }
+  .section-intro a:visited, .subline a:visited, .compare-cell a:visited { color: var(--fg); }
+  .section-intro a:hover, .subline a:hover, .compare-cell a:hover {
+    color: var(--accent);
+    border-color: var(--line-strong);
+  }
 
   /* ---------- Filter bar ---------- */
   .filterbar {
