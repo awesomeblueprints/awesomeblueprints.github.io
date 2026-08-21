@@ -1,0 +1,10 @@
+{
+  "generated": "2026-08-21T08:38:38+00:00",
+  "entries": [
+    {
+      "date": "2026-08-21",
+      "title": "The catalogue opens",
+      "body": "Forty-five free blueprints are available, covering FastAPI, PostgreSQL, Redis,\nDocker, GitHub Actions, vector search, streaming, MCP and LLM agents.\n\nEvery blueprint is one self-contained document. It states when to use the\narchitecture and when not to, gives the reference implementation, the rules that\nmatter and the failure modes, and ends with a definition of done. You can hand a\nsingle file to an AI coding agent and it has everything it needs — nothing points\nelsewhere for something you need.\n\nEach one is written to be applied to a project that already exists. The agent is\ntold to audit what is there before it proposes anything, and never to replace\nworking code without asking you first."
+    }
+  ]
+}
