@@ -763,6 +763,12 @@
     transition: color 160ms ease, border-color 160ms ease;
   }
   .release-page:hover { color: var(--fg); border-color: var(--line-strong); }
+  /* After "Show all", focus moves to the first revealed card so a keyboard
+     reader is not stranded on a button that has just disappeared. That focus
+     is for assistive technology, not a selection — Safari draws its ring on a
+     programmatically focused element and it reads as an accidental highlight.
+     Only the -1 target is affected; real focus on the links inside is not. */
+  .release[tabindex="-1"]:focus { outline: none; }
 
   /* Second filter row: what kind of thing, under the row that asks
      whether it is free. The two are separate questions and reading
