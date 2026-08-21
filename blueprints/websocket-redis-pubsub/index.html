@@ -1,0 +1,559 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>WebSocket Broadcast with Redis Pub/Sub — Blueprint for AI Coding Agents | Awesome Blueprints</title>
+<meta name="description" content="WebSocket broadcast with Redis pub/sub: delivering messages across replicas, subscriber-loop health, delivery lag and duplicate handling." />
+<link rel="canonical" href="https://awesomeblueprints.com/blueprints/websocket-redis-pubsub/" />
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="Awesome Blueprints" />
+<meta property="og:url" content="https://awesomeblueprints.com/blueprints/websocket-redis-pubsub/" />
+<meta property="og:title" content="WebSocket Broadcast with Redis Pub/Sub — Architecture Blueprint" />
+<meta property="og:description" content="WebSocket broadcast with Redis pub/sub: delivering messages across replicas, subscriber-loop health, delivery lag and duplicate handling." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="WebSocket Broadcast with Redis Pub/Sub — Architecture Blueprint" />
+<meta name="twitter:description" content="WebSocket broadcast with Redis pub/sub: delivering messages across replicas, subscriber-loop health, delivery lag and duplicate handling." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/page.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "WebSocket Broadcast with Redis Pub/Sub", "description": "WebSocket broadcast with Redis pub/sub: delivering messages across replicas, subscriber-loop health, delivery lag and duplicate handling.", "url": "https://awesomeblueprints.com/blueprints/websocket-redis-pubsub/", "dateModified": "2026-08-19", "keywords": "Redis, Streaming", "isAccessibleForFree": true, "license": "https://opensource.org/licenses/MIT", "publisher": {"@type": "Organization", "name": "Awesome Blueprints", "url": "https://awesomeblueprints.com"}}</script>
+<script>
+  (function () {
+    var t;
+    try { t = localStorage.getItem('ab-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">Awesome Blueprints</a>
+    <div class="nav-right">
+      <a class="nav-link" href="/#blueprints">Catalogue</a>
+      <a class="nav-link" href="/#faq">FAQ</a>
+      <a class="nav-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/websocket-redis-pubsub" target="_blank" rel="noopener">GitHub ↗</a>
+      <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Switch theme">◑</button>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/">Home</a> <span>/</span> <a href="/#blueprints">Blueprints</a> <span>/</span>
+    <span>WebSocket Broadcast with Redis Pub/Sub</span>
+  </nav>
+
+  <header class="page-head">
+    <p class="eyebrow">websocket-redis-pubsub</p>
+    <h1>WebSocket Broadcast with Redis Pub/Sub</h1>
+    <p class="lede">WebSocket broadcast with Redis pub/sub: delivering messages across replicas, subscriber-loop health, delivery lag and duplicate handling.</p>
+    <div class="facts"><span>medium</span><span>3–5 days</span><span>Verified 2026-08-19</span></div>
+    <div class="tags"><span class="tag">Redis</span><span class="tag">Streaming</span></div>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/websocket-redis-pubsub" target="_blank" rel="noopener">Read it on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Back to the catalogue</a>
+    </div>
+  </header>
+
+  <article class="doc">
+<blockquote>
+<p>Fanning a message to every replica so that two users in one room see each other
+even when they landed on different processes — with an honest account of what
+Pub/Sub drops, and a separate path for the history a reconnecting client needs.</p>
+</blockquote>
+<p><strong>Complexity:</strong> medium-high · <strong>Typical build:</strong> 3–5 days · <strong>Verified:</strong> 2026-08-19 (re-check after ~90 days)</p>
+<p><strong>Examples in:</strong> Python, with Redis and FastAPI. The architecture is language-agnostic: sections 5, 10 and 11 hold wherever you build this. Section 4 is illustrative — if your project is in another language, your agent translates the idioms rather than importing them, and nothing is lost. The equivalents are the Socket.IO Redis adapter in Node, Phoenix PubSub in Elixir, and NATS or a Postgres <code>LISTEN/NOTIFY</code> bus where Redis is not already present.</p>
+<p><strong>Use when:</strong> a real-time feature already works on one process and now has to run on more than one — because it was scaled, or because a rolling deploy briefly runs two versions at once. That second case surprises people: you do not need to have chosen horizontal scaling to hit this.</p>
+<p><strong>Not for:</strong> a single-process deployment that will stay single-process, where an in-memory registry is correct and this is a service, a failure mode and a delivery guarantee you did not need. Also not a message queue: nothing here is durable, and using it for work that must not be lost is a category error §1 exists to prevent.</p>
+<hr />
+<h2>⚙️ INSTRUCTIONS FOR THE AI — READ BEFORE WRITING ANY CODE</h2>
+<p><strong>Do not start coding.</strong></p>
+<p><strong>Step 1 — Refresh.</strong> Verify the Redis client's pub/sub API and, specifically,
+whether a subscribing connection can be shared with ordinary commands — in most
+clients it cannot, and the failure is confusing. Verify the server's
+<code>client-output-buffer-limit</code> for pubsub clients and what happens when a subscriber
+exceeds it. Confirm whether Streams are available, because §5 sends anything
+requiring delivery guarantees there rather than to Pub/Sub. Verify how the
+deployment routes WebSocket connections and whether sticky sessions are in play,
+since that changes the presence problem but not the broadcast one. Report what you
+verified and what turned out wrong.</p>
+<p><strong>Step 2 — Read the project, then audit what already exists.</strong> Find the existing
+connection registry and every place that broadcasts — each becomes a publish. Find
+whether any feature currently assumes one process: presence counts, "who is
+typing", per-room sequence numbers, in-memory rate limits. Those are the things
+that break silently at the second replica, and listing them is most of the value
+of this audit. Determine whether messages missed during a reconnect must be
+recoverable; the answer decides whether Pub/Sub alone is enough. Then audit §11
+item by item, each marked <em>already true</em>, <em>partly true</em> or <em>absent</em>, with the file
+that decides it, reported before anything is proposed.</p>
+<p>Assume the project is right until it demonstrably is not; code satisfying an item
+stays even where its shape differs from §4; replacing something that works needs a
+one-line reason; never delete a working path to make room for the blueprint's
+version. The same holds for language — §4 is illustrative, its idioms get
+translated into the project's language, and §11 is what has to become true rather
+than the syntax.</p>
+<p><strong>Step 3 — Write a plan for the gap only, and get it approved</strong>, including a
+<code>## Proposed stack</code> section and an explicit statement of what is lost when Redis
+is briefly unavailable. Do not ask open framework questions — propose, and ask for
+confirmation once. Say what you are adding, what you are leaving alone, and what
+you propose to change, and touch nothing else.</p>
+<p><strong>Step 4 — Build in the order in §7.</strong> <strong>Step 5 — §11 is the definition of done.</strong></p>
+<hr />
+<h2>1. Why the in-process registry stops at replica two</h2>
+<p>A connection registry in a process's memory is correct and complete — for that
+process. The moment there are two, every user is connected to one of them and
+invisible to the other.</p>
+<table>
+<thead>
+<tr>
+<th>One process</th>
+<th>A bus between processes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A broadcast reaches everyone, because everyone is here</td>
+<td>A broadcast is published once and every instance delivers to its own connections</td>
+</tr>
+<tr>
+<td>"Three people online" is a length of a list</td>
+<td>It is a count that has to be aggregated across instances, with a way to expire the dead ones</td>
+</tr>
+<tr>
+<td>A message published while a client reconnects is simply not sent</td>
+<td>The gap is real and visible, and needs a history the client can ask for</td>
+</tr>
+<tr>
+<td>Nothing to configure and nothing to fail</td>
+<td>A dependency that can be down, and a decision about what happens then</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Pub/Sub is fire-and-forget, and this is the fact the whole design has to
+respect.</strong> A subscriber that is disconnected does not have messages queued for it;
+they are dropped and never replayed. During the gap between a subscriber dropping
+and re-subscribing, everything published is permanently lost — for that instance,
+and therefore for every client on it.</p>
+<p>That is acceptable for "someone is typing" and unacceptable for "your order
+shipped". So the design is two paths, not one: <strong>Pub/Sub for the live fan-out,
+and a durable record for anything a client must eventually see.</strong> Trying to make
+Pub/Sub reliable is the mistake this section exists to prevent — the tool for
+at-least-once delivery with replay is Streams with consumer groups, and it is a
+different tool for a different guarantee.</p>
+<h2>2. Architecture</h2>
+<pre class="mermaid">%% GENERATED - do not edit by hand.
+%% Edit the source header in architecture.mmd, then rebuild.
+%% Fan out across replicas
+
+flowchart TB
+    subgraph instancea[&quot;Instance A&quot;]
+        direction TB
+        rega[&quot;Local registry&quot;]
+        puba[&quot;Publisher&quot;]
+        suba[&quot;Subscriber loop&quot;]
+    end
+    subgraph instanceb[&quot;Instance B&quot;]
+        direction TB
+        regb[&quot;Local registry&quot;]
+        subb[&quot;Subscriber loop&quot;]
+    end
+
+    clienta([&quot;Client on instance A&quot;])
+    clientb([&quot;Client on instance B&quot;])
+    bus{{&quot;Redis Pub Sub channel&quot;}}
+    history[(&quot;Durable recent messages&quot;)]
+    presence[(&quot;Presence keys with expiry&quot;)]
+
+    clienta --&gt;|&quot;sends a message&quot;| rega
+    rega --&gt; puba
+    puba --&gt;|&quot;written first, so it exists before anyone is told&quot;| history
+    puba --&gt;|&quot;published once&quot;| bus
+    bus --&gt;|&quot;delivered to every subscribed instance&quot;| suba
+    bus --&gt; subb
+    suba --&gt;|&quot;local delivery only&quot;| rega
+    subb --&gt; regb
+    regb -.-&gt;|&quot;receives it&quot;| clientb
+    rega ---|&quot;refreshed while connected&quot;| presence
+    regb --- presence
+    clientb --&gt;|&quot;after a reconnect, ask for what was missed&quot;| history
+
+    classDef service fill:#eff6ff,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b;
+    classDef datastore fill:#e9faf3,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b;
+    classDef external fill:#fff4ed,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b;
+    classDef actor fill:#f0eefc,stroke:#4a3aa7,stroke-width:1.5px,color:#0b0b0b;
+    class rega,puba,suba,regb,subb service;
+    class history,presence datastore;
+    class bus external;
+    class clienta,clientb actor;</pre>
+<p>The rule the diagram encodes: <strong>the durable write happens before the publish.</strong>
+Publishing first and persisting after leaves a window where a client saw a message
+that no history contains — so a reconnect appears to lose it, and the client's own
+view contradicts the server's.</p>
+<h2>3. Project structure</h2>
+<div class="hl"><pre><span></span><code>app/ws/
+├── registry.py     unchanged: local connections and rooms
+├── bus.py          publish, the subscriber loop, and the instance id
+├── history.py      recent messages per room, bounded and expiring
+└── presence.py     who is in a room, aggregated across instances
+</code></pre></div>
+
+<p><strong>One rule: nothing outside <code>bus.py</code> publishes or subscribes.</strong> A second
+subscriber loop somewhere else means messages are delivered twice locally, and the
+duplicate looks like a client bug for a long time before anyone suspects the
+server.</p>
+<h2>4. Reference implementation</h2>
+<div class="hl"><pre><span></span><code><span class="c1"># app/ws/bus.py</span>
+<span class="kn">import</span> <span class="nn">asyncio</span><span class="o">,</span> <span class="nn">json</span><span class="o">,</span> <span class="nn">uuid</span>
+<span class="kn">import</span> <span class="nn">redis.asyncio</span> <span class="k">as</span> <span class="nn">redis</span>
+
+<span class="n">INSTANCE_ID</span> <span class="o">=</span> <span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">()</span><span class="o">.</span><span class="n">hex</span>      <span class="c1"># per process, not per host: two workers on one</span>
+                                    <span class="c1"># machine are two instances for every purpose here</span>
+
+
+<span class="k">class</span> <span class="nc">Bus</span><span class="p">:</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">url</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">registry</span><span class="p">:</span> <span class="n">Registry</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="c1"># Two connections, deliberately. A connection in subscribe mode cannot run</span>
+        <span class="c1"># ordinary commands in most clients, and sharing one produces errors that</span>
+        <span class="c1"># read like a protocol bug rather than a usage mistake.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_pub</span> <span class="o">=</span> <span class="n">redis</span><span class="o">.</span><span class="n">from_url</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sub</span> <span class="o">=</span> <span class="n">redis</span><span class="o">.</span><span class="n">from_url</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_registry</span> <span class="o">=</span> <span class="n">registry</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">publish</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">room</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">message</span><span class="p">[</span><span class="s2">&quot;origin&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">INSTANCE_ID</span>
+        <span class="c1"># Persist first. Publishing first leaves a window where a connected client</span>
+        <span class="c1"># has seen something the history does not contain — so after a reconnect the</span>
+        <span class="c1"># message vanishes, and the client&#39;s view contradicts the server&#39;s.</span>
+        <span class="k">await</span> <span class="n">history</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">room</span><span class="p">,</span> <span class="n">message</span><span class="p">)</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pub</span><span class="o">.</span><span class="n">publish</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;room:</span><span class="si">{</span><span class="n">room</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">message</span><span class="p">))</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;The subscriber loop. Reconnects forever, because it must.&quot;&quot;&quot;</span>
+        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">pubsub</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sub</span><span class="o">.</span><span class="n">pubsub</span><span class="p">(</span><span class="n">ignore_subscribe_messages</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                <span class="k">await</span> <span class="n">pubsub</span><span class="o">.</span><span class="n">psubscribe</span><span class="p">(</span><span class="s2">&quot;room:*&quot;</span><span class="p">)</span>
+                <span class="k">async</span> <span class="k">for</span> <span class="n">raw</span> <span class="ow">in</span> <span class="n">pubsub</span><span class="o">.</span><span class="n">listen</span><span class="p">():</span>
+                    <span class="n">message</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">raw</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">])</span>
+                    <span class="n">room</span> <span class="o">=</span> <span class="n">raw</span><span class="p">[</span><span class="s2">&quot;channel&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">decode</span><span class="p">()</span><span class="o">.</span><span class="n">removeprefix</span><span class="p">(</span><span class="s2">&quot;room:&quot;</span><span class="p">)</span>
+                    <span class="c1"># Delivered to this instance&#39;s connections only. The publisher&#39;s</span>
+                    <span class="c1"># own instance receives its own message too, which is what keeps</span>
+                    <span class="c1"># the delivery path identical everywhere — one code path, tested</span>
+                    <span class="c1"># once, rather than a local shortcut that drifts.</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_registry</span><span class="o">.</span><span class="n">deliver_local</span><span class="p">(</span><span class="n">room</span><span class="p">,</span> <span class="n">message</span><span class="p">)</span>
+            <span class="k">except</span> <span class="n">redis</span><span class="o">.</span><span class="n">ConnectionError</span><span class="p">:</span>
+                <span class="c1"># Messages published during this gap are gone: pub/sub queues nothing</span>
+                <span class="c1"># for a disconnected subscriber. That is why anything a client must</span>
+                <span class="c1"># eventually see is in history, and why clients ask for it on reconnect.</span>
+                <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">RECONNECT_BACKOFF</span><span class="p">)</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/ws/history.py</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">append</span><span class="p">(</span><span class="n">room</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="n">key</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;history:</span><span class="si">{</span><span class="n">room</span><span class="si">}</span><span class="s2">&quot;</span>
+    <span class="k">async</span> <span class="k">with</span> <span class="n">redis_client</span><span class="o">.</span><span class="n">pipeline</span><span class="p">(</span><span class="n">transaction</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="k">as</span> <span class="n">pipe</span><span class="p">:</span>
+        <span class="c1"># A capped list: the last N messages, expiring if the room goes quiet.</span>
+        <span class="c1"># Unbounded history in a cache is a memory leak with a long fuse.</span>
+        <span class="n">pipe</span><span class="o">.</span><span class="n">lpush</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">message</span><span class="p">))</span>
+        <span class="n">pipe</span><span class="o">.</span><span class="n">ltrim</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">HISTORY_MAX</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">pipe</span><span class="o">.</span><span class="n">expire</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">HISTORY_TTL</span><span class="p">)</span>
+        <span class="k">await</span> <span class="n">pipe</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">since</span><span class="p">(</span><span class="n">room</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">last_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
+    <span class="sd">&quot;&quot;&quot;What a reconnecting client missed.</span>
+
+<span class="sd">    Bounded on purpose: if the client was away longer than the history, it is told</span>
+<span class="sd">    so and reloads from the API instead of silently receiving a partial view. A gap</span>
+<span class="sd">    the client cannot detect is worse than one it can.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">raw</span> <span class="o">=</span> <span class="k">await</span> <span class="n">redis_client</span><span class="o">.</span><span class="n">lrange</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;history:</span><span class="si">{</span><span class="n">room</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">HISTORY_MAX</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="n">messages</span> <span class="o">=</span> <span class="p">[</span><span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">m</span><span class="p">)</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="nb">reversed</span><span class="p">(</span><span class="n">raw</span><span class="p">)]</span>
+    <span class="k">if</span> <span class="n">last_id</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">messages</span>
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">m</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">messages</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">m</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">last_id</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">messages</span><span class="p">[</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">:]</span>
+    <span class="k">raise</span> <span class="n">HistoryGap</span><span class="p">(</span><span class="n">room</span><span class="p">)</span>          <span class="c1"># the client must do a full reload</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/ws/presence.py</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">touch</span><span class="p">(</span><span class="n">room</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">user_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="c1"># A key per user per room, with a TTL longer than the refresh interval. This is</span>
+    <span class="c1"># what makes presence self-healing: an instance that is killed refreshes</span>
+    <span class="c1"># nothing, and its users expire on their own. A set that is cleaned up on</span>
+    <span class="c1"># disconnect leaks a member every time a process dies without warning — which</span>
+    <span class="c1"># is what a deploy, an OOM kill and a crash all look like.</span>
+    <span class="k">await</span> <span class="n">redis_client</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;presence:</span><span class="si">{</span><span class="n">room</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">user_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">INSTANCE_ID</span><span class="p">,</span> <span class="n">ex</span><span class="o">=</span><span class="n">PRESENCE_TTL</span><span class="p">)</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">members</span><span class="p">(</span><span class="n">room</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">set</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
+    <span class="c1"># SCAN, never KEYS: KEYS walks the entire keyspace and blocks the server, which</span>
+    <span class="c1"># is single-threaded — so one presence query stalls every other client.</span>
+    <span class="k">return</span> <span class="p">{</span><span class="nb">int</span><span class="p">(</span><span class="n">k</span><span class="o">.</span><span class="n">decode</span><span class="p">()</span><span class="o">.</span><span class="n">rsplit</span><span class="p">(</span><span class="s2">&quot;:&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)[</span><span class="mi">1</span><span class="p">])</span>
+            <span class="k">async</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">redis_client</span><span class="o">.</span><span class="n">scan_iter</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;presence:</span><span class="si">{</span><span class="n">room</span><span class="si">}</span><span class="s2">:*&quot;</span><span class="p">,</span> <span class="n">count</span><span class="o">=</span><span class="mi">100</span><span class="p">)}</span>
+</code></pre></div>
+
+<h2>5. Golden-standard rules</h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Forbidden:</strong> using Pub/Sub for anything that must not be lost</td>
+<td>A disconnected subscriber has nothing queued for it and messages published during the gap are gone permanently. Use a durable structure for delivery guarantees.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> publishing before the durable write</td>
+<td>It leaves a window where a client saw a message no history contains, so a reconnect appears to lose it.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> sharing one connection between subscribe mode and ordinary commands</td>
+<td>Most clients cannot, and the resulting errors read like a protocol bug rather than a usage mistake.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> <code>KEYS</code> for presence or room enumeration</td>
+<td>The server is single-threaded; a full keyspace walk stalls every other client. Use incremental scanning.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> unbounded history</td>
+<td>A cache with no cap is a memory leak with a long fuse, and it fails when the system is busiest.</td>
+</tr>
+<tr>
+<td>Presence is expiring keys, not a maintained set</td>
+<td>A set cleaned up on disconnect leaks a member on every crash, OOM kill and deploy. Expiry heals without anyone doing anything.</td>
+</tr>
+<tr>
+<td>The subscriber loop reconnects forever, with backoff</td>
+<td>Its death is silent — the instance keeps serving and simply stops delivering, which no health check notices.</td>
+</tr>
+<tr>
+<td>An instance delivers its own published messages through the bus</td>
+<td>One delivery path, tested once. A local shortcut is a second path that drifts from the first.</td>
+</tr>
+<tr>
+<td>Every message carries an origin instance and an id</td>
+<td>Without them, duplicates cannot be detected and a client cannot say what it already has.</td>
+</tr>
+<tr>
+<td>Messages carry a room-scoped ordering identifier</td>
+<td>"What did I miss" has no answer otherwise, and the reconnect story falls apart.</td>
+</tr>
+<tr>
+<td>A history gap is reported, not hidden</td>
+<td>A client silently missing messages is a bug users report as data loss. Tell it to reload.</td>
+</tr>
+<tr>
+<td>Redis being down degrades cross-instance delivery only</td>
+<td>Local delivery should keep working. A real-time feature that takes the whole application down with its bus is a worse outcome than a temporarily narrower broadcast.</td>
+</tr>
+</tbody>
+</table>
+<h2>6. Data contracts</h2>
+<div class="hl"><pre><span></span><code><span class="p">{</span><span class="nt">&quot;v&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;chat.message&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;room&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;orders:42&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w"> </span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;01J8Z...&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;origin&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;9f3a...&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;ts&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1755600000</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{}}</span><span class="w"></span>
+</code></pre></div>
+
+<p>Three guarantees, and their limits, stated so nobody assumes more:</p>
+<div class="hl"><pre><span></span><code>live fan-out    best effort. Published once, delivered to instances currently
+                subscribed. Nothing is queued for one that is not.
+history         last N messages per room, expiring. A client away longer than N
+                is told there is a gap rather than given a partial view.
+presence        eventually correct within one TTL. Never exact — a user who
+                vanished is present until their key expires.
+</code></pre></div>
+
+<p>Presence being approximate is a property, not a defect. Making it exact requires
+either sticky sessions or a coordinated registry, and both cost more than the
+feature is worth for a number displayed next to a room name.</p>
+<h2>7. Build order</h2>
+<ol>
+<li><strong>Two instances, one bus, one room.</strong> Prove a message sent to instance A
+   reaches a client on instance B. Everything else is refinement of this.</li>
+<li><strong>The subscriber loop with reconnection</strong>, then kill Redis while a client is
+   connected and confirm the instance recovers and resumes delivering.</li>
+<li><strong>Publish through the bus everywhere</strong>, including for the publisher's own
+   connections, and delete any local shortcut.</li>
+<li><strong>Message ids and the origin field.</strong></li>
+<li><strong>History, capped and expiring</strong>, with the gap signal.</li>
+<li><strong>Reconnect flow</strong>: client reconnects with its last id, receives what it missed,
+   or is told to reload.</li>
+<li><strong>Presence with expiring keys</strong>, and a test that killing an instance clears its
+   users within one TTL.</li>
+</ol>
+<p>Step 2 immediately after step 1 because the subscriber loop dying is the failure
+mode with no symptom: the instance keeps answering health checks and simply stops
+delivering.</p>
+<h2>8. Blocks to pull in</h2>
+<p>Nothing here is a prerequisite. These are adjacent problems, by name only —
+resolve them separately if they apply.</p>
+<ul>
+<li>FastAPI WebSocket endpoint — the local registry and connection lifecycle this extends</li>
+<li>Redis cache layer — the same Redis, a different subsystem with different guarantees</li>
+<li>Idempotency keys and safe retries — the duplicate-delivery problem in its general form</li>
+<li>Observability and tracing — where subscriber-loop health and delivery lag are watched</li>
+</ul>
+<h2>9. Metrics</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Cross-instance delivery latency, p99</td>
+<td>&lt; 50 ms</td>
+</tr>
+<tr>
+<td>Messages published but not delivered to a live subscribed instance</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Subscriber loops not currently subscribed</td>
+<td>0, alerted on</td>
+</tr>
+<tr>
+<td>Presence entries for users who have left, beyond one TTL</td>
+<td>0</td>
+</tr>
+<tr>
+<td>History memory per active room</td>
+<td>Bounded by the cap, and measured</td>
+</tr>
+<tr>
+<td>Reconnects that produce a silent gap</td>
+<td>0 — every gap is reported</td>
+</tr>
+</tbody>
+</table>
+<h2>10. Failure modes</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Two users in one room cannot see each other after scaling up</td>
+<td>The registry is per process and nothing crosses instances</td>
+<td>Publish to the bus; deliver locally on receipt</td>
+</tr>
+<tr>
+<td>One instance stops delivering while its health check stays green</td>
+<td>The subscriber loop died and nothing restarted it</td>
+<td>Reconnect forever with backoff; monitor subscription state, not process health</td>
+</tr>
+<tr>
+<td>Messages sent during a brief Redis outage are gone forever</td>
+<td>Pub/Sub queues nothing for a disconnected subscriber</td>
+<td>Expected — that is why history exists; anything that must not be lost goes to a durable structure</td>
+</tr>
+<tr>
+<td>A client reconnects and silently misses messages</td>
+<td>History was shorter than the gap and the shortfall was not reported</td>
+<td>Detect the gap and tell the client to reload</td>
+</tr>
+<tr>
+<td>Clients see every message twice</td>
+<td>A second subscriber loop exists, or the publisher also delivers locally</td>
+<td>One loop, one path; everything goes through the bus</td>
+</tr>
+<tr>
+<td>Presence counts drift upwards over days</td>
+<td>Presence is a set cleaned up on disconnect, and processes sometimes die without one</td>
+<td>Expiring keys refreshed while connected</td>
+</tr>
+<tr>
+<td>Redis CPU spikes and every client stalls</td>
+<td>Presence or rooms enumerated with <code>KEYS</code></td>
+<td>Incremental scanning</td>
+</tr>
+<tr>
+<td>Redis memory grows until it evicts things you needed</td>
+<td>History has no cap or no expiry</td>
+<td>Cap the list and set a TTL</td>
+</tr>
+<tr>
+<td>A rolling deploy briefly splits a room in two</td>
+<td>Old and new instances are both running — the same problem as scaling, arriving unannounced</td>
+<td>This blueprint; it applies even to a deployment you consider single-instance</td>
+</tr>
+<tr>
+<td>The whole API goes down when Redis does</td>
+<td>The bus is on the request path and its failure is not contained</td>
+<td>Degrade to local-only delivery; keep the application serving</td>
+</tr>
+<tr>
+<td>A client receives its own message twice</td>
+<td>It applied the message optimistically and again on delivery</td>
+<td>Use the message id to reconcile on the client</td>
+</tr>
+</tbody>
+</table>
+<h2>11. Definition of done</h2>
+<ul>
+<li class="task">With two instances running, a message from a client on one reaches a client on the other, covered by a test that runs both</li>
+<li class="task">Killing Redis and restarting it leaves both instances delivering again without a restart, covered by a test</li>
+<li class="task">The subscriber loop's subscription state is exported as a metric and alerted on, not inferred from process health</li>
+<li class="task">Every message carries an id, an origin instance and a version, asserted on a received message</li>
+<li class="task">A message is present in history before it is published, verified by a test that inspects both after a publish</li>
+<li class="task">History is capped and expires, verified by publishing beyond the cap and asserting the oldest is gone</li>
+<li class="task">A client reconnecting with its last id receives exactly what it missed, covered by a test</li>
+<li class="task">A client away longer than the history receives an explicit gap signal rather than a partial list</li>
+<li class="task">Presence for an instance that is killed clears within one TTL without any cleanup running, covered by a test</li>
+<li class="task">No code path uses <code>KEYS</code>, checked by grep in CI</li>
+<li class="task">With Redis unavailable, clients on the same instance still exchange messages and the API still serves, covered by a test</li>
+<li class="task">Only <code>bus.py</code> publishes or subscribes, checked by grep in CI</li>
+</ul>
+  </article>
+
+  <aside class="tailpiece">
+    <h2>Use this blueprint</h2>
+    <p>
+      Copy the file into your project and point your agent at it. It works with Claude Code,
+      Cursor, Copilot, ChatGPT and anything else that reads a file — there is nothing to install.
+    </p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/websocket-redis-pubsub" target="_blank" rel="noopener">Open on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Browse all blueprints</a>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p><a href="/">Awesome Blueprints</a> — same request, same architecture, every time.</p>
+    <p class="dim">MIT · awesomeblueprints.com</p>
+  </div>
+</footer>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'neutral' });
+</script>
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const now = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', now);
+    try { localStorage.setItem('ab-theme', now); } catch (e) {}
+    location.reload();   // the diagram is themed at render time
+  });
+</script>
+
+</body>
+</html>

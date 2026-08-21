@@ -1,0 +1,560 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ChromaDB Embedded Vector Store — Blueprint for AI Coding Agents | Awesome Blueprints</title>
+<meta name="description" content="ChromaDB as an embedded vector store: persistence, metadata filtering and collection design for prototypes, CLI tools and local retrieval." />
+<link rel="canonical" href="https://awesomeblueprints.com/blueprints/chromadb/" />
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="Awesome Blueprints" />
+<meta property="og:url" content="https://awesomeblueprints.com/blueprints/chromadb/" />
+<meta property="og:title" content="ChromaDB Embedded Vector Store — Architecture Blueprint" />
+<meta property="og:description" content="ChromaDB as an embedded vector store: persistence, metadata filtering and collection design for prototypes, CLI tools and local retrieval." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="ChromaDB Embedded Vector Store — Architecture Blueprint" />
+<meta name="twitter:description" content="ChromaDB as an embedded vector store: persistence, metadata filtering and collection design for prototypes, CLI tools and local retrieval." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/page.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "ChromaDB Embedded Vector Store", "description": "ChromaDB as an embedded vector store: persistence, metadata filtering and collection design for prototypes, CLI tools and local retrieval.", "url": "https://awesomeblueprints.com/blueprints/chromadb/", "dateModified": "2026-08-19", "keywords": "Vector search", "isAccessibleForFree": true, "license": "https://opensource.org/licenses/MIT", "publisher": {"@type": "Organization", "name": "Awesome Blueprints", "url": "https://awesomeblueprints.com"}}</script>
+<script>
+  (function () {
+    var t;
+    try { t = localStorage.getItem('ab-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">Awesome Blueprints</a>
+    <div class="nav-right">
+      <a class="nav-link" href="/#blueprints">Catalogue</a>
+      <a class="nav-link" href="/#faq">FAQ</a>
+      <a class="nav-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/chromadb" target="_blank" rel="noopener">GitHub ↗</a>
+      <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Switch theme">◑</button>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/">Home</a> <span>/</span> <a href="/#blueprints">Blueprints</a> <span>/</span>
+    <span>ChromaDB Embedded Vector Store</span>
+  </nav>
+
+  <header class="page-head">
+    <p class="eyebrow">chromadb</p>
+    <h1>ChromaDB Embedded Vector Store</h1>
+    <p class="lede">ChromaDB as an embedded vector store: persistence, metadata filtering and collection design for prototypes, CLI tools and local retrieval.</p>
+    <div class="facts"><span>low</span><span>1 day</span><span>Verified 2026-08-19</span></div>
+    <div class="tags"><span class="tag">Vector search</span></div>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/chromadb" target="_blank" rel="noopener">Read it on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Back to the catalogue</a>
+    </div>
+  </header>
+
+  <article class="doc">
+<blockquote>
+<p>A vector store with no infrastructure: embedded in the process, persisted to a
+directory, useful the same afternoon — set up so that the day it stops being
+the right choice, moving off it is an export rather than an archaeology project.</p>
+</blockquote>
+<p><strong>Complexity:</strong> low · <strong>Typical build:</strong> 1 day · <strong>Verified:</strong> 2026-08-19 (re-check after ~90 days)</p>
+<p><strong>Examples in:</strong> Python. The architecture is language-agnostic: sections 5, 10 and 11 hold wherever you build this. Section 4 is illustrative — if your project is in another language, your agent translates the idioms rather than importing them, and nothing is lost. The portability discipline in §3 is the durable part and applies to any embedded store you might reach for instead.</p>
+<p><strong>Use when:</strong> you need retrieval working today and infrastructure is the thing in the way — a prototype, a demo, a desktop or CLI tool, a test suite that needs a real vector store, or embedded search inside another product.</p>
+<p><strong>Not for:</strong> a service with several processes writing at once. An embedded store is a library holding a directory, and two writers is not a configuration it has. Also not for a corpus you already know will be large or multi-tenant with hard isolation — starting here then is a migration you have scheduled in advance for no reason.</p>
+<hr />
+<h2>⚙️ INSTRUCTIONS FOR THE AI — READ BEFORE WRITING ANY CODE</h2>
+<p><strong>Do not start coding.</strong></p>
+<p><strong>Step 1 — Refresh.</strong> Verify the installed major and what changed in it — this
+library has had substantial rewrites, including a change of implementation
+language, and configuration and authentication have moved between versions.
+Confirm the current client constructors for the in-memory, persistent and
+client-server modes, and <strong>whether persistence is automatic or still requires an
+explicit call</strong>, because older examples are full of a call that no longer exists.
+Confirm whether any maintenance command is needed after upgrading. Report what you
+verified and what turned out wrong.</p>
+<p><strong>Step 2 — Read the project, then audit what already exists.</strong> Find whether more
+than one process will ever open the store — a web worker plus a background job
+counts, and it is the constraint that decides everything else. Find the embedding
+function currently in use, and whether it is the library's default: the default is
+convenient and it is a different model from whatever you will use in production,
+so a corpus built with it has to be re-embedded rather than moved. Establish
+whether the data can be regenerated from a source, since that decides how much
+this store's durability matters. Then audit §11 item by item, each marked <em>already
+true</em>, <em>partly true</em> or <em>absent</em>, with the file that decides it, reported before
+anything is proposed.</p>
+<p>Assume the project is right until it demonstrably is not; code satisfying an item
+stays even where its shape differs from §4; replacing something that works needs a
+one-line reason; never delete a working path to make room for the blueprint's
+version. The same holds for language — §4 is illustrative, its idioms get
+translated into the project's language, and §11 is what has to become true rather
+than the syntax.</p>
+<p><strong>Step 3 — Write a plan for the gap only, and get it approved</strong>, including a
+<code>## Proposed stack</code> section and the two conditions that will mean it is time to
+leave — written down now, while nobody is under pressure. Do not ask open
+framework questions — propose, and ask for confirmation once. Say what you are
+adding, what you are leaving alone, and what you propose to change, and touch
+nothing else.</p>
+<p><strong>Step 4 — Build in the order in §7.</strong> <strong>Step 5 — §11 is the definition of done.</strong></p>
+<hr />
+<h2>1. The cost of the easiest possible start</h2>
+<p>Zero infrastructure is a real advantage and it is worth taking. The problem is
+that the same properties that make it easy to start make it easy to build things
+that cannot leave.</p>
+<table>
+<thead>
+<tr>
+<th>Using it as the tutorial shows</th>
+<th>Using it deliberately</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The default embedding function, chosen by not choosing</td>
+<td>The model named explicitly, because the corpus is only portable if you know what produced it</td>
+</tr>
+<tr>
+<td>Vectors are in the store and nowhere else</td>
+<td>The source text and its metadata are kept; the store is derived and rebuildable</td>
+</tr>
+<tr>
+<td>Ids assigned as it goes</td>
+<td>Ids derived from the source, so re-ingesting replaces rather than duplicates</td>
+</tr>
+<tr>
+<td>"We will move when we need to"</td>
+<td>Two written conditions that mean it is time, agreed before anyone is under pressure</td>
+</tr>
+</tbody>
+</table>
+<p>The first row is the one that turns a move into a rewrite. The library will
+happily embed for you with a bundled default model, and that default is not what
+you will run in production. Vectors from two models cannot be compared, so
+"exporting to another store" is not a copy — <strong>it is re-embedding the entire
+corpus</strong>, at whatever the provider charges, on a deadline. Naming the model from
+the first line costs nothing and keeps the option open.</p>
+<p>The second row matters because the failure mode of an embedded store is not
+corruption but <em>creep</em>. It works, so more gets built on it, and the constraint —
+one process writes — is discovered when a background worker is added, months
+later, by a colleague who did not know that was a constraint. That is not a defect
+of the library; it is what "embedded" means. <strong>Write down what it cannot do while
+it is still doing everything you need.</strong></p>
+<h2>2. Architecture</h2>
+<pre class="mermaid">%% GENERATED - do not edit by hand.
+%% Edit the source header in architecture.mmd, then rebuild.
+%% Embedded store, kept portable
+
+flowchart TB
+    dev([&quot;Developer&quot;])
+    ingest[&quot;Ingest&quot;]
+    embedder[&quot;Named embedding function&quot;]
+    store[&quot;Store client&quot;]
+    query[&quot;Query&quot;]
+    export[&quot;Export&quot;]
+    source[(&quot;Source documents, the real source of truth&quot;)]
+    dir[(&quot;Persistence directory&quot;)]
+    provider{{&quot;Embedding provider&quot;}}
+    next{{&quot;A different store, later&quot;}}
+
+    source --&gt;|&quot;rebuildable from here&quot;| ingest
+    ingest --&gt; embedder
+    embedder --&gt;|&quot;the model, named explicitly&quot;| provider
+    embedder --&gt;|&quot;ids derived from the source&quot;| store
+    store --&gt;|&quot;written on every change, one writer only&quot;| dir
+    dev --&gt; query
+    query --&gt; store
+    store --&gt;|&quot;matches with metadata&quot;| query
+    export --&gt;|&quot;documents, metadata and ids&quot;| store
+    export -.-&gt;|&quot;vectors only if the model is unchanged&quot;| next
+    source -.-&gt;|&quot;otherwise re-embed from here&quot;| next
+
+    classDef service fill:#eff6ff,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b;
+    classDef datastore fill:#e9faf3,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b;
+    classDef external fill:#fff4ed,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b;
+    classDef actor fill:#f0eefc,stroke:#4a3aa7,stroke-width:1.5px,color:#0b0b0b;
+    class ingest,embedder,store,query,export service;
+    class source,dir datastore;
+    class provider,next external;
+    class dev actor;</pre>
+<p>The rule the diagram encodes: <strong>there are two arrows into a future store, and
+which one you take is decided the day you choose an embedding model.</strong> Same model,
+the vectors move. Different model, you re-embed from source — which is only
+possible because the source arrow exists.</p>
+<h2>3. Project structure</h2>
+<div class="hl"><pre><span></span><code>app/retrieval/
+├── store.py       the client, and the only module importing the library
+├── embed.py       the embedding function, named and configured here
+├── ingest.py      source documents to the store, rerunnable
+└── export.py      everything out, in a form another store can read
+data/
+└── chroma/        the persistence directory — git-ignored, and reproducible
+</code></pre></div>
+
+<p><strong>One rule: <code>export.py</code> exists from the first week and is tested.</strong> Not when a
+migration is planned — then. It is fifty lines, it makes the exit real rather than
+theoretical, and writing it early forces the two decisions that make an exit
+possible at all: knowing which model produced the vectors, and having ids that
+mean something outside this store.</p>
+<h2>4. Reference implementation</h2>
+<div class="hl"><pre><span></span><code><span class="c1"># app/retrieval/embed.py</span>
+<span class="kn">from</span> <span class="nn">chromadb.utils</span> <span class="kn">import</span> <span class="n">embedding_functions</span>
+
+<span class="c1"># Named explicitly, never the library&#39;s default. The bundled default is convenient</span>
+<span class="c1"># and it is a different model from anything you will run in production — and</span>
+<span class="c1"># vectors from two models cannot be compared. Choosing by not choosing turns a</span>
+<span class="c1"># future export into a full re-embed of the corpus, on someone else&#39;s deadline.</span>
+<span class="n">EMBEDDING_MODEL</span> <span class="o">=</span> <span class="s2">&quot;text-embedding-3-small&quot;</span>
+
+<span class="n">embedding_function</span> <span class="o">=</span> <span class="n">embedding_functions</span><span class="o">.</span><span class="n">OpenAIEmbeddingFunction</span><span class="p">(</span>
+    <span class="n">api_key</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">openai_api_key</span><span class="o">.</span><span class="n">get_secret_value</span><span class="p">(),</span>
+    <span class="n">model_name</span><span class="o">=</span><span class="n">EMBEDDING_MODEL</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/retrieval/store.py</span>
+<span class="kn">import</span> <span class="nn">chromadb</span>
+
+<span class="c1"># Persistent, not in-memory. The in-memory client is right for tests and loses</span>
+<span class="c1"># everything on exit; using it in development produces a corpus that quietly</span>
+<span class="c1"># disappears and a bug report about &quot;search stopped working&quot;.</span>
+<span class="n">client</span> <span class="o">=</span> <span class="n">chromadb</span><span class="o">.</span><span class="n">PersistentClient</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">settings</span><span class="o">.</span><span class="n">chroma_dir</span><span class="p">))</span>
+
+<span class="n">collection</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">get_or_create_collection</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;documents&quot;</span><span class="p">,</span>
+    <span class="n">embedding_function</span><span class="o">=</span><span class="n">embedding_function</span><span class="p">,</span>
+    <span class="c1"># The metric is fixed at creation and cannot be changed afterwards. Cosine for</span>
+    <span class="c1"># normalised embeddings; the wrong choice ranks badly rather than failing, so</span>
+    <span class="c1"># it is worth confirming against the model&#39;s documentation now.</span>
+    <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;hnsw:space&quot;</span><span class="p">:</span> <span class="s2">&quot;cosine&quot;</span><span class="p">,</span> <span class="s2">&quot;embedding_model&quot;</span><span class="p">:</span> <span class="n">EMBEDDING_MODEL</span><span class="p">},</span>
+<span class="p">)</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/retrieval/ingest.py</span>
+<span class="kn">import</span> <span class="nn">hashlib</span>
+
+
+<span class="k">def</span> <span class="nf">chunk_id</span><span class="p">(</span><span class="n">document_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="c1"># Derived, never generated. Rerunning ingestion for a changed document then</span>
+    <span class="c1"># replaces its chunks; with random ids it inserts a second copy of everything</span>
+    <span class="c1"># and retrieval degrades as duplicates crowd the results — with no error.</span>
+    <span class="k">return</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">sha256</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">document_id</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">index</span><span class="si">}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">encode</span><span class="p">())</span><span class="o">.</span><span class="n">hexdigest</span><span class="p">()[:</span><span class="mi">32</span><span class="p">]</span>
+
+
+<span class="k">def</span> <span class="nf">ingest</span><span class="p">(</span><span class="n">document_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">chunks</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">meta</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="n">collection</span><span class="o">.</span><span class="n">upsert</span><span class="p">(</span>
+        <span class="n">ids</span><span class="o">=</span><span class="p">[</span><span class="n">chunk_id</span><span class="p">(</span><span class="n">document_id</span><span class="p">,</span> <span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">chunks</span><span class="p">))],</span>
+        <span class="n">documents</span><span class="o">=</span><span class="n">chunks</span><span class="p">,</span>
+        <span class="n">metadatas</span><span class="o">=</span><span class="p">[{</span><span class="o">**</span><span class="n">meta</span><span class="p">,</span> <span class="s2">&quot;document_id&quot;</span><span class="p">:</span> <span class="n">document_id</span><span class="p">,</span> <span class="s2">&quot;chunk_index&quot;</span><span class="p">:</span> <span class="n">i</span><span class="p">,</span>
+                    <span class="c1"># Recorded per record. When the model changes, this is what</span>
+                    <span class="c1"># lets you find and re-embed the old rows instead of guessing.</span>
+                    <span class="s2">&quot;embedding_model&quot;</span><span class="p">:</span> <span class="n">EMBEDDING_MODEL</span><span class="p">}</span>
+                   <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">chunks</span><span class="p">))],</span>
+    <span class="p">)</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/retrieval/export.py</span>
+<span class="k">def</span> <span class="nf">export_all</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Everything out, in a form another store can read.</span>
+
+<span class="sd">    Written in the first week and tested, not when a migration is planned. It is</span>
+<span class="sd">    what makes leaving a decision rather than a project — and writing it early is</span>
+<span class="sd">    what forces ids and the model to be portable in the first place.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">batch</span><span class="p">,</span> <span class="n">offset</span> <span class="o">=</span> <span class="mi">1000</span><span class="p">,</span> <span class="mi">0</span>
+    <span class="k">with</span> <span class="n">path</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">out</span><span class="p">:</span>
+        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="n">page</span> <span class="o">=</span> <span class="n">collection</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">limit</span><span class="o">=</span><span class="n">batch</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="n">offset</span><span class="p">,</span>
+                                  <span class="n">include</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;documents&quot;</span><span class="p">,</span> <span class="s2">&quot;metadatas&quot;</span><span class="p">,</span> <span class="s2">&quot;embeddings&quot;</span><span class="p">])</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">page</span><span class="p">[</span><span class="s2">&quot;ids&quot;</span><span class="p">]:</span>
+                <span class="k">break</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">cid</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">page</span><span class="p">[</span><span class="s2">&quot;ids&quot;</span><span class="p">]):</span>
+                <span class="n">out</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span>
+                    <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="n">cid</span><span class="p">,</span>
+                    <span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="n">page</span><span class="p">[</span><span class="s2">&quot;documents&quot;</span><span class="p">][</span><span class="n">i</span><span class="p">],</span>
+                    <span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="n">page</span><span class="p">[</span><span class="s2">&quot;metadatas&quot;</span><span class="p">][</span><span class="n">i</span><span class="p">],</span>
+                    <span class="c1"># Only reusable if the target store uses the same model. If it</span>
+                    <span class="c1"># does not, the text and metadata above are what matters and</span>
+                    <span class="c1"># the vectors are recomputed.</span>
+                    <span class="s2">&quot;embedding&quot;</span><span class="p">:</span> <span class="n">page</span><span class="p">[</span><span class="s2">&quot;embeddings&quot;</span><span class="p">][</span><span class="n">i</span><span class="p">],</span>
+                <span class="p">})</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">offset</span> <span class="o">+=</span> <span class="n">batch</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># tests/conftest.py</span>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span>
+<span class="k">def</span> <span class="nf">store</span><span class="p">(</span><span class="n">tmp_path</span><span class="p">):</span>
+    <span class="c1"># An ephemeral client per test: no directory to clean up, no state carried</span>
+    <span class="c1"># between tests, and no chance of a test writing into the development corpus.</span>
+    <span class="n">client</span> <span class="o">=</span> <span class="n">chromadb</span><span class="o">.</span><span class="n">EphemeralClient</span><span class="p">()</span>
+    <span class="k">yield</span> <span class="n">client</span><span class="o">.</span><span class="n">create_collection</span><span class="p">(</span><span class="s2">&quot;documents&quot;</span><span class="p">,</span> <span class="n">embedding_function</span><span class="o">=</span><span class="n">fake_embeddings</span><span class="p">)</span>
+</code></pre></div>
+
+<h2>5. Golden-standard rules</h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Forbidden:</strong> the library's default embedding function</td>
+<td>It is a different model from production, and vectors from two models cannot be compared — so an export becomes a full re-embed.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> more than one process writing to the same directory</td>
+<td>An embedded store is a library holding files. Two writers is not a supported configuration and the damage is not always immediate.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> generated ids</td>
+<td>Re-ingesting then duplicates the corpus, and duplicates crowd results without raising anything.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> treating the store as the only copy of anything</td>
+<td>It holds derived data. Keep the source text and metadata; the store must be rebuildable.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> the in-memory client outside tests</td>
+<td>It loses everything on exit and the symptom is "search stopped working" rather than an error.</td>
+</tr>
+<tr>
+<td>The embedding model is recorded in the collection and on every record</td>
+<td>It is what makes a model change a scoped backfill rather than a full re-embed.</td>
+</tr>
+<tr>
+<td>An export exists and is tested from the first week</td>
+<td>It makes leaving a decision instead of a project, and writing it early forces the choices that allow leaving.</td>
+</tr>
+<tr>
+<td>The distance metric is chosen deliberately at creation</td>
+<td>It cannot be changed afterwards, and the wrong one ranks badly rather than failing.</td>
+</tr>
+<tr>
+<td>The two conditions that mean it is time to leave are written down</td>
+<td>Decided while nobody is under pressure, they get acted on; left implicit, they are argued about during an incident.</td>
+</tr>
+<tr>
+<td>The persistence directory is reproducible, not backed up</td>
+<td>Backing up derived data is effort spent protecting something you can regenerate.</td>
+</tr>
+<tr>
+<td>Tests use an ephemeral client</td>
+<td>Otherwise a test writes into the development corpus and the failure appears somewhere else entirely.</td>
+</tr>
+<tr>
+<td>The library major is pinned</td>
+<td>It has had substantial rewrites, and an unpinned upgrade is a rewrite you did not schedule.</td>
+</tr>
+</tbody>
+</table>
+<h2>6. Data contracts</h2>
+<div class="hl"><pre><span></span><code><span class="nb">id</span>        <span class="n">derived</span> <span class="kn">from</span> <span class="p">(</span><span class="n">document_id</span><span class="p">,</span> <span class="n">chunk_index</span><span class="p">)</span> <span class="err">—</span> <span class="n">stable</span> <span class="n">across</span> <span class="n">re</span><span class="o">-</span><span class="n">ingestion</span>
+<span class="n">document</span>  <span class="n">the</span> <span class="n">chunk</span> <span class="n">text</span><span class="p">,</span> <span class="n">stored</span> <span class="n">so</span> <span class="n">an</span> <span class="n">export</span> <span class="n">needs</span> <span class="n">no</span> <span class="n">second</span> <span class="n">source</span>
+<span class="n">metadata</span>  <span class="p">{</span><span class="s2">&quot;document_id&quot;</span><span class="p">,</span> <span class="s2">&quot;chunk_index&quot;</span><span class="p">,</span> <span class="s2">&quot;embedding_model&quot;</span><span class="p">,</span> <span class="o">...</span><span class="p">}</span>
+</code></pre></div>
+
+<p>The export format is the real contract, and it is deliberately dull: one JSON
+object per line with the text, the metadata, the id and the vector. Every store
+worth moving to can read that. The vector is only reusable if the target uses the
+same model; the text and metadata are what make the move possible when it does
+not, which is the common case.</p>
+<p><strong>The two conditions to write down now.</strong> Something like: more than one process
+needs to write, or the corpus passes a size at which search latency stops being
+acceptable. Both are checkable, neither is a matter of opinion at three in the
+morning, and having them written is what stops "we should probably move" from
+being a conversation held quarterly for two years.</p>
+<h2>7. Build order</h2>
+<ol>
+<li><strong>Persistent client, a named embedding model, one document, one search.</strong> The
+   model is chosen here and everything portable follows from it.</li>
+<li><strong>Derived ids and ingestion that is rerunnable</strong>, with a test asserting the
+   record count is unchanged after a second run.</li>
+<li><strong>The export, and a test that round-trips it</strong> — write it now, while it is
+   fifty lines and nobody is waiting.</li>
+<li><strong>Metadata filters</strong>, and a test that a filtered search never returns records
+   outside the filter.</li>
+<li><strong>The ephemeral test fixture</strong>, so no test can touch the real directory.</li>
+<li><strong>The two exit conditions</strong>, written into the repository beside the store.</li>
+<li><strong>A rebuild from source</strong>, executed once to prove the store is genuinely
+   derived rather than authoritative.</li>
+</ol>
+<p>Step 3 that early on purpose. An export written under pressure is written against
+whatever the ids and the model happen to be by then, and by then they are usually
+the two things that make the move expensive.</p>
+<h2>8. Blocks to pull in</h2>
+<p>Nothing here is a prerequisite. These are adjacent problems, by name only —
+resolve them separately if they apply.</p>
+<ul>
+<li>Chunking and embeddings for retrieval — what produces the records this stores</li>
+<li>Vector search in Postgres — a common next step when one process stops being enough</li>
+<li>Qdrant vector search with filters — the other common next step, when filtering dominates</li>
+<li>Test harness and unit tests — where the ephemeral fixture belongs</li>
+<li>Typed config and settings — where the directory path and the model name are validated</li>
+</ul>
+<h2>9. Metrics</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Processes writing to the store</td>
+<td>1</td>
+</tr>
+<tr>
+<td>Records whose embedding model is unrecorded</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Duplicate records after re-ingesting an unchanged document</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Time to export the whole corpus</td>
+<td>Measured, and known before it is needed</td>
+</tr>
+<tr>
+<td>Time to rebuild the store from source</td>
+<td>Measured, and demonstrated once</td>
+</tr>
+<tr>
+<td>Search latency, p95</td>
+<td>Under the threshold named in the exit conditions</td>
+</tr>
+<tr>
+<td>Tests writing to the development directory</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<h2>10. Failure modes</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Moving to another store turns out to require re-embedding everything</td>
+<td>The library's default embedding model was used and never recorded</td>
+<td>Name the model from the first line; record it per record</td>
+</tr>
+<tr>
+<td>The corpus doubles and search quality drops</td>
+<td>Ids were generated, so re-ingestion inserted copies</td>
+<td>Derive ids from the document and chunk position</td>
+</tr>
+<tr>
+<td>Search stops working after a restart, with no error</td>
+<td>The in-memory client was used outside tests</td>
+<td>Use the persistent client; keep the ephemeral one for tests</td>
+</tr>
+<tr>
+<td>The store behaves strangely after adding a background worker</td>
+<td>Two processes are writing to one directory</td>
+<td>Move to a client-server deployment or a different store; this is the constraint that decides it</td>
+</tr>
+<tr>
+<td>A test corrupted the development corpus</td>
+<td>Tests share the real directory</td>
+<td>An ephemeral client per test</td>
+</tr>
+<tr>
+<td>An upgrade broke the application in ways the changelog did not obviously predict</td>
+<td>The major was unpinned and the library has been rewritten more than once</td>
+<td>Pin the major; read the migration notes before moving</td>
+</tr>
+<tr>
+<td>Ranking is poor and nothing is wrong</td>
+<td>The distance metric does not match the embedding model</td>
+<td>Set it at creation; it cannot be changed later</td>
+</tr>
+<tr>
+<td>Nobody can say whether it is time to move</td>
+<td>The exit conditions were never written down</td>
+<td>Two checkable conditions, agreed early</td>
+</tr>
+<tr>
+<td>Restoring the store from a backup produced a stale corpus</td>
+<td>Derived data was backed up instead of regenerated</td>
+<td>Keep ingestion rerunnable; rebuild rather than restore</td>
+</tr>
+<tr>
+<td>A filtered search returned records outside the filter</td>
+<td>The metadata filter was built incorrectly and nothing tested it</td>
+<td>Test the filter path, as with any query</td>
+</tr>
+<tr>
+<td>Disk use grows well past the corpus size</td>
+<td>Old versions accumulate without maintenance</td>
+<td>Run whatever compaction the installed version provides; check the release notes</td>
+</tr>
+</tbody>
+</table>
+<h2>11. Definition of done</h2>
+<ul>
+<li class="task">The embedding model is named explicitly in code and recorded on every record; a test asserts no record lacks it</li>
+<li class="task">Re-running ingestion for an unchanged document leaves the record count unchanged, covered by a test</li>
+<li class="task">An export produces every record with text, metadata and vector, and a round-trip test restores an identical corpus</li>
+<li class="task">The store is rebuildable from source by rerunning ingestion, demonstrated once end to end with the duration recorded</li>
+<li class="task">Tests use an ephemeral client; a test asserts the development directory is untouched by the suite</li>
+<li class="task">Only one process writes to the store, stated in the code and verified against the deployment</li>
+<li class="task">The distance metric is set at collection creation with the embedding model named beside it</li>
+<li class="task">The two conditions that mean it is time to move are written in the repository, both checkable</li>
+<li class="task">The library major is pinned, and the pinned version is recorded with the date it was verified</li>
+<li class="task">A metadata-filtered search never returns records outside the filter, covered by a test</li>
+<li class="task">The persistence directory is git-ignored and absent from backups, with a comment saying why</li>
+</ul>
+  </article>
+
+  <aside class="tailpiece">
+    <h2>Use this blueprint</h2>
+    <p>
+      Copy the file into your project and point your agent at it. It works with Claude Code,
+      Cursor, Copilot, ChatGPT and anything else that reads a file — there is nothing to install.
+    </p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/chromadb" target="_blank" rel="noopener">Open on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Browse all blueprints</a>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p><a href="/">Awesome Blueprints</a> — same request, same architecture, every time.</p>
+    <p class="dim">MIT · awesomeblueprints.com</p>
+  </div>
+</footer>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'neutral' });
+</script>
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const now = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', now);
+    try { localStorage.setItem('ab-theme', now); } catch (e) {}
+    location.reload();   // the diagram is themed at render time
+  });
+</script>
+
+</body>
+</html>

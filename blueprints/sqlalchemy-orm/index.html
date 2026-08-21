@@ -1,0 +1,596 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Async SQLAlchemy ORM Layer — Blueprint for AI Coding Agents | Awesome Blueprints</title>
+<meta name="description" content="An async SQLAlchemy ORM layer: a session per request, relationship loading without N+1, transactions and repositories you can test." />
+<link rel="canonical" href="https://awesomeblueprints.com/blueprints/sqlalchemy-orm/" />
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="Awesome Blueprints" />
+<meta property="og:url" content="https://awesomeblueprints.com/blueprints/sqlalchemy-orm/" />
+<meta property="og:title" content="Async SQLAlchemy ORM Layer — Architecture Blueprint" />
+<meta property="og:description" content="An async SQLAlchemy ORM layer: a session per request, relationship loading without N+1, transactions and repositories you can test." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Async SQLAlchemy ORM Layer — Architecture Blueprint" />
+<meta name="twitter:description" content="An async SQLAlchemy ORM layer: a session per request, relationship loading without N+1, transactions and repositories you can test." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/page.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "Async SQLAlchemy ORM Layer", "description": "An async SQLAlchemy ORM layer: a session per request, relationship loading without N+1, transactions and repositories you can test.", "url": "https://awesomeblueprints.com/blueprints/sqlalchemy-orm/", "dateModified": "2026-08-19", "keywords": "PostgreSQL, Python", "isAccessibleForFree": true, "license": "https://opensource.org/licenses/MIT", "publisher": {"@type": "Organization", "name": "Awesome Blueprints", "url": "https://awesomeblueprints.com"}}</script>
+<script>
+  (function () {
+    var t;
+    try { t = localStorage.getItem('ab-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">Awesome Blueprints</a>
+    <div class="nav-right">
+      <a class="nav-link" href="/#blueprints">Catalogue</a>
+      <a class="nav-link" href="/#faq">FAQ</a>
+      <a class="nav-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/sqlalchemy-orm" target="_blank" rel="noopener">GitHub ↗</a>
+      <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Switch theme">◑</button>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/">Home</a> <span>/</span> <a href="/#blueprints">Blueprints</a> <span>/</span>
+    <span>Async SQLAlchemy ORM Layer</span>
+  </nav>
+
+  <header class="page-head">
+    <p class="eyebrow">sqlalchemy-orm</p>
+    <h1>Async SQLAlchemy ORM Layer</h1>
+    <p class="lede">An async SQLAlchemy ORM layer: a session per request, relationship loading without N+1, transactions and repositories you can test.</p>
+    <div class="facts"><span>medium</span><span>2–4 days</span><span>Verified 2026-08-19</span></div>
+    <div class="tags"><span class="tag">PostgreSQL</span><span class="tag">Python</span></div>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/sqlalchemy-orm" target="_blank" rel="noopener">Read it on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Back to the catalogue</a>
+    </div>
+  </header>
+
+  <article class="doc">
+<blockquote>
+<p>Declarative models, a session scoped to one request, repositories that return
+objects rather than rows — and relationship loading made explicit, because in
+async SQLAlchemy the convenient default does not fail slowly, it raises.</p>
+</blockquote>
+<p><strong>Complexity:</strong> medium · <strong>Typical build:</strong> 2–4 days · <strong>Verified:</strong> 2026-08-19 (re-check after ~90 days)</p>
+<p><strong>Examples in:</strong> Python, with SQLAlchemy 2.0 and asyncpg. The architecture is language-agnostic: sections 5, 10 and 11 hold wherever you build this. Section 4 is illustrative — if your project is in another language, your agent translates the idioms rather than importing them, and nothing is lost. The equivalents are Drizzle or Prisma in TypeScript, <code>Ecto.Repo</code> with <code>preload</code> in Elixir, and ActiveRecord with <code>includes</code> in Rails — where the N+1 problem is identical and only the error is quieter.</p>
+<p><strong>Use when:</strong> the data model has relationships worth traversing, several places need the same queries, and you want transaction boundaries in one place rather than repeated at every call site.</p>
+<p><strong>Not for:</strong> a service whose data access is a handful of hand-written analytical queries. An ORM adds an object graph, a session lifecycle and a loading strategy to a problem that had none, and for reporting workloads the SQL was the clearer artefact all along. Mixing is fine — the ORM for the write model, plain SQL for the reports.</p>
+<hr />
+<h2>⚙️ INSTRUCTIONS FOR THE AI — READ BEFORE WRITING ANY CODE</h2>
+<p><strong>Do not start coding.</strong></p>
+<p><strong>Step 1 — Refresh.</strong> Verify the installed SQLAlchemy major version. This
+blueprint is written for the 2.0 style: <code>Mapped[...]</code> annotations with
+<code>mapped_column()</code>, <code>DeclarativeBase</code> rather than <code>declarative_base()</code>,
+<code>select()</code> with <code>session.execute()</code> rather than <code>session.query()</code>, and
+<code>async_sessionmaker</code>. Confirm <code>AsyncAttrs</code> and the current loader-strategy names.
+Verify the async driver and check whether a connection pooler in transaction mode
+is in front of the database — if so, SQLAlchemy must not pool on top of it.
+Report what you verified and what turned out wrong.</p>
+<p><strong>Step 2 — Read the project, then audit what already exists.</strong> Find the existing
+connection or pool setup — this layer sits on it and must not create a second one.
+Find any existing models, and for each relationship record its <code>lazy</code> setting.
+Find where transactions are currently committed, and specifically whether any
+commit happens inside a loop or inside a function that also does IO. Find whether
+<code>expire_on_commit</code> is set anywhere. Then audit §11 item by item, each marked
+<em>already true</em>, <em>partly true</em> or <em>absent</em>, with the file that decides it, reported
+before anything is proposed.</p>
+<p>Assume the project is right until it demonstrably is not; code satisfying an item
+stays even where its shape differs from §4; replacing something that works needs a
+one-line reason; never delete a working path to make room for the blueprint's
+version. The same holds for language — §4 is illustrative, its idioms get
+translated into the project's language, and §11 is what has to become true rather
+than the syntax.</p>
+<p><strong>Step 3 — Write a plan for the gap only, and get it approved</strong>, including a
+<code>## Proposed stack</code> section. If models already exist, the plan is to add explicit
+loading strategies and a session boundary, not to rewrite the models. Do not ask
+open framework questions — propose, and ask for confirmation once. Say what you
+are adding, what you are leaving alone, and what you propose to change, and touch
+nothing else.</p>
+<p><strong>Step 4 — Build in the order in §7.</strong> <strong>Step 5 — §11 is the definition of done.</strong></p>
+<hr />
+<h2>1. Why the convenient default is not available here</h2>
+<p>In synchronous SQLAlchemy, touching <code>order.customer</code> on an object whose customer
+was not loaded issues a query and returns the answer. It is the feature that makes
+the ORM pleasant, and it is the feature that produces N+1: a list endpoint over a
+hundred orders quietly runs a hundred and one queries, and nothing in the response
+says so.</p>
+<p>Async SQLAlchemy cannot do this at all, and the reason is worth understanding
+rather than working around. Attribute access goes through a property, properties
+cannot be <code>async</code>, and the ORM's internals are synchronous code driven through a
+greenlet that yields to the event loop when it needs IO. Reached from outside that
+greenlet, the machinery has no way to await. It raises <code>MissingGreenlet</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Sync ORM, lazy by default</th>
+<th>Async ORM, loading declared</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>N+1 is a performance bug found weeks later on a dashboard</td>
+<td>Unloaded access raises immediately, in the first test that touches it</td>
+</tr>
+<tr>
+<td>The query count depends on what the template happened to render</td>
+<td>The query count is a property of the query, visible where it is written</td>
+</tr>
+<tr>
+<td><code>commit()</code> expires attributes and they transparently reload</td>
+<td><code>commit()</code> expires attributes and the next read raises</td>
+</tr>
+</tbody>
+</table>
+<p>The third row is where teams lose an afternoon. <code>expire_on_commit</code> defaults to
+true, so after a commit <em>every</em> attribute is expired — including plain columns
+that were already loaded. Reading <code>order.id</code> after committing raises, and the
+traceback points at an attribute access rather than at the commit that caused it.</p>
+<p><strong>This is a better situation than the sync default, not a worse one.</strong> The failure
+is loud, immediate, and in the test rather than in production. The work is to stop
+fighting it and declare loading on purpose.</p>
+<h2>2. Architecture</h2>
+<pre class="mermaid">%% GENERATED - do not edit by hand.
+%% Edit the source header in architecture.mmd, then rebuild.
+%% Session scoped to one request
+
+flowchart TB
+    client([&quot;API client&quot;])
+    route[&quot;Route handler&quot;]
+    sessiondep[&quot;Session dependency&quot;]
+    factory[&quot;Async session factory&quot;]
+    session[&quot;Session, one per request&quot;]
+    repo[&quot;Repository&quot;]
+    models[&quot;Declarative models&quot;]
+    pool[&quot;Connection pool&quot;]
+    store[(&quot;PostgreSQL&quot;)]
+
+    client --&gt;|&quot;request&quot;| route
+    route --- sessiondep
+    sessiondep --&gt;|&quot;open&quot;| factory
+    factory --&gt;|&quot;begin transaction&quot;| session
+    route --&gt;|&quot;call with the session&quot;| repo
+    repo --&gt;|&quot;select with explicit loading&quot;| models
+    models --&gt;|&quot;unit of work&quot;| session
+    session --&gt;|&quot;acquire for the transaction&quot;| pool
+    pool --&gt; store
+    sessiondep -.-&gt;|&quot;commit on success, rollback on error, always close&quot;| session
+
+    classDef service fill:#eff6ff,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b;
+    classDef datastore fill:#e9faf3,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b;
+    classDef external fill:#fff4ed,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b;
+    classDef actor fill:#f0eefc,stroke:#4a3aa7,stroke-width:1.5px,color:#0b0b0b;
+    class route,sessiondep,factory,session,repo,models,pool service;
+    class store datastore;
+    class client actor;</pre>
+<p>The rule the diagram encodes: <strong>the transaction boundary is the dependency, not
+the repository.</strong> A repository that commits cannot be composed — two of them in
+one request produce two transactions, and the second failing leaves the first
+already written.</p>
+<h2>3. Project structure</h2>
+<div class="hl"><pre><span></span><code>app/
+├── db/
+│   ├── base.py         DeclarativeBase and the shared column conventions
+│   ├── session.py      the async engine, the session factory, the dependency
+│   └── naming.py       the constraint naming convention
+├── models/
+│   ├── order.py
+│   └── product.py
+└── repositories/
+    ├── base.py         generic CRUD over one model
+    └── orders.py       the queries that are actually about orders
+</code></pre></div>
+
+<p><strong>One rule: a repository never commits.</strong> It reads, it adds, it flushes when it
+needs a generated id — and the transaction ends where the request ends. Break it
+and every repository becomes its own transaction, so a request that touches two of
+them can no longer roll back as a unit, and there is no error to tell you.</p>
+<h2>4. Reference implementation</h2>
+<div class="hl"><pre><span></span><code><span class="c1"># app/db/base.py</span>
+<span class="kn">from</span> <span class="nn">datetime</span> <span class="kn">import</span> <span class="n">datetime</span>
+<span class="kn">from</span> <span class="nn">sqlalchemy</span> <span class="kn">import</span> <span class="n">MetaData</span><span class="p">,</span> <span class="n">func</span>
+<span class="kn">from</span> <span class="nn">sqlalchemy.orm</span> <span class="kn">import</span> <span class="n">DeclarativeBase</span><span class="p">,</span> <span class="n">Mapped</span><span class="p">,</span> <span class="n">mapped_column</span>
+
+<span class="c1"># Every constraint gets a deterministic name. Without this, Postgres invents names,</span>
+<span class="c1"># and Alembic&#39;s autogenerate cannot detect changes to constraints it cannot name —</span>
+<span class="c1"># so a migration silently omits them. Set this before the first table exists;</span>
+<span class="c1"># afterwards it is a rename migration for every constraint in the database.</span>
+<span class="n">NAMING</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;ix&quot;</span><span class="p">:</span> <span class="s2">&quot;ix_</span><span class="si">%(column_0_label)s</span><span class="s2">&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;uq&quot;</span><span class="p">:</span> <span class="s2">&quot;uq_</span><span class="si">%(table_name)s</span><span class="s2">_</span><span class="si">%(column_0_name)s</span><span class="s2">&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;ck&quot;</span><span class="p">:</span> <span class="s2">&quot;ck_</span><span class="si">%(table_name)s</span><span class="s2">_</span><span class="si">%(constraint_name)s</span><span class="s2">&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;fk&quot;</span><span class="p">:</span> <span class="s2">&quot;fk_</span><span class="si">%(table_name)s</span><span class="s2">_</span><span class="si">%(column_0_name)s</span><span class="s2">_</span><span class="si">%(referred_table_name)s</span><span class="s2">&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;pk&quot;</span><span class="p">:</span> <span class="s2">&quot;pk_</span><span class="si">%(table_name)s</span><span class="s2">&quot;</span><span class="p">,</span>
+<span class="p">}</span>
+
+
+<span class="k">class</span> <span class="nc">Base</span><span class="p">(</span><span class="n">DeclarativeBase</span><span class="p">):</span>
+    <span class="n">metadata</span> <span class="o">=</span> <span class="n">MetaData</span><span class="p">(</span><span class="n">naming_convention</span><span class="o">=</span><span class="n">NAMING</span><span class="p">)</span>
+
+
+<span class="k">class</span> <span class="nc">TimestampMixin</span><span class="p">:</span>
+    <span class="n">created_at</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="n">datetime</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">server_default</span><span class="o">=</span><span class="n">func</span><span class="o">.</span><span class="n">now</span><span class="p">())</span>
+    <span class="c1"># server_default, not default: a Python default is wrong for rows written by a</span>
+    <span class="c1"># migration, a bulk load or psql, and those rows are exactly the ones you later</span>
+    <span class="c1"># cannot explain.</span>
+    <span class="n">updated_at</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="n">datetime</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span>
+        <span class="n">server_default</span><span class="o">=</span><span class="n">func</span><span class="o">.</span><span class="n">now</span><span class="p">(),</span> <span class="n">onupdate</span><span class="o">=</span><span class="n">func</span><span class="o">.</span><span class="n">now</span><span class="p">()</span>
+    <span class="p">)</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/models/order.py</span>
+<span class="kn">from</span> <span class="nn">decimal</span> <span class="kn">import</span> <span class="n">Decimal</span>
+<span class="kn">from</span> <span class="nn">sqlalchemy</span> <span class="kn">import</span> <span class="n">ForeignKey</span><span class="p">,</span> <span class="n">Numeric</span>
+<span class="kn">from</span> <span class="nn">sqlalchemy.orm</span> <span class="kn">import</span> <span class="n">Mapped</span><span class="p">,</span> <span class="n">mapped_column</span><span class="p">,</span> <span class="n">relationship</span>
+<span class="kn">from</span> <span class="nn">app.db.base</span> <span class="kn">import</span> <span class="n">Base</span><span class="p">,</span> <span class="n">TimestampMixin</span>
+
+
+<span class="k">class</span> <span class="nc">Order</span><span class="p">(</span><span class="n">Base</span><span class="p">,</span> <span class="n">TimestampMixin</span><span class="p">):</span>
+    <span class="n">__tablename__</span> <span class="o">=</span> <span class="s2">&quot;orders&quot;</span>
+
+    <span class="nb">id</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">primary_key</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">customer_id</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">ForeignKey</span><span class="p">(</span><span class="s2">&quot;customers.id&quot;</span><span class="p">),</span> <span class="n">index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">total</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="n">Decimal</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">Numeric</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
+    <span class="c1"># Numeric, never Float. Float loses cents at the edges and nothing raises.</span>
+
+    <span class="c1"># lazy=&quot;raise&quot; is the load-bearing line in this file. It converts an</span>
+    <span class="c1"># unintended lazy load from a silent extra query into an exception at the</span>
+    <span class="c1"># access — which means the first test that walks the relationship fails, rather</span>
+    <span class="c1"># than a dashboard six weeks later showing 101 queries on a list endpoint.</span>
+    <span class="n">items</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="s2">&quot;OrderItem&quot;</span><span class="p">]]</span> <span class="o">=</span> <span class="n">relationship</span><span class="p">(</span>
+        <span class="n">back_populates</span><span class="o">=</span><span class="s2">&quot;order&quot;</span><span class="p">,</span> <span class="n">lazy</span><span class="o">=</span><span class="s2">&quot;raise&quot;</span><span class="p">,</span> <span class="n">cascade</span><span class="o">=</span><span class="s2">&quot;all, delete-orphan&quot;</span>
+    <span class="p">)</span>
+    <span class="n">customer</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="s2">&quot;Customer&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">relationship</span><span class="p">(</span><span class="n">back_populates</span><span class="o">=</span><span class="s2">&quot;orders&quot;</span><span class="p">,</span> <span class="n">lazy</span><span class="o">=</span><span class="s2">&quot;raise&quot;</span><span class="p">)</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/db/session.py</span>
+<span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">AsyncIterator</span>
+<span class="kn">from</span> <span class="nn">sqlalchemy.ext.asyncio</span> <span class="kn">import</span> <span class="n">AsyncSession</span><span class="p">,</span> <span class="n">async_sessionmaker</span><span class="p">,</span> <span class="n">create_async_engine</span>
+<span class="kn">from</span> <span class="nn">app.config</span> <span class="kn">import</span> <span class="n">get_settings</span>
+
+<span class="n">settings</span> <span class="o">=</span> <span class="n">get_settings</span><span class="p">()</span>
+
+<span class="n">engine</span> <span class="o">=</span> <span class="n">create_async_engine</span><span class="p">(</span>
+    <span class="nb">str</span><span class="p">(</span><span class="n">settings</span><span class="o">.</span><span class="n">database_url</span><span class="p">),</span>
+    <span class="n">pool_size</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+    <span class="n">max_overflow</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>          <span class="c1"># a hard ceiling; overflow hides the fact that you are over budget</span>
+    <span class="n">pool_pre_ping</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>      <span class="c1"># one cheap round trip beats the first query of every</span>
+                             <span class="c1"># request after a database restart failing</span>
+    <span class="n">pool_recycle</span><span class="o">=</span><span class="mi">1800</span><span class="p">,</span>       <span class="c1"># below any proxy or firewall idle timeout, so the pool</span>
+                             <span class="c1"># never hands out a socket the network has already dropped</span>
+<span class="p">)</span>
+
+<span class="n">SessionFactory</span> <span class="o">=</span> <span class="n">async_sessionmaker</span><span class="p">(</span>
+    <span class="n">engine</span><span class="p">,</span>
+    <span class="n">expire_on_commit</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>  <span class="c1"># otherwise every attribute is expired after commit and the</span>
+                             <span class="c1"># next read — even of a plain column — raises MissingGreenlet</span>
+    <span class="n">autoflush</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>         <span class="c1"># implicit flushes mid-query reorder writes in ways that are</span>
+                             <span class="c1"># very hard to reason about; flush deliberately instead</span>
+<span class="p">)</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">get_session</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">AsyncSession</span><span class="p">]:</span>
+    <span class="c1"># The transaction boundary. One request, one transaction: commit if the handler</span>
+    <span class="c1"># returned, roll back if it raised, close either way.</span>
+    <span class="k">async</span> <span class="k">with</span> <span class="n">SessionFactory</span><span class="p">()</span> <span class="k">as</span> <span class="n">session</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">yield</span> <span class="n">session</span>
+            <span class="k">await</span> <span class="n">session</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="k">await</span> <span class="n">session</span><span class="o">.</span><span class="n">rollback</span><span class="p">()</span>
+            <span class="k">raise</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/repositories/orders.py</span>
+<span class="kn">from</span> <span class="nn">sqlalchemy</span> <span class="kn">import</span> <span class="n">select</span>
+<span class="kn">from</span> <span class="nn">sqlalchemy.ext.asyncio</span> <span class="kn">import</span> <span class="n">AsyncSession</span>
+<span class="kn">from</span> <span class="nn">sqlalchemy.orm</span> <span class="kn">import</span> <span class="n">joinedload</span><span class="p">,</span> <span class="n">selectinload</span>
+<span class="kn">from</span> <span class="nn">app.models.order</span> <span class="kn">import</span> <span class="n">Order</span>
+
+
+<span class="k">class</span> <span class="nc">OrderRepository</span><span class="p">:</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">session</span><span class="p">:</span> <span class="n">AsyncSession</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">session</span> <span class="o">=</span> <span class="n">session</span>          <span class="c1"># given, never created — so a test can hand it</span>
+                                        <span class="c1"># a session inside a transaction it will roll back</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">list_with_items</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">limit</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Order</span><span class="p">]:</span>
+        <span class="n">stmt</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">select</span><span class="p">(</span><span class="n">Order</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">options</span><span class="p">(</span>
+                <span class="c1"># selectinload for a collection: a second query with WHERE id IN (...).</span>
+                <span class="c1"># joinedload here would multiply the parent row by its children and</span>
+                <span class="c1"># make LIMIT count item rows instead of orders.</span>
+                <span class="n">selectinload</span><span class="p">(</span><span class="n">Order</span><span class="o">.</span><span class="n">items</span><span class="p">),</span>
+                <span class="c1"># joinedload for the many-to-one: one row per order, one query total.</span>
+                <span class="n">joinedload</span><span class="p">(</span><span class="n">Order</span><span class="o">.</span><span class="n">customer</span><span class="p">),</span>
+            <span class="p">)</span>
+            <span class="o">.</span><span class="n">order_by</span><span class="p">(</span><span class="n">Order</span><span class="o">.</span><span class="n">id</span><span class="o">.</span><span class="n">desc</span><span class="p">())</span>
+            <span class="o">.</span><span class="n">limit</span><span class="p">(</span><span class="n">limit</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="nb">list</span><span class="p">((</span><span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">session</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">stmt</span><span class="p">))</span><span class="o">.</span><span class="n">scalars</span><span class="p">()</span><span class="o">.</span><span class="n">all</span><span class="p">())</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">add</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">order</span><span class="p">:</span> <span class="n">Order</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Order</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">session</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">order</span><span class="p">)</span>
+        <span class="c1"># flush, never commit: this sends the INSERT and populates the generated id</span>
+        <span class="c1"># while leaving the transaction open for whatever else this request does.</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">session</span><span class="o">.</span><span class="n">flush</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">order</span>
+</code></pre></div>
+
+<h2>5. Golden-standard rules</h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Forbidden:</strong> a repository or service calling <code>commit()</code></td>
+<td>The transaction must span the request. A repository that commits cannot be composed, and a second failure leaves the first write already permanent.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> <code>lazy</code> left at its default on any relationship</td>
+<td>The default is a silent extra query per object in sync and an exception in async. Declaring <code>lazy="raise"</code> makes the loading strategy a decision instead of an accident.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> <code>Float</code> for money</td>
+<td>Binary floating point cannot represent cents exactly, the drift is small, and nothing raises. Use the database's exact numeric type.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> SQLAlchemy pooling on top of a pooler in transaction mode</td>
+<td>Two poolers each believe they own the connection lifecycle. Use a null pool and let the external one do its job.</td>
+</tr>
+<tr>
+<td><code>expire_on_commit=False</code></td>
+<td>The default expires every attribute after commit, so reading a plain column afterwards raises, with a traceback pointing at the read rather than the commit.</td>
+</tr>
+<tr>
+<td>Loading strategy is chosen per query, not per model</td>
+<td>The right strategy for a detail endpoint is wrong for a list endpoint. <code>lazy="raise"</code> on the model forces the choice to be made where the query is.</td>
+</tr>
+<tr>
+<td><code>selectinload</code> for collections, <code>joinedload</code> for many-to-one</td>
+<td>A join to a collection multiplies parent rows by children, which silently breaks <code>LIMIT</code> and inflates the transferred result.</td>
+</tr>
+<tr>
+<td>A repository receives a session; it never opens one</td>
+<td>It is what lets the same code run in a request, in a background job, and in a test that rolls back — with no branch for each.</td>
+</tr>
+<tr>
+<td>Every constraint has an explicit naming convention, set before the first table</td>
+<td>Autogenerate cannot detect changes to a constraint it cannot name. Adding this later is a rename migration for every constraint you have.</td>
+</tr>
+<tr>
+<td>Timestamps use server defaults</td>
+<td>A Python default is absent for rows written by a migration, a bulk load or a human at <code>psql</code> — and those are the rows whose history you will later need.</td>
+</tr>
+<tr>
+<td><code>pool_recycle</code> is below the shortest idle timeout on the path</td>
+<td>Otherwise the pool eventually hands out a socket that a proxy or firewall has already dropped, and the failure lands on a user's request.</td>
+</tr>
+<tr>
+<td>Flush deliberately; do not rely on autoflush</td>
+<td>Implicit flushes fire mid-query and reorder writes in ways that are very hard to reconstruct from a log.</td>
+</tr>
+</tbody>
+</table>
+<h2>6. Data contracts</h2>
+<div class="hl"><pre><span></span><code><span class="k">class</span> <span class="nc">Order</span><span class="p">(</span><span class="n">Base</span><span class="p">):</span>
+    <span class="nb">id</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">primary_key</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">total</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="n">Decimal</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">Numeric</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
+    <span class="c1"># not float — cents do not survive binary floating point</span>
+    <span class="n">customer_id</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">ForeignKey</span><span class="p">(</span><span class="s2">&quot;customers.id&quot;</span><span class="p">),</span> <span class="n">index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="c1"># the index is not optional: an unindexed foreign key makes every join and</span>
+    <span class="c1"># every cascade delete a sequential scan, and it stays fast until the table</span>
+    <span class="c1"># is large enough that it is expensive to fix</span>
+    <span class="n">items</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="s2">&quot;OrderItem&quot;</span><span class="p">]]</span> <span class="o">=</span> <span class="n">relationship</span><span class="p">(</span><span class="n">lazy</span><span class="o">=</span><span class="s2">&quot;raise&quot;</span><span class="p">)</span>
+    <span class="c1"># the annotation is the contract: a collection, never None, and never loaded</span>
+    <span class="c1"># by accident</span>
+</code></pre></div>
+
+<p><code>Mapped[X]</code> versus <code>Mapped[X | None]</code> is the nullability of the column, not a
+convenience. Getting it wrong means the model claims a value is always present
+while the table permits null, and the first null row raises inside serialisation —
+far from the migration that allowed it.</p>
+<h2>7. Build order</h2>
+<ol>
+<li><strong>Base, naming convention, one model, one table.</strong> The naming convention has to
+   exist before the first table; retrofitting it renames every constraint.</li>
+<li><strong>Session factory and the dependency</strong>, with <code>expire_on_commit=False</code>. Prove
+   one request equals one transaction: raise inside a handler after a write and
+   assert nothing was persisted.</li>
+<li><strong>One repository, taking a session</strong>, with a test that passes it a session
+   inside a transaction the test rolls back.</li>
+<li><strong>Relationships, all with <code>lazy="raise"</code>.</strong> Add a test that walks a
+   relationship without loading it and expects the exception — this is the guard,
+   so it needs a test of its own.</li>
+<li><strong>Explicit loading on the list query</strong>, with a query-count assertion. Two
+   queries for a list of a hundred orders with items, not a hundred and one.</li>
+<li><strong>Pool settings</strong> — pre-ping, recycle, and the null pool if a pooler is in
+   front.</li>
+<li><strong>Concurrency check:</strong> run the list endpoint under parallel load and confirm
+   the pool does not exhaust and no session is shared across tasks.</li>
+</ol>
+<p>Step 4 before step 5 because <code>lazy="raise"</code> is what makes step 5's mistakes
+visible. In the other order, a missing loader is just a slow endpoint.</p>
+<h2>8. Blocks to pull in</h2>
+<p>Nothing here is a prerequisite. These are adjacent problems, by name only —
+resolve them separately if they apply.</p>
+<ul>
+<li>PostgreSQL connection pool and lifecycle — the pool this engine sits on</li>
+<li>Alembic migrations — how the tables these models describe come to exist</li>
+<li>Pydantic request and response schemas — what these objects turn into at the boundary</li>
+<li>Cursor pagination — what the list query needs before the table gets large</li>
+<li>Integration tests with real dependencies — where the rolled-back session fixture belongs</li>
+</ul>
+<h2>9. Metrics</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Queries per list endpoint request</td>
+<td>Constant in the number of rows returned — 2 or 3, never N+1</td>
+</tr>
+<tr>
+<td>Unintended lazy loads reaching production</td>
+<td>0, guaranteed by <code>lazy="raise"</code> rather than by review</td>
+</tr>
+<tr>
+<td>Transactions per request</td>
+<td>1</td>
+</tr>
+<tr>
+<td>Session objects shared between concurrent tasks</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Connections held open beyond the request that opened them</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Time added by <code>pool_pre_ping</code> per request</td>
+<td>&lt; 1 ms</td>
+</tr>
+</tbody>
+</table>
+<h2>10. Failure modes</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MissingGreenlet</code> on a line that only reads an attribute</td>
+<td>The attribute was expired by a commit, or the relationship was never loaded — either way the ORM would need to emit IO from a property, which it cannot</td>
+<td><code>expire_on_commit=False</code>, and load relationships explicitly in the query</td>
+</tr>
+<tr>
+<td>A list endpoint is fast with ten rows and unusable with a thousand</td>
+<td>N+1: one query for the list, one per row for a relationship</td>
+<td>Add <code>selectinload</code> or <code>joinedload</code>, and assert the query count in a test</td>
+</tr>
+<tr>
+<td>A list endpoint with <code>LIMIT 20</code> returns fewer than twenty parents</td>
+<td><code>joinedload</code> on a collection multiplied parent rows by children, and the limit applied to the joined rows</td>
+<td><code>selectinload</code> for collections</td>
+</tr>
+<tr>
+<td>A request writes half its changes and returns success</td>
+<td>Something committed mid-request, so the later failure rolled back only what came after</td>
+<td>Remove every commit outside the session dependency</td>
+</tr>
+<tr>
+<td>Rows appear that no code path explains, or writes land in an unexpected order</td>
+<td>Autoflush fired inside an unrelated query</td>
+<td><code>autoflush=False</code> and flush where you mean to</td>
+</tr>
+<tr>
+<td>The first request after a database restart always fails</td>
+<td>The pool handed out a connection that was severed while idle</td>
+<td><code>pool_pre_ping=True</code>, and <code>pool_recycle</code> below the shortest idle timeout on the path</td>
+</tr>
+<tr>
+<td>Connections exhaust under moderate load, and the count exceeds what the pool was configured for</td>
+<td><code>max_overflow</code> is silently adding connections beyond <code>pool_size</code></td>
+<td>Set <code>max_overflow=0</code> so the ceiling is the ceiling</td>
+</tr>
+<tr>
+<td>A cascade delete of one row takes minutes</td>
+<td>The foreign key has no index, so each cascade step is a sequential scan</td>
+<td>Index every foreign key</td>
+</tr>
+<tr>
+<td>Money is off by a cent on large orders</td>
+<td>A relationship or column used <code>Float</code></td>
+<td><code>Numeric</code> with an explicit scale</td>
+</tr>
+<tr>
+<td>Two concurrent requests interfere with each other's data</td>
+<td>A session was stored on a module or shared between tasks — a session is not concurrency-safe</td>
+<td>One session per request, obtained from the dependency</td>
+</tr>
+<tr>
+<td>Alembic generates a migration that silently omits a constraint change</td>
+<td>The constraint has a database-generated name, which autogenerate cannot compare</td>
+<td>Set the naming convention on the metadata before the first table</td>
+</tr>
+</tbody>
+</table>
+<h2>11. Definition of done</h2>
+<ul>
+<li class="task">Every relationship declares an explicit <code>lazy</code> strategy; a test walks the models' mappers and fails on any that does not</li>
+<li class="task">A test accesses an unloaded relationship and asserts the raise, so the guard itself is covered</li>
+<li class="task"><code>expire_on_commit=False</code> on the session factory, with a test reading a column after commit</li>
+<li class="task">A list endpoint's query count is asserted and is constant in the number of rows returned</li>
+<li class="task">Raising inside a handler after a write leaves nothing persisted, covered by a test</li>
+<li class="task"><code>grep</code> finds no <code>commit()</code> outside the session dependency, checked in CI</li>
+<li class="task">Every repository takes a session as a constructor argument and a test passes one inside a rolled-back transaction</li>
+<li class="task">The metadata naming convention is set and every existing constraint matches it, verified against the live schema</li>
+<li class="task">Every foreign key column has an index, verified by a query against the catalogue rather than by reading the models</li>
+<li class="task">No monetary or exact-decimal column is mapped to <code>Float</code>, verified by inspecting column types</li>
+<li class="task"><code>pool_recycle</code> is set below the shortest idle timeout on the network path, with that timeout named in a comment</li>
+<li class="task">Running the test suite in parallel produces the same results as running it serially</li>
+</ul>
+  </article>
+
+  <aside class="tailpiece">
+    <h2>Use this blueprint</h2>
+    <p>
+      Copy the file into your project and point your agent at it. It works with Claude Code,
+      Cursor, Copilot, ChatGPT and anything else that reads a file — there is nothing to install.
+    </p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/sqlalchemy-orm" target="_blank" rel="noopener">Open on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Browse all blueprints</a>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p><a href="/">Awesome Blueprints</a> — same request, same architecture, every time.</p>
+    <p class="dim">MIT · awesomeblueprints.com</p>
+  </div>
+</footer>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'neutral' });
+</script>
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const now = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', now);
+    try { localStorage.setItem('ab-theme', now); } catch (e) {}
+    location.reload();   // the diagram is themed at render time
+  });
+</script>
+
+</body>
+</html>

@@ -1,0 +1,567 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LLM Observability and Tracing — Blueprint for AI Coding Agents | Awesome Blueprints</title>
+<meta name="description" content="LLM observability and tracing: spans for model calls, prompt versions, token and cost attribution, and finding the run behind a bad answer." />
+<link rel="canonical" href="https://awesomeblueprints.com/blueprints/observability-tracing/" />
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="Awesome Blueprints" />
+<meta property="og:url" content="https://awesomeblueprints.com/blueprints/observability-tracing/" />
+<meta property="og:title" content="LLM Observability and Tracing — Architecture Blueprint" />
+<meta property="og:description" content="LLM observability and tracing: spans for model calls, prompt versions, token and cost attribution, and finding the run behind a bad answer." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="LLM Observability and Tracing — Architecture Blueprint" />
+<meta name="twitter:description" content="LLM observability and tracing: spans for model calls, prompt versions, token and cost attribution, and finding the run behind a bad answer." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/page.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "LLM Observability and Tracing", "description": "LLM observability and tracing: spans for model calls, prompt versions, token and cost attribution, and finding the run behind a bad answer.", "url": "https://awesomeblueprints.com/blueprints/observability-tracing/", "dateModified": "2026-08-19", "keywords": "Observability", "isAccessibleForFree": true, "license": "https://opensource.org/licenses/MIT", "publisher": {"@type": "Organization", "name": "Awesome Blueprints", "url": "https://awesomeblueprints.com"}}</script>
+<script>
+  (function () {
+    var t;
+    try { t = localStorage.getItem('ab-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">Awesome Blueprints</a>
+    <div class="nav-right">
+      <a class="nav-link" href="/#blueprints">Catalogue</a>
+      <a class="nav-link" href="/#faq">FAQ</a>
+      <a class="nav-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/observability-tracing" target="_blank" rel="noopener">GitHub ↗</a>
+      <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Switch theme">◑</button>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/">Home</a> <span>/</span> <a href="/#blueprints">Blueprints</a> <span>/</span>
+    <span>LLM Observability and Tracing</span>
+  </nav>
+
+  <header class="page-head">
+    <p class="eyebrow">observability-tracing</p>
+    <h1>LLM Observability and Tracing</h1>
+    <p class="lede">LLM observability and tracing: spans for model calls, prompt versions, token and cost attribution, and finding the run behind a bad answer.</p>
+    <div class="facts"><span>medium</span><span>4–6 days</span><span>Verified 2026-08-19</span></div>
+    <div class="tags"><span class="tag">Observability</span></div>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/observability-tracing" target="_blank" rel="noopener">Read it on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Back to the catalogue</a>
+    </div>
+  </header>
+
+  <article class="doc">
+<blockquote>
+<p>A structured trace of every model call and every agent step — inputs, outputs,
+tokens, cost, latency and outcome — so that a complaint about yesterday can be
+reconstructed and replayed instead of guessed at.</p>
+</blockquote>
+<p><strong>Complexity:</strong> medium · <strong>Typical build:</strong> 4–6 days · <strong>Verified:</strong> 2026-08-19 (re-check after ~90 days)</p>
+<p><strong>Examples in:</strong> Python with OpenTelemetry. Only §4 and §6 are language-specific — the rules, failure modes and definition of done hold anywhere, and your agent translates the code.</p>
+<p><strong>Use when:</strong> a system that calls a model runs somewhere you cannot watch it, and someone will eventually say "it gave me a strange answer on Tuesday". Also when nobody can say which feature is responsible for the model bill.</p>
+<p><strong>Not for:</strong> replacing your existing application observability. This is a layer on top of it — the same trace, with the model-specific fields that ordinary logging has no place for.</p>
+<hr />
+<h2>⚙️ INSTRUCTIONS FOR THE AI — READ BEFORE WRITING ANY CODE</h2>
+<p><strong>Do not start coding.</strong></p>
+<p><strong>Step 1 — Refresh.</strong> Search the web and verify: the current state of the
+OpenTelemetry GenAI semantic conventions — the attribute names for model,
+token counts and cost move between releases, and stable-versus-experimental
+matters here; whether the provider's SDK now emits spans natively and what it
+omits; the current published prices for every model in use, since the cost table
+is wrong the moment it is stale. Report what you verified and where your
+assumptions were wrong.</p>
+<p><strong>Step 2 — Read the project, then audit what exists.</strong> Find the existing tracing
+setup, the logging configuration, any request-id propagation, and every place a
+model response is currently logged. A project with a web framework almost always
+has trace context propagation already; this hangs off it rather than replacing it.</p>
+<p><strong>Then audit what exists.</strong> Walk §11 item by item, marking each <em>already true</em>,
+<em>partly true</em> or <em>absent</em> with the file that decides it. Report that before
+proposing anything.</p>
+<p>Assume the project is right until it demonstrably is not. Code that satisfies an
+item stays, whatever its shape — §4 is illustrative, and its idioms translate
+into this project's language. Replacing something that works needs a one-line
+reason. Never delete a working path to make room for the version written here.
+If nothing relevant exists, say so and use §3.</p>
+<p>The same applies to language. §4 is illustrative: translate its idioms into this
+project's language and libraries rather than importing its shape. §11 is what has
+to become true — not the syntax it happens to be written in.</p>
+<p><strong>Step 3 — Write a plan for the gap only, and get it approved.</strong> List: what goes
+in a span and what goes in the payload store, the sampling policy and what it
+never samples away, the redaction rules, and the two retention periods.</p>
+<p><strong>In that plan, include a <code>## Proposed stack</code> section.</strong> Do not ask an open
+question. <em>Propose</em> the backend and payload store — with a one-line reason, the
+versions verified in Step 1, and what would change the decision. Ask the user to
+confirm once.</p>
+<p>Name what you are adding, leaving alone, and changing. Touch nothing else.</p>
+<hr />
+<h2>1. Why ordinary observability misses all of it</h2>
+<p>Conventional monitoring answers one question: was there an error? Systems built
+on models fail without one. The call returns 200, the JSON parses, the latency is
+normal, and the answer is wrong. Every dashboard stays green while users read
+nonsense.</p>
+<table>
+<thead>
+<tr>
+<th>Question</th>
+<th>Ordinary logs</th>
+<th>Model traces</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Did it error?</td>
+<td>Yes</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>What exactly went into the model?</td>
+<td>The template, if you are lucky</td>
+<td>The assembled prompt</td>
+</tr>
+<tr>
+<td>Which tools ran, with what arguments?</td>
+<td>Scattered across lines</td>
+<td>One tree per request</td>
+</tr>
+<tr>
+<td>What did this request cost?</td>
+<td>Nothing</td>
+<td>A number, attributable to a feature</td>
+</tr>
+<tr>
+<td>Can I re-run it unchanged?</td>
+<td>No</td>
+<td>Yes, from the stored payload</td>
+</tr>
+<tr>
+<td>Did the user think it was good?</td>
+<td>Unknowable</td>
+<td>Feedback attached by trace id</td>
+</tr>
+</tbody>
+</table>
+<p>The economic half is the part that surprises teams. Token cost is invisible
+without per-request attribution, and a tenfold regression is routinely discovered
+several weeks later, by finance, on an invoice.</p>
+<p>The other trap is the one that looks like prudence: storing only errors, or
+sampling uniformly to control cost. Both throw away exactly the traces you will
+need, because the interesting failure returned 200 and looked like healthy
+traffic on the way past.</p>
+<h2>2. Architecture</h2>
+<pre class="mermaid">%% GENERATED - do not edit by hand.
+%% Edit the source header in architecture.mmd, then rebuild.
+%% Trace and Payload Path
+
+flowchart TB
+    subgraph app[&quot;Request Path&quot;]
+        direction TB
+        entry[&quot;Entry - creates trace id&quot;]
+        llm[&quot;Model Call Span&quot;]
+        tools[&quot;Tool Call Spans&quot;]
+        redact[&quot;Redaction - before any write&quot;]
+    end
+    subgraph emit[&quot;Emission - off the hot path&quot;]
+        direction TB
+        sampler[&quot;Tail Sampler - keeps every failure&quot;]
+        cost[&quot;Cost Calculator - versioned price table&quot;]
+    end
+
+    client([&quot;Client&quot;])
+    payloads[(&quot;Payload Store - prompts and responses&quot;)]
+    spans[(&quot;Span Store - metadata only&quot;)]
+    metrics[&quot;Metrics - derived from spans&quot;]
+    replay[&quot;Replay - rebuild the exact input&quot;]
+    engineer([&quot;Engineer&quot;])
+
+    client --&gt;|&quot;request&quot;| entry
+    entry --&gt; llm
+    llm --&gt; tools
+    llm --&gt;|&quot;prompt and response&quot;| redact
+    tools --&gt;|&quot;args and results&quot;| redact
+    redact ---|&quot;content, by reference&quot;| payloads
+    llm -.-&gt;|&quot;token counts&quot;| cost
+    cost -.-&gt; sampler
+    tools -.-&gt; sampler
+    sampler -.-&gt;|&quot;kept traces&quot;| spans
+    spans --&gt;|&quot;derived, never emitted separately&quot;| metrics
+    entry --&gt;|&quot;answer plus trace id&quot;| client
+    client -.-&gt;|&quot;feedback, by trace id&quot;| spans
+    engineer --&gt; replay
+    replay --&gt;|&quot;the assembled prompt&quot;| payloads
+
+    classDef service fill:#eff6ff,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b;
+    classDef datastore fill:#e9faf3,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b;
+    classDef external fill:#fff4ed,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b;
+    classDef actor fill:#f0eefc,stroke:#4a3aa7,stroke-width:1.5px,color:#0b0b0b;
+    class entry,llm,tools,redact,sampler,cost,metrics,replay service;
+    class payloads,spans datastore;
+    class client,engineer actor;</pre>
+<p><strong>The rule this diagram encodes:</strong> spans hold references, payloads hold content.
+Inline the prompts and the trace store becomes too large to query, which ends
+with tracing switched off in the release that needed it.</p>
+<h2>3. Project structure</h2>
+<div class="hl"><pre><span></span><code>telemetry/
+├── context.py     # trace id creation and propagation across async boundaries
+├── spans.py       # llm_span and tool_span. Every field, every time.
+├── payloads.py    # put/get by reference. The assembled prompt, not the template.
+├── cost.py        # versioned price table; historical cost recomputable
+├── sampling.py    # tail decision: what is always kept, and the rest
+├── redact.py      # runs before any write, no exceptions
+└── replay.py      # rebuild the exact input for one step of one trace
+</code></pre></div>
+
+<p><strong>The rule that keeps this maintainable:</strong> what gets stored is the <em>assembled</em>
+prompt, not the template plus the variables. Reassembling it later requires the
+prompt-building code to be deterministic and unchanged since, and neither is
+true by the time you need it.</p>
+<h2>4. Reference implementation</h2>
+<p><strong>One span per model call</strong>, with every field filled in — a span missing token
+counts is a span that cannot answer the cost question later:</p>
+<div class="hl"><pre><span></span><code><span class="nd">@asynccontextmanager</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">llm_span</span><span class="p">(</span><span class="n">model</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">step</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+    <span class="k">with</span> <span class="n">tracer</span><span class="o">.</span><span class="n">start_as_current_span</span><span class="p">(</span><span class="s2">&quot;llm.call&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">span</span><span class="p">:</span>
+        <span class="n">span</span><span class="o">.</span><span class="n">set_attribute</span><span class="p">(</span><span class="s2">&quot;gen_ai.request.model&quot;</span><span class="p">,</span> <span class="n">model</span><span class="p">)</span>
+        <span class="n">span</span><span class="o">.</span><span class="n">set_attribute</span><span class="p">(</span><span class="s2">&quot;llm.step_index&quot;</span><span class="p">,</span> <span class="n">step</span><span class="p">)</span>
+        <span class="n">t0</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span>
+        <span class="n">holder</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">yield</span> <span class="n">holder</span>
+            <span class="n">usage</span> <span class="o">=</span> <span class="n">holder</span><span class="p">[</span><span class="s2">&quot;usage&quot;</span><span class="p">]</span>
+            <span class="n">span</span><span class="o">.</span><span class="n">set_attributes</span><span class="p">({</span>
+                <span class="s2">&quot;gen_ai.usage.input_tokens&quot;</span><span class="p">:</span> <span class="n">usage</span><span class="o">.</span><span class="n">input_tokens</span><span class="p">,</span>
+                <span class="s2">&quot;gen_ai.usage.output_tokens&quot;</span><span class="p">:</span> <span class="n">usage</span><span class="o">.</span><span class="n">output_tokens</span><span class="p">,</span>
+                <span class="s2">&quot;llm.usage.cached_tokens&quot;</span><span class="p">:</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">usage</span><span class="p">,</span> <span class="s2">&quot;cache_read_input_tokens&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+                <span class="s2">&quot;llm.cost_usd&quot;</span><span class="p">:</span> <span class="n">cost_of</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">usage</span><span class="p">),</span>
+                <span class="s2">&quot;llm.stop_reason&quot;</span><span class="p">:</span> <span class="n">holder</span><span class="p">[</span><span class="s2">&quot;stop_reason&quot;</span><span class="p">],</span>
+                <span class="c1"># References. Never the text itself.</span>
+                <span class="s2">&quot;llm.prompt_ref&quot;</span><span class="p">:</span> <span class="k">await</span> <span class="n">payloads</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">redact</span><span class="p">(</span><span class="n">holder</span><span class="p">[</span><span class="s2">&quot;prompt&quot;</span><span class="p">])),</span>
+                <span class="s2">&quot;llm.response_ref&quot;</span><span class="p">:</span> <span class="k">await</span> <span class="n">payloads</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">redact</span><span class="p">(</span><span class="n">holder</span><span class="p">[</span><span class="s2">&quot;response&quot;</span><span class="p">])),</span>
+            <span class="p">})</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">span</span><span class="o">.</span><span class="n">record_exception</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+            <span class="n">span</span><span class="o">.</span><span class="n">set_status</span><span class="p">(</span><span class="n">trace</span><span class="o">.</span><span class="n">StatusCode</span><span class="o">.</span><span class="n">ERROR</span><span class="p">)</span>
+            <span class="k">raise</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="n">span</span><span class="o">.</span><span class="n">set_attribute</span><span class="p">(</span><span class="s2">&quot;llm.latency_ms&quot;</span><span class="p">,</span> <span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span> <span class="o">-</span> <span class="n">t0</span><span class="p">)</span> <span class="o">*</span> <span class="mi">1000</span><span class="p">)</span>
+</code></pre></div>
+
+<p><strong>Sampling decides at the end of the request, not the start.</strong> A head decision
+cannot know the request was going to fail:</p>
+<div class="hl"><pre><span></span><code><span class="k">def</span> <span class="nf">should_keep</span><span class="p">(</span><span class="n">t</span><span class="p">:</span> <span class="n">Trace</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">t</span><span class="o">.</span><span class="n">outcome</span> <span class="o">!=</span> <span class="s2">&quot;success&quot;</span><span class="p">:</span>      <span class="k">return</span> <span class="kc">True</span>    <span class="c1"># every failure</span>
+    <span class="k">if</span> <span class="n">t</span><span class="o">.</span><span class="n">total_latency_ms</span> <span class="o">&gt;</span> <span class="mi">10_000</span><span class="p">:</span> <span class="k">return</span> <span class="kc">True</span>    <span class="c1"># every slow request</span>
+    <span class="k">if</span> <span class="n">t</span><span class="o">.</span><span class="n">total_cost_usd</span> <span class="o">&gt;</span> <span class="mf">0.50</span><span class="p">:</span>     <span class="k">return</span> <span class="kc">True</span>    <span class="c1"># every expensive request</span>
+    <span class="k">if</span> <span class="n">t</span><span class="o">.</span><span class="n">feedback</span><span class="p">:</span>                  <span class="k">return</span> <span class="kc">True</span>    <span class="c1"># anything a user reacted to</span>
+    <span class="k">return</span> <span class="n">random</span><span class="o">.</span><span class="n">random</span><span class="p">()</span> <span class="o">&lt;</span> <span class="mf">0.05</span>                  <span class="c1"># and a slice of the healthy traffic</span>
+</code></pre></div>
+
+<p><strong>Replay is the payoff.</strong> It works only because the assembled prompt was stored:</p>
+<div class="hl"><pre><span></span><code><span class="k">async</span> <span class="k">def</span> <span class="nf">replay</span><span class="p">(</span><span class="n">trace_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">step</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+    <span class="n">span</span> <span class="o">=</span> <span class="k">await</span> <span class="n">spans</span><span class="o">.</span><span class="n">get_llm_span</span><span class="p">(</span><span class="n">trace_id</span><span class="p">,</span> <span class="n">step</span><span class="p">)</span>
+    <span class="n">prompt</span> <span class="o">=</span> <span class="k">await</span> <span class="n">payloads</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">span</span><span class="o">.</span><span class="n">prompt_ref</span><span class="p">)</span>
+    <span class="k">return</span> <span class="k">await</span> <span class="n">client</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">model</span> <span class="ow">or</span> <span class="n">span</span><span class="o">.</span><span class="n">model</span><span class="p">,</span>
+                               <span class="n">temperature</span><span class="o">=</span><span class="n">span</span><span class="o">.</span><span class="n">temperature</span><span class="p">,</span> <span class="o">**</span><span class="n">prompt</span><span class="p">)</span>
+</code></pre></div>
+
+<p>The same function is how you evaluate a model upgrade: replay a thousand real
+traces against the new model and diff the outputs, instead of arguing from a
+benchmark.</p>
+<h2>5. Golden-standard rules</h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>One trace id created at entry and propagated across every async boundary</td>
+<td>Orphaned spans are the commonest reason a trace cannot be read</td>
+</tr>
+<tr>
+<td>Every model call emits a span with model, all token counts, cost, latency and stop reason</td>
+<td>Any missing field is a question you will not be able to answer later</td>
+</tr>
+<tr>
+<td>Cached tokens are recorded separately</td>
+<td>Otherwise a caching regression is invisible and simply looks like higher cost</td>
+</tr>
+<tr>
+<td>Prompts and responses go to a payload store; spans hold references</td>
+<td>Inlined payloads make the trace store unqueryable, and then unused</td>
+</tr>
+<tr>
+<td>What is stored is the assembled prompt, not the template</td>
+<td>Reassembling later requires code that has not changed, which it has</td>
+</tr>
+<tr>
+<td>Tool calls get spans with arguments, result size and an error flag</td>
+<td>The tool layer is where most agent failures actually happen</td>
+</tr>
+<tr>
+<td>Sampling is tail-based, and always keeps failures, slow, expensive and user-flagged traces</td>
+<td>Uniform sampling keeps the boring traffic and loses the incident</td>
+</tr>
+<tr>
+<td>Redaction runs before any write</td>
+<td>Traces live for months; anything sensitive in them is a standing liability</td>
+</tr>
+<tr>
+<td>Payload retention and metadata retention are set separately</td>
+<td>Metadata is cheap and worth a year; payloads are neither</td>
+</tr>
+<tr>
+<td>Telemetry is emitted asynchronously</td>
+<td>Otherwise observability becomes the latency problem it was meant to diagnose</td>
+</tr>
+<tr>
+<td>The trace id is returned to the client</td>
+<td>Without it, user feedback cannot be attached to anything</td>
+</tr>
+<tr>
+<td>Metrics are derived from spans, never emitted alongside them</td>
+<td>Two independent paths drift, and then neither is trusted</td>
+</tr>
+<tr>
+<td>The cost table is versioned, and historical cost can be recomputed</td>
+<td>Prices change; a silent recalculation destroys every past comparison</td>
+</tr>
+</tbody>
+</table>
+<h2>6. Data contracts</h2>
+<div class="hl"><pre><span></span><code><span class="k">class</span> <span class="nc">LLMSpan</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">trace_id</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">span_id</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">parent_span_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="n">step_index</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">model</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">provider</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">temperature</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">prompt_ref</span><span class="p">:</span> <span class="nb">str</span>            <span class="c1"># a reference. Never the text.</span>
+    <span class="n">response_ref</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">prompt_tokens</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">completion_tokens</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">cached_tokens</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">cost_usd</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">latency_ms</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">time_to_first_token_ms</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">stop_reason</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">error</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+<span class="k">class</span> <span class="nc">ToolSpan</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">trace_id</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">tool_name</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">args_ref</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">result_bytes</span><span class="p">:</span> <span class="nb">int</span>          <span class="c1"># the number that explains a context overflow</span>
+    <span class="n">result_ref</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">is_error</span><span class="p">:</span> <span class="nb">bool</span>
+    <span class="n">latency_ms</span><span class="p">:</span> <span class="nb">float</span>
+
+<span class="k">class</span> <span class="nc">Trace</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">trace_id</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">user_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="n">tenant_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="n">route</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">outcome</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;success&quot;</span><span class="p">,</span> <span class="s2">&quot;error&quot;</span><span class="p">,</span> <span class="s2">&quot;abstained&quot;</span><span class="p">,</span> <span class="s2">&quot;budget_exhausted&quot;</span><span class="p">]</span>
+    <span class="n">total_tokens</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">total_cost_usd</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">total_latency_ms</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">n_llm_calls</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">n_tool_calls</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">feedback</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>     <span class="c1"># attached later, by trace id</span>
+</code></pre></div>
+
+<h2>7. Build order</h2>
+<ol>
+<li><strong>A trace id at the entry point</strong>, propagated everywhere. Nothing else works
+   without this.</li>
+<li><strong>One span per model call</strong> with model, tokens, latency and stop reason.</li>
+<li><strong>The payload store</strong>, holding the assembled prompt and the response by
+   reference.</li>
+<li><strong>Redaction</strong>, before anything is written. Not a later hardening pass — a
+   month of unredacted traces cannot be un-stored.</li>
+<li><strong>Cost</strong>, from a versioned price table, on every span.</li>
+<li><strong>Tool spans</strong> with arguments, result size and error flag.</li>
+<li><strong>Tail sampling</strong>, with the always-keep list explicit in code.</li>
+<li><strong>The trace id returned to the client</strong>, and a feedback endpoint that attaches
+   to it.</li>
+<li><strong>Metrics derived from spans</strong>, and the old separately-emitted ones deleted.</li>
+<li><strong>Replay</strong>, and then use it to reproduce one real reported issue. Until that
+    has happened once, you do not know it works.</li>
+</ol>
+<h2>8. Related reading</h2>
+<p>Every blueprint here stands on its own: nothing below is a prerequisite, and
+nothing above needs any of it to be implemented. These are adjacent problems you
+will meet next, listed so you know they have been thought about.</p>
+<ul>
+<li><strong>The Agent Loop</strong> — the multi-step runs these traces are mostly reconstructing.</li>
+<li><strong>Eval Harness Design</strong> — where sampled production traces become permanent cases.</li>
+<li><strong>Tool Design</strong> — the layer tool spans measure.</li>
+<li><strong>Error Envelope</strong> — the request-scoped identifier this hangs off.</li>
+</ul>
+<h2>9. Metrics</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Requests with a complete trace</td>
+<td>&gt; 99%</td>
+</tr>
+<tr>
+<td>Failed requests with a trace</td>
+<td>100%. Not "most"</td>
+</tr>
+<tr>
+<td>Traces that replay to a byte-identical prompt</td>
+<td>&gt; 95%; below 80% prompt assembly is not deterministic</td>
+</tr>
+<tr>
+<td>Added latency at p95 from tracing</td>
+<td>&lt; 5 ms</td>
+</tr>
+<tr>
+<td>Trace storage cost as a share of inference cost</td>
+<td>&lt; 5%</td>
+</tr>
+<tr>
+<td>Spend attributable to a trace</td>
+<td>100%</td>
+</tr>
+<tr>
+<td>User feedback linked to a trace</td>
+<td>&gt; 95%</td>
+</tr>
+</tbody>
+</table>
+<h2>10. Failure modes</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A user's complaint cannot be reproduced</td>
+<td>Only the template was stored</td>
+<td>Store the assembled prompt</td>
+</tr>
+<tr>
+<td>Traces cost more than inference</td>
+<td>Payloads inlined and nothing sampled</td>
+<td>Reference payloads; tail-sample successes</td>
+</tr>
+<tr>
+<td>A tenfold cost regression found on the invoice</td>
+<td>No per-request cost</td>
+<td>Cost on every span, aggregated daily by route</td>
+</tr>
+<tr>
+<td>Spans appear with no parent</td>
+<td>Context dropped at an async boundary</td>
+<td>Propagate explicitly; test the async path</td>
+</tr>
+<tr>
+<td>Feedback cannot be attached to anything</td>
+<td>The trace id never reached the client</td>
+<td>Return it in the response body</td>
+</tr>
+<tr>
+<td>Traces contain personal data</td>
+<td>Redaction added later, or never</td>
+<td>Redact before write; audit a sample monthly</td>
+</tr>
+<tr>
+<td>The bug is not in the traces</td>
+<td>Uniform sampling</td>
+<td>Tail-based, with failures always kept</td>
+</tr>
+<tr>
+<td>Metrics and traces disagree</td>
+<td>Emitted independently</td>
+<td>Derive metrics from spans</td>
+</tr>
+<tr>
+<td>Replay produces a different prompt</td>
+<td>Prompt assembly is not deterministic</td>
+<td>Store the final assembled prompt, and stop reconstructing</td>
+</tr>
+<tr>
+<td>Cost numbers changed retroactively</td>
+<td>The price table was edited in place</td>
+<td>Version it; recompute deliberately, and say so</td>
+</tr>
+</tbody>
+</table>
+<h2>11. Definition of done</h2>
+<ul>
+<li class="task">A trace id is created at entry and propagated across every async boundary.</li>
+<li class="task">Every model call emits a span with model, all token counts including cached, cost, latency and stop reason.</li>
+<li class="task">Prompts and responses are stored by reference, never inlined in a span.</li>
+<li class="task">The stored prompt is the assembled prompt, and replay has reproduced it byte for byte.</li>
+<li class="task">Tool calls emit spans with arguments, result size and an error flag.</li>
+<li class="task">Sampling is tail-based and always keeps failures, slow, expensive and user-flagged traces.</li>
+<li class="task">Redaction runs before every write, and a sample is audited.</li>
+<li class="task">Payload retention and metadata retention are defined separately.</li>
+<li class="task">Telemetry emission is asynchronous and adds under 5 ms at p95.</li>
+<li class="task">The trace id is returned to the client and feedback attaches to it.</li>
+<li class="task">Metrics are derived from spans, with no separate emission path left.</li>
+<li class="task">The cost table is versioned and historical cost can be recomputed.</li>
+<li class="task">Replay has been used at least once to reproduce a real reported issue.</li>
+</ul>
+  </article>
+
+  <aside class="tailpiece">
+    <h2>Use this blueprint</h2>
+    <p>
+      Copy the file into your project and point your agent at it. It works with Claude Code,
+      Cursor, Copilot, ChatGPT and anything else that reads a file — there is nothing to install.
+    </p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/observability-tracing" target="_blank" rel="noopener">Open on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Browse all blueprints</a>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p><a href="/">Awesome Blueprints</a> — same request, same architecture, every time.</p>
+    <p class="dim">MIT · awesomeblueprints.com</p>
+  </div>
+</footer>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'neutral' });
+</script>
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const now = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', now);
+    try { localStorage.setItem('ab-theme', now); } catch (e) {}
+    location.reload();   // the diagram is themed at render time
+  });
+</script>
+
+</body>
+</html>

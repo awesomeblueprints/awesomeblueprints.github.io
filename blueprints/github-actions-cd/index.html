@@ -1,0 +1,576 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GitHub Actions CD — Blueprint for AI Coding Agents | Awesome Blueprints</title>
+<meta name="description" content="GitHub Actions CD: build once and promote the same image, environment approvals, smoke checks after deploy and a rollback you have run." />
+<link rel="canonical" href="https://awesomeblueprints.com/blueprints/github-actions-cd/" />
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="Awesome Blueprints" />
+<meta property="og:url" content="https://awesomeblueprints.com/blueprints/github-actions-cd/" />
+<meta property="og:title" content="GitHub Actions CD — Architecture Blueprint" />
+<meta property="og:description" content="GitHub Actions CD: build once and promote the same image, environment approvals, smoke checks after deploy and a rollback you have run." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="GitHub Actions CD — Architecture Blueprint" />
+<meta name="twitter:description" content="GitHub Actions CD: build once and promote the same image, environment approvals, smoke checks after deploy and a rollback you have run." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/page.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "GitHub Actions CD", "description": "GitHub Actions CD: build once and promote the same image, environment approvals, smoke checks after deploy and a rollback you have run.", "url": "https://awesomeblueprints.com/blueprints/github-actions-cd/", "dateModified": "2026-08-19", "keywords": "CI/CD", "isAccessibleForFree": true, "license": "https://opensource.org/licenses/MIT", "publisher": {"@type": "Organization", "name": "Awesome Blueprints", "url": "https://awesomeblueprints.com"}}</script>
+<script>
+  (function () {
+    var t;
+    try { t = localStorage.getItem('ab-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">Awesome Blueprints</a>
+    <div class="nav-right">
+      <a class="nav-link" href="/#blueprints">Catalogue</a>
+      <a class="nav-link" href="/#faq">FAQ</a>
+      <a class="nav-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/github-actions-cd" target="_blank" rel="noopener">GitHub ↗</a>
+      <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Switch theme">◑</button>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/">Home</a> <span>/</span> <a href="/#blueprints">Blueprints</a> <span>/</span>
+    <span>GitHub Actions CD</span>
+  </nav>
+
+  <header class="page-head">
+    <p class="eyebrow">github-actions-cd</p>
+    <h1>GitHub Actions CD</h1>
+    <p class="lede">GitHub Actions CD: build once and promote the same image, environment approvals, smoke checks after deploy and a rollback you have run.</p>
+    <div class="facts"><span>medium</span><span>2–4 days</span><span>Verified 2026-08-19</span></div>
+    <div class="tags"><span class="tag">CI/CD</span></div>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/github-actions-cd" target="_blank" rel="noopener">Read it on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Back to the catalogue</a>
+    </div>
+  </header>
+
+  <article class="doc">
+<blockquote>
+<p>Deployment that starts where CI ended: one image built once and identified by
+its commit, cloud credentials issued per run instead of stored, production
+behind an approval, migrations before instances, and a health check that rolls
+back rather than reports.</p>
+</blockquote>
+<p><strong>Complexity:</strong> medium · <strong>Typical build:</strong> 2–4 days · <strong>Verified:</strong> 2026-08-19 (re-check after ~90 days)</p>
+<p><strong>Examples in:</strong> GitHub Actions deploying a container. The architecture is language-agnostic: sections 5, 10 and 11 hold wherever you build this. Section 4 is illustrative — if your project is in another language or on another platform, your agent translates the idioms rather than importing them, and nothing is lost. The identity, approval, migration-ordering and rollback concerns are the same on GitLab, Buildkite or Argo; only the syntax changes.</p>
+<p><strong>Use when:</strong> a service is deployed often enough that doing it by hand is a risk, and CI already runs and blocks merges. This builds on that: it does not repeat the checks, it requires them.</p>
+<p><strong>Not for:</strong> a project with no CI. Automating a deploy that nothing verified means shipping breakage faster and more reliably. Also not for a system where a bad release cannot be undone — a database rewrite, an irreversible external effect — where the correct answer is a manual gate with a human who understands the blast radius.</p>
+<hr />
+<h2>⚙️ INSTRUCTIONS FOR THE AI — READ BEFORE WRITING ANY CODE</h2>
+<p><strong>Do not start coding.</strong></p>
+<p><strong>Step 1 — Refresh.</strong> Verify whether the target platform supports federated
+identity from the CI provider, and the current configuration for it — issuing a
+short-lived credential per run removes the stored long-lived key, which is the
+single biggest improvement available here. Verify the current syntax for
+environments, required reviewers and deployment protection rules. Resolve every
+action to a commit SHA. Confirm how the platform reports a rollout's health and
+whether it can roll back on its own, because that decides whether §4's rollback
+step is a command you issue or a policy you configure. Report what you verified
+and what turned out wrong.</p>
+<p><strong>Step 2 — Read the project, then audit what already exists.</strong> Find how deploys
+happen today, including the manual steps, and write them down — that list is the
+specification. Find every long-lived credential stored as a secret and what it can
+reach; each is a work item. Find whether migrations currently run as part of the
+deploy and in what order relative to new instances starting. Find whether anything
+verifies the deploy afterwards. Determine whether the platform can roll back and
+how long it takes. Then audit §11 item by item, each marked <em>already true</em>,
+<em>partly true</em> or <em>absent</em>, with the file that decides it, reported before anything
+is proposed.</p>
+<p>Assume the project is right until it demonstrably is not; code satisfying an item
+stays even where its shape differs from §4; replacing something that works needs a
+one-line reason; never delete a working path to make room for the blueprint's
+version. The same holds for language — §4 is illustrative, its idioms get
+translated into the project's language, and §11 is what has to become true rather
+than the syntax.</p>
+<p><strong>Step 3 — Write a plan for the gap only, and get it approved</strong>, including a
+<code>## Proposed stack</code> section, the rollback procedure, and what happens if a
+migration succeeds and the deploy then fails. Do not ask open framework questions
+— propose, and ask for confirmation once. Say what you are adding, what you are
+leaving alone, and what you propose to change, and touch nothing else.</p>
+<p><strong>Step 4 — Build in the order in §7.</strong> <strong>Step 5 — §11 is the definition of done.</strong></p>
+<hr />
+<h2>1. Why a deploy job is not continuous delivery</h2>
+<p>The obvious version adds a deploy step to the end of the existing pipeline. It
+works, and it collects four problems.</p>
+<table>
+<thead>
+<tr>
+<th>A deploy step bolted onto CI</th>
+<th>A separate delivery workflow</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A long-lived cloud key sits in repository secrets, valid until someone rotates it</td>
+<td>A short-lived credential is issued per run, scoped to this repository and branch</td>
+</tr>
+<tr>
+<td>The image is rebuilt for deploy, so what ships was never the thing that was tested</td>
+<td>One image, built once, identified by the commit, promoted through environments</td>
+</tr>
+<tr>
+<td>Production deploys automatically because staging did</td>
+<td>Production is an environment with a required reviewer</td>
+</tr>
+<tr>
+<td>Success means the workflow exited zero</td>
+<td>Success means the new version answered a health check, and failure rolls back</td>
+</tr>
+</tbody>
+</table>
+<p>The second row is the one that produces the unexplainable incident. Rebuilding
+from the same commit is not reproducible unless every input is pinned, and most
+are not: a base image tag moved, a transitive dependency published a patch, a
+build argument differed. <strong>Tag the image with the commit SHA, build it once, and
+deploy that digest.</strong> Then "which code is in production" has an answer you can
+check rather than infer.</p>
+<p>The fourth row is where teams discover their rollback does not exist. A workflow
+that exits zero after issuing a deploy command has told you the command was
+accepted. Whether the new version can serve traffic is a separate question, and it
+is the only one that matters.</p>
+<h2>2. Architecture</h2>
+<pre class="mermaid">%% GENERATED - do not edit by hand.
+%% Edit the source header in architecture.mmd, then rebuild.
+%% Promotion from merge to production
+
+flowchart TB
+    merge([&quot;Merge to main&quot;])
+    approver([&quot;Approver&quot;])
+    ci[&quot;CI checks, already green&quot;]
+    buildpush[&quot;Build once and push by digest&quot;]
+    staging[&quot;Deploy to staging&quot;]
+    smoke[&quot;Smoke check against staging&quot;]
+    gate[&quot;Environment protection&quot;]
+    migrate[&quot;Migrations, before instances&quot;]
+    deploy[&quot;Deploy to production&quot;]
+    verify[&quot;Health verification&quot;]
+    rollback[&quot;Roll back to the previous digest&quot;]
+    idp{{&quot;Federated identity, short lived credential&quot;}}
+    registry{{&quot;Image registry&quot;}}
+    prodstore[(&quot;Production database&quot;)]
+
+    merge --&gt; ci
+    ci --&gt;|&quot;only when green&quot;| buildpush
+    buildpush --- idp
+    buildpush --&gt;|&quot;tagged with the commit&quot;| registry
+    buildpush --&gt;|&quot;that digest, not a rebuild&quot;| staging
+    staging --&gt; smoke
+    smoke --&gt;|&quot;passed&quot;| gate
+    gate -.-&gt;|&quot;waits for a human&quot;| approver
+    approver --&gt;|&quot;approved&quot;| migrate
+    migrate --&gt;|&quot;backward compatible only&quot;| prodstore
+    migrate --&gt;|&quot;same digest as staging&quot;| deploy
+    deploy --&gt; verify
+    verify -.-&gt;|&quot;failed&quot;| rollback
+    rollback --&gt;|&quot;previous digest&quot;| registry
+
+    classDef service fill:#eff6ff,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b;
+    classDef datastore fill:#e9faf3,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b;
+    classDef external fill:#fff4ed,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b;
+    classDef actor fill:#f0eefc,stroke:#4a3aa7,stroke-width:1.5px,color:#0b0b0b;
+    class ci,buildpush,staging,smoke,gate,migrate,deploy,verify,rollback service;
+    class prodstore datastore;
+    class idp,registry external;
+    class merge,approver actor;</pre>
+<p>The rule the diagram encodes: <strong>one arrow leaves the build, and every environment
+downstream consumes that same digest.</strong> No environment rebuilds. If any did, the
+thing verified in staging and the thing running in production would be different
+artefacts that merely share a commit message.</p>
+<h2>3. Project structure</h2>
+<div class="hl"><pre><span></span><code>.github/workflows/
+├── ci.yaml         checks on pull requests — required, and unchanged by this work
+└── cd.yaml         build, push, promote — runs only on main and only after CI
+</code></pre></div>
+
+<p><strong>One rule: CD is triggered by a merge to a protected branch, never by a pull
+request event.</strong> A pull request can modify the workflow that runs it. Anything
+holding credentials must run from a ref that review has already gated, or a
+contributor can propose a change whose only purpose is to print your secrets.</p>
+<h2>4. Reference implementation</h2>
+<div class="hl"><pre><span></span><code><span class="c1"># .github/workflows/cd.yaml</span><span class="w"></span>
+<span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">CD</span><span class="w"></span>
+
+<span class="nt">on</span><span class="p">:</span><span class="w"></span>
+<span class="w">  </span><span class="nt">push</span><span class="p">:</span><span class="w"></span>
+<span class="w">    </span><span class="nt">branches</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">main</span><span class="p p-Indicator">]</span><span class="w">      </span><span class="c1"># merge only; never pull_request, and never pull_request_target</span><span class="w"></span>
+
+<span class="nt">permissions</span><span class="p">:</span><span class="w"></span>
+<span class="w">  </span><span class="nt">contents</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">read</span><span class="w"></span>
+<span class="w">  </span><span class="nt">id-token</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">write</span><span class="w">         </span><span class="c1"># mint the short-lived identity token — this is what</span><span class="w"></span>
+<span class="w">                          </span><span class="c1"># replaces a stored cloud key</span><span class="w"></span>
+<span class="w">  </span><span class="nt">packages</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">write</span><span class="w">         </span><span class="c1"># push the image</span><span class="w"></span>
+
+<span class="nt">concurrency</span><span class="p">:</span><span class="w"></span>
+<span class="w">  </span><span class="c1"># Never two deploys at once, and do NOT cancel: a half-applied deploy is worse</span><span class="w"></span>
+<span class="w">  </span><span class="c1"># than a queued one. This is the opposite of the CI setting, deliberately.</span><span class="w"></span>
+<span class="w">  </span><span class="nt">group</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cd-production</span><span class="w"></span>
+<span class="w">  </span><span class="nt">cancel-in-progress</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w"></span>
+
+<span class="nt">jobs</span><span class="p">:</span><span class="w"></span>
+<span class="w">  </span><span class="nt">build</span><span class="p">:</span><span class="w"></span>
+<span class="w">    </span><span class="nt">runs-on</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ubuntu-24.04</span><span class="w"></span>
+<span class="w">    </span><span class="nt">outputs</span><span class="p">:</span><span class="w"></span>
+<span class="w">      </span><span class="nt">digest</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${{ steps.push.outputs.digest }}</span><span class="w"></span>
+<span class="w">    </span><span class="nt">steps</span><span class="p">:</span><span class="w"></span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683</span><span class="w"> </span><span class="c1"># v4.2.2</span><span class="w"></span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772</span><span class="w"> </span><span class="c1"># v3.4.0</span><span class="w"></span>
+<span class="w">        </span><span class="nt">with</span><span class="p">:</span><span class="w"></span>
+<span class="w">          </span><span class="nt">registry</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ghcr.io</span><span class="w"></span>
+<span class="w">          </span><span class="nt">username</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${{ github.actor }}</span><span class="w"></span>
+<span class="w">          </span><span class="nt">password</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${{ secrets.GITHUB_TOKEN }}</span><span class="w"></span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">push</span><span class="w"></span>
+<span class="w">        </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker/build-push-action@471d1dc4e07e5cdedd4c2171150001c434f0b7a4</span><span class="w"> </span><span class="c1"># v6.15.0</span><span class="w"></span>
+<span class="w">        </span><span class="nt">with</span><span class="p">:</span><span class="w"></span>
+<span class="w">          </span><span class="nt">push</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w"></span>
+<span class="w">          </span><span class="c1"># The commit SHA, not `latest`. `latest` cannot answer &quot;what is running</span><span class="w"></span>
+<span class="w">          </span><span class="c1"># in production&quot; and cannot be rolled back to a known point.</span><span class="w"></span>
+<span class="w">          </span><span class="nt">tags</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ghcr.io/${{ github.repository }}:${{ github.sha }}</span><span class="w"></span>
+<span class="w">          </span><span class="nt">cache-from</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">type=gha</span><span class="w"></span>
+
+<span class="w">  </span><span class="nt">staging</span><span class="p">:</span><span class="w"></span>
+<span class="w">    </span><span class="nt">needs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build</span><span class="w"></span>
+<span class="w">    </span><span class="nt">runs-on</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ubuntu-24.04</span><span class="w"></span>
+<span class="w">    </span><span class="nt">environment</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">staging</span><span class="w"></span>
+<span class="w">    </span><span class="nt">steps</span><span class="p">:</span><span class="w"></span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">aws-actions/configure-aws-credentials@ececac1a45f3b08a01d2dd070d28d111c5fe6722</span><span class="w"> </span><span class="c1"># v4.1.0</span><span class="w"></span>
+<span class="w">        </span><span class="nt">with</span><span class="p">:</span><span class="w"></span>
+<span class="w">          </span><span class="c1"># No stored access key. The workflow presents a signed identity token and</span><span class="w"></span>
+<span class="w">          </span><span class="c1"># receives a credential valid for minutes, scoped to this repository and</span><span class="w"></span>
+<span class="w">          </span><span class="c1"># this branch. A leaked log line is then worth nothing an hour later.</span><span class="w"></span>
+<span class="w">          </span><span class="nt">role-to-assume</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${{ vars.STAGING_ROLE_ARN }}</span><span class="w"></span>
+<span class="w">          </span><span class="nt">aws-region</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">eu-central-1</span><span class="w"></span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./deploy.sh staging &quot;${{ needs.build.outputs.digest }}&quot;</span><span class="w"></span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Smoke check</span><span class="w"></span>
+<span class="w">        </span><span class="c1"># The deploy command returning zero means the platform accepted it. This is</span><span class="w"></span>
+<span class="w">        </span><span class="c1"># what proves the new version can actually serve.</span><span class="w"></span>
+<span class="w">        </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./smoke.sh &quot;$STAGING_URL&quot;</span><span class="w"></span>
+
+<span class="w">  </span><span class="nt">production</span><span class="p">:</span><span class="w"></span>
+<span class="w">    </span><span class="nt">needs</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">build</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">staging</span><span class="p p-Indicator">]</span><span class="w"></span>
+<span class="w">    </span><span class="nt">runs-on</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ubuntu-24.04</span><span class="w"></span>
+<span class="w">    </span><span class="c1"># The environment carries the protection rules: required reviewers, and which</span><span class="w"></span>
+<span class="w">    </span><span class="c1"># branches may deploy to it. The gate lives in the environment, not in this</span><span class="w"></span>
+<span class="w">    </span><span class="c1"># file — a workflow edit cannot remove it.</span><span class="w"></span>
+<span class="w">    </span><span class="nt">environment</span><span class="p">:</span><span class="w"></span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">production</span><span class="w"></span>
+<span class="w">      </span><span class="nt">url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://api.example.com</span><span class="w"></span>
+<span class="w">    </span><span class="nt">steps</span><span class="p">:</span><span class="w"></span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">aws-actions/configure-aws-credentials@ececac1a45f3b08a01d2dd070d28d111c5fe6722</span><span class="w"> </span><span class="c1"># v4.1.0</span><span class="w"></span>
+<span class="w">        </span><span class="nt">with</span><span class="p">:</span><span class="w"></span>
+<span class="w">          </span><span class="nt">role-to-assume</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${{ vars.PRODUCTION_ROLE_ARN }}</span><span class="w"></span>
+<span class="w">          </span><span class="nt">aws-region</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">eu-central-1</span><span class="w"></span>
+
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Migrate</span><span class="w"></span>
+<span class="w">        </span><span class="c1"># Before new instances start, and backward compatible by rule: during a</span><span class="w"></span>
+<span class="w">        </span><span class="c1"># rolling deploy the previous version is still serving against this schema.</span><span class="w"></span>
+<span class="w">        </span><span class="c1"># A migration that the old code cannot tolerate breaks production before</span><span class="w"></span>
+<span class="w">        </span><span class="c1"># the new version has replaced it.</span><span class="w"></span>
+<span class="w">        </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./migrate.sh &quot;${{ needs.build.outputs.digest }}&quot;</span><span class="w"></span>
+
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Deploy</span><span class="w"></span>
+<span class="w">        </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./deploy.sh production &quot;${{ needs.build.outputs.digest }}&quot;</span><span class="w"></span>
+
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Verify</span><span class="w"></span>
+<span class="w">        </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">verify</span><span class="w"></span>
+<span class="w">        </span><span class="c1"># Poll until the new version reports ready, or give up. Without a timeout</span><span class="w"></span>
+<span class="w">        </span><span class="c1"># a stuck rollout hangs the job until the runner limit, and nobody rolls back.</span><span class="w"></span>
+<span class="w">        </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./verify.sh &quot;https://api.example.com&quot; --timeout 180</span><span class="w"></span>
+
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Roll back</span><span class="w"></span>
+<span class="w">        </span><span class="nt">if</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">failure() &amp;&amp; steps.verify.outcome == &#39;failure&#39;</span><span class="w"></span>
+<span class="w">        </span><span class="c1"># Deploying the previous digest, not reverting the commit: it is faster, it</span><span class="w"></span>
+<span class="w">        </span><span class="c1"># needs no build, and it restores an artefact that was known to work.</span><span class="w"></span>
+<span class="w">        </span><span class="c1"># Note the schema is NOT rolled back — that is why migrations must be</span><span class="w"></span>
+<span class="w">        </span><span class="c1"># backward compatible.</span><span class="w"></span>
+<span class="w">        </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./deploy.sh production &quot;${{ vars.PREVIOUS_DIGEST }}&quot;</span><span class="w"></span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># verify.sh — success means serving, not &quot;command accepted&quot;</span>
+<span class="c1">#!/usr/bin/env bash</span>
+<span class="nb">set</span> -euo pipefail
+<span class="nv">url</span><span class="o">=</span><span class="nv">$1</span><span class="p">;</span> <span class="nv">deadline</span><span class="o">=</span><span class="k">$((</span> <span class="k">$(</span>date +%s<span class="k">)</span> <span class="o">+</span> <span class="si">${</span><span class="nv">3</span><span class="k">:-</span><span class="nv">180</span><span class="si">}</span> <span class="k">))</span>
+<span class="k">until</span> curl -fsS <span class="s2">&quot;</span><span class="nv">$url</span><span class="s2">/health/ready&quot;</span> &gt;/dev/null<span class="p">;</span> <span class="k">do</span>
+  <span class="o">[</span> <span class="s2">&quot;</span><span class="k">$(</span>date +%s<span class="k">)</span><span class="s2">&quot;</span> -lt <span class="s2">&quot;</span><span class="nv">$deadline</span><span class="s2">&quot;</span> <span class="o">]</span> <span class="o">||</span> <span class="o">{</span> <span class="nb">echo</span> <span class="s2">&quot;did not become ready&quot;</span><span class="p">;</span> <span class="nb">exit</span> <span class="m">1</span><span class="p">;</span> <span class="o">}</span>
+  sleep <span class="m">5</span>
+<span class="k">done</span>
+<span class="c1"># Readiness alone can be true on old instances that have not been replaced yet.</span>
+<span class="c1"># Assert the version too, or the check passes while the deploy did nothing.</span>
+<span class="nb">test</span> <span class="s2">&quot;</span><span class="k">$(</span>curl -fsS <span class="s2">&quot;</span><span class="nv">$url</span><span class="s2">/version&quot;</span> <span class="p">|</span> jq -r .commit<span class="k">)</span><span class="s2">&quot;</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="nv">$GITHUB_SHA</span><span class="s2">&quot;</span>
+</code></pre></div>
+
+<h2>5. Golden-standard rules</h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Forbidden:</strong> a long-lived cloud key in repository secrets</td>
+<td>It is valid until someone remembers to rotate it, and it is reachable by every workflow. Federated identity issues a credential per run that expires in minutes.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> CD triggered by a pull-request event</td>
+<td>A pull request can change the workflow that runs it. Anything holding credentials runs from a reviewed ref only.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> rebuilding the image per environment</td>
+<td>Then what was tested and what ships are different artefacts. Build once; promote the digest.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> deploying a mutable tag such as <code>latest</code></td>
+<td>It cannot answer what is running, and it cannot be rolled back to a known point.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> a migration the currently running version cannot tolerate</td>
+<td>During a rolling deploy the old code runs against the new schema. A dropped column breaks production before the new version has replaced it.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> cancelling an in-flight deploy</td>
+<td>A half-applied deploy is worse than a queued one. Serialise; do not cancel.</td>
+</tr>
+<tr>
+<td>Success means the new version served a request</td>
+<td>A deploy command exiting zero means it was accepted, which is a different claim.</td>
+</tr>
+<tr>
+<td>The verification asserts the version, not just health</td>
+<td>Readiness can be answered by old instances that were never replaced, so the check passes while nothing was deployed.</td>
+</tr>
+<tr>
+<td>Rollback deploys the previous digest, not a reverted commit</td>
+<td>It is faster, needs no build, and restores an artefact known to have worked.</td>
+</tr>
+<tr>
+<td>Production is an environment with a required reviewer</td>
+<td>The gate then lives outside the workflow file, where editing the file cannot remove it.</td>
+</tr>
+<tr>
+<td>Every deploy is traceable to a commit from the artefact alone</td>
+<td>Someone will need to answer "what is running" during an incident, without access to the pipeline.</td>
+</tr>
+<tr>
+<td>Rollback is exercised on a schedule</td>
+<td>An untested rollback is a plan, and the first execution should not be during an outage.</td>
+</tr>
+</tbody>
+</table>
+<h2>6. Data contracts</h2>
+<div class="hl"><pre><span></span><code>artefact      one image, tagged with the commit SHA, referenced by digest
+promotion     staging and production consume the same digest; neither rebuilds
+credential    short-lived, per run, scoped to this repository and branch
+gate          production requires an approval recorded outside the workflow file
+success       the new version answered a health check and reported its own commit
+rollback      redeploy the previous digest; the schema is not rolled back
+</code></pre></div>
+
+<p>The last line is the contract that constrains everything upstream. Because the
+schema does not roll back, every migration must be safe for the version being
+rolled back to. That single sentence is why a column is removed a release after
+the code stops using it, and it belongs in the deployment contract rather than in
+a migration checklist nobody reads.</p>
+<h2>7. Build order</h2>
+<ol>
+<li><strong>Build and push one image tagged with the commit</strong>, on merge to main. Nothing
+   deploys yet. Confirm the digest is reproducible as a reference.</li>
+<li><strong>Deploy that digest to staging</strong> with a stored credential if that is what
+   exists. Getting the promotion shape right first is worth more than getting the
+   credential right first.</li>
+<li><strong>Replace the stored credential with federated identity</strong>, and delete the
+   stored one. Deleting it is the step that matters; an unused key is still a key.</li>
+<li><strong>Smoke check against staging</strong>, asserting the deployed version's commit.</li>
+<li><strong>Production as a gated environment</strong> with a required reviewer.</li>
+<li><strong>Migrations as a step before instances start</strong>, with the backward-compatibility
+   rule written into the review checklist.</li>
+<li><strong>Verification with a timeout, then rollback</strong> — and execute a rollback
+   deliberately, on purpose, before you need one.</li>
+</ol>
+<p>Step 7 last and non-optional. Everything before it makes deploys faster; only this
+step makes a bad deploy survivable, and it is the one that gets postponed.</p>
+<h2>8. Blocks to pull in</h2>
+<p>Nothing here is a prerequisite. These are adjacent problems, by name only —
+resolve them separately if they apply.</p>
+<ul>
+<li>GitHub Actions CI — the checks this workflow requires rather than repeats</li>
+<li>Alembic migrations — the backward-compatible schema changes this deploys</li>
+<li>Dockerfile for a production service — the image built once and promoted</li>
+<li>PostgreSQL connection pool and lifecycle — the readiness endpoint verification polls</li>
+<li>Observability and tracing — where the deploy marker and the post-deploy signal land</li>
+</ul>
+<h2>9. Metrics</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Time from merge to production</td>
+<td>&lt; 20 minutes, excluding the approval wait</td>
+</tr>
+<tr>
+<td>Long-lived cloud credentials stored as secrets</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Images rebuilt between staging and production</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Deploys that cannot be traced to a commit from the artefact</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Time to roll back</td>
+<td>&lt; 5 minutes</td>
+</tr>
+<tr>
+<td>Rollbacks executed as a drill</td>
+<td>≥ 1 per quarter</td>
+</tr>
+<tr>
+<td>Failed deploys that left production in a mixed state</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<h2>10. Failure modes</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Production behaves differently from staging with the same commit</td>
+<td>The image was rebuilt per environment and an unpinned input changed</td>
+<td>Build once, promote the digest</td>
+</tr>
+<tr>
+<td>Nobody can say which code is in production</td>
+<td>The deployed tag is <code>latest</code> or a branch name</td>
+<td>Tag with the commit SHA and expose it on a version endpoint</td>
+</tr>
+<tr>
+<td>A cloud key leaked and the exposure window was months</td>
+<td>A long-lived key was stored as a repository secret</td>
+<td>Federated identity, and delete the stored key</td>
+</tr>
+<tr>
+<td>A contributor's pull request printed a production secret</td>
+<td>CD was triggered by a pull-request event</td>
+<td>Trigger on push to a protected branch only</td>
+</tr>
+<tr>
+<td>Production broke during a deploy, before the new version was live</td>
+<td>A migration removed something the running version still used</td>
+<td>Backward-compatible migrations; remove a release later</td>
+</tr>
+<tr>
+<td>The deploy reported success and users saw errors</td>
+<td>Success was defined as the deploy command exiting zero</td>
+<td>Poll a health endpoint and assert the version</td>
+</tr>
+<tr>
+<td>Verification passes but nothing was deployed</td>
+<td>Old instances answered the readiness check</td>
+<td>Assert the reported commit matches the deployed one</td>
+</tr>
+<tr>
+<td>A rollback was attempted and failed</td>
+<td>It reverted the commit and rebuilt, which takes as long as a deploy and can fail the same way</td>
+<td>Redeploy the previous digest</td>
+</tr>
+<tr>
+<td>Two deploys ran at once and production ended in a mixed state</td>
+<td>The concurrency group cancelled in progress, or was absent</td>
+<td>Serialise deploys and do not cancel</td>
+</tr>
+<tr>
+<td>The job hung until the runner limit and nobody rolled back</td>
+<td>Verification had no timeout</td>
+<td>Bound it, and treat the timeout as a failure that triggers rollback</td>
+</tr>
+<tr>
+<td>The rollback ran and the application still failed</td>
+<td>The schema had moved forward and the old code could not read it</td>
+<td>This is the backward-compatibility rule; there is no fix at rollback time</td>
+</tr>
+</tbody>
+</table>
+<h2>11. Definition of done</h2>
+<ul>
+<li class="task">No long-lived cloud credential exists as a repository or organisation secret, verified by listing them</li>
+<li class="task">The workflow triggers only on push to a protected branch, never on a pull-request event</li>
+<li class="task">The image is built once and staging and production deploy the same digest, asserted by comparing the deployed digests</li>
+<li class="task">Every running instance exposes the commit it was built from, and a deploy asserts it matches</li>
+<li class="task">Production deploys require an approval recorded in the environment, verified by attempting a deploy</li>
+<li class="task">Migrations run to completion before any new instance starts, and a failing migration stops the deploy — demonstrated once</li>
+<li class="task">Verification polls a health endpoint with a timeout, and a timeout is treated as a failure</li>
+<li class="task">A failed verification automatically redeploys the previous digest, demonstrated by deliberately deploying a broken image</li>
+<li class="task">A rollback has been executed on purpose within the last quarter, and the time it took is recorded</li>
+<li class="task">Two deploys triggered close together run one after the other, and neither is cancelled</li>
+<li class="task">Every action is pinned to a full commit SHA</li>
+<li class="task">The deployment contract, including that the schema is not rolled back, is written down where migration authors will read it</li>
+</ul>
+  </article>
+
+  <aside class="tailpiece">
+    <h2>Use this blueprint</h2>
+    <p>
+      Copy the file into your project and point your agent at it. It works with Claude Code,
+      Cursor, Copilot, ChatGPT and anything else that reads a file — there is nothing to install.
+    </p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/github-actions-cd" target="_blank" rel="noopener">Open on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Browse all blueprints</a>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p><a href="/">Awesome Blueprints</a> — same request, same architecture, every time.</p>
+    <p class="dim">MIT · awesomeblueprints.com</p>
+  </div>
+</footer>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'neutral' });
+</script>
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const now = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', now);
+    try { localStorage.setItem('ab-theme', now); } catch (e) {}
+    location.reload();   // the diagram is themed at render time
+  });
+</script>
+
+</body>
+</html>

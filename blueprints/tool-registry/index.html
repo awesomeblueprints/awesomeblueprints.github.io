@@ -1,0 +1,616 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LLM Tool Registry and Dispatcher — Blueprint for AI Coding Agents | Awesome Blueprints</title>
+<meta name="description" content="An LLM tool registry and dispatcher: declaring tools, validating arguments, result budgets, errors the model can act on and confirmation rules." />
+<link rel="canonical" href="https://awesomeblueprints.com/blueprints/tool-registry/" />
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="Awesome Blueprints" />
+<meta property="og:url" content="https://awesomeblueprints.com/blueprints/tool-registry/" />
+<meta property="og:title" content="LLM Tool Registry and Dispatcher — Architecture Blueprint" />
+<meta property="og:description" content="An LLM tool registry and dispatcher: declaring tools, validating arguments, result budgets, errors the model can act on and confirmation rules." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="LLM Tool Registry and Dispatcher — Architecture Blueprint" />
+<meta name="twitter:description" content="An LLM tool registry and dispatcher: declaring tools, validating arguments, result budgets, errors the model can act on and confirmation rules." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/page.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "LLM Tool Registry and Dispatcher", "description": "An LLM tool registry and dispatcher: declaring tools, validating arguments, result budgets, errors the model can act on and confirmation rules.", "url": "https://awesomeblueprints.com/blueprints/tool-registry/", "dateModified": "2026-08-19", "keywords": "Agents", "isAccessibleForFree": true, "license": "https://opensource.org/licenses/MIT", "publisher": {"@type": "Organization", "name": "Awesome Blueprints", "url": "https://awesomeblueprints.com"}}</script>
+<script>
+  (function () {
+    var t;
+    try { t = localStorage.getItem('ab-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">Awesome Blueprints</a>
+    <div class="nav-right">
+      <a class="nav-link" href="/#blueprints">Catalogue</a>
+      <a class="nav-link" href="/#faq">FAQ</a>
+      <a class="nav-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/tool-registry" target="_blank" rel="noopener">GitHub ↗</a>
+      <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Switch theme">◑</button>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/">Home</a> <span>/</span> <a href="/#blueprints">Blueprints</a> <span>/</span>
+    <span>LLM Tool Registry and Dispatcher</span>
+  </nav>
+
+  <header class="page-head">
+    <p class="eyebrow">tool-registry</p>
+    <h1>LLM Tool Registry and Dispatcher</h1>
+    <p class="lede">An LLM tool registry and dispatcher: declaring tools, validating arguments, result budgets, errors the model can act on and confirmation rules.</p>
+    <div class="facts"><span>medium</span><span>2–3 days</span><span>Verified 2026-08-19</span></div>
+    <div class="tags"><span class="tag">Agents</span></div>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/tool-registry" target="_blank" rel="noopener">Read it on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Back to the catalogue</a>
+    </div>
+  </header>
+
+  <article class="doc">
+<blockquote>
+<p>Managing twenty tools rather than writing one: a registry whose schemas cannot
+drift from the functions they describe, a dispatcher that validates what the
+model invented before calling anything, and a rule for which tools may run at
+the same time.</p>
+</blockquote>
+<p><strong>Complexity:</strong> medium · <strong>Typical build:</strong> 2–3 days · <strong>Verified:</strong> 2026-08-19 (re-check after ~90 days)</p>
+<p><strong>Examples in:</strong> Python. The architecture is language-agnostic: sections 5, 10 and 11 hold wherever you build this. Section 4 is illustrative — if your project is in another language, your agent translates the idioms rather than importing them, and nothing is lost. The equivalents are Zod schemas with a discriminated union dispatch in TypeScript, struct tags plus reflection in Go, and behaviour modules in Elixir.</p>
+<p><strong>Use when:</strong> an agent has more than a handful of tools, they are added by more than one person, and the failures are now operational rather than descriptive — a schema that no longer matches its function, an argument that reached the code unchecked, one slow tool holding up the turn.</p>
+<p><strong>Not for:</strong> designing an individual tool. What it should be called, how its description should read, what its arguments should be named and what shape its result should take are a different problem with a different answer, and doing it well matters more than anything here. Also not for a single-tool agent: a registry for one entry is indirection with no payoff.</p>
+<hr />
+<h2>⚙️ INSTRUCTIONS FOR THE AI — READ BEFORE WRITING ANY CODE</h2>
+<p><strong>Do not start coding.</strong></p>
+<p><strong>Step 1 — Refresh.</strong> Verify how the model provider represents tool calls in a
+response, and specifically <strong>whether it can return several in one turn</strong> — that
+decides whether the dispatcher needs concurrency at all, and providers differ.
+Verify the format for returning a tool result and a tool error, including how a
+result is correlated back to the call that produced it. Verify whether the SDK
+validates arguments against the declared schema before handing them to you, or
+whether that is entirely your responsibility — assume the latter until proven
+otherwise. Report what you verified and what turned out wrong.</p>
+<p><strong>Step 2 — Read the project, then audit what already exists.</strong> List every tool the
+agent currently exposes and, for each, record three things: where its schema comes
+from, whether it has a timeout, and whether running it twice is harmful. That last
+column is the one this blueprint needs and the one nobody has written down. Find
+whether any tool result is unbounded in size. Find whether tool schemas are
+hand-written next to the function or generated from it. Then audit §11 item by
+item, each marked <em>already true</em>, <em>partly true</em> or <em>absent</em>, with the file that
+decides it, reported before anything is proposed.</p>
+<p>Assume the project is right until it demonstrably is not; code satisfying an item
+stays even where its shape differs from §4; replacing something that works needs a
+one-line reason; never delete a working path to make room for the blueprint's
+version. The same holds for language — §4 is illustrative, its idioms get
+translated into the project's language, and §11 is what has to become true rather
+than the syntax.</p>
+<p><strong>Step 3 — Write a plan for the gap only, and get it approved</strong>, including a
+<code>## Proposed stack</code> section and the tool table from Step 2 with the parallel-safety
+column filled in. Do not ask open framework questions — propose, and ask for
+confirmation once. Say what you are adding, what you are leaving alone, and what
+you propose to change, and touch nothing else.</p>
+<p><strong>Step 4 — Build in the order in §7.</strong> <strong>Step 5 — §11 is the definition of done.</strong></p>
+<hr />
+<h2>1. What breaks at the twentieth tool</h2>
+<p>One tool is a function with a description. Twenty is an operational system, and
+four things fail that did not exist at one.</p>
+<table>
+<thead>
+<tr>
+<th>Tools added one at a time</th>
+<th>A registry with a dispatcher</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The schema is hand-written beside the function and drifts the first time a parameter is renamed</td>
+<td>The schema is derived from the signature, so drift is impossible rather than unlikely</td>
+</tr>
+<tr>
+<td>Arguments the model invented go straight into the function</td>
+<td>Arguments are validated against the schema first, and a failure is returned as something the model can act on</td>
+</tr>
+<tr>
+<td>One slow tool holds the whole turn</td>
+<td>Each tool has its own deadline</td>
+</tr>
+<tr>
+<td>Every call site re-implements dispatch, and they diverge</td>
+<td>One dispatcher, one place where correlation, errors and limits are enforced</td>
+</tr>
+</tbody>
+</table>
+<p>The first row is the quiet one. A hand-written schema is a second description of
+the same function, and the compiler checks neither against the other. Rename a
+parameter and the model keeps sending the old name — which arrives as an unknown
+keyword, or worse, is silently accepted by a permissive signature. <strong>Generate the
+schema from the function and this class of bug stops existing.</strong></p>
+<p>The second row is the one that costs money or data. A model producing an argument
+is producing text that resembles the type you asked for; it is not bound by it. An
+<code>order_id</code> may arrive as <code>"42"</code>, as <code>42</code>, as <code>"ORD-42"</code> or as a plausible-looking
+value for an order that does not exist. Validating at the boundary between the
+model and your code is the same discipline as validating a request body, for the
+same reason and with more urgency: the caller here is not merely untrusted, it is
+generative.</p>
+<p>And there is a failure with no single-tool equivalent at all. When a provider
+returns several tool calls in one turn and the dispatcher runs them concurrently,
+tools that were correct in sequence can produce wrong answers together — one
+reading state another has not written yet, or two updating the same row. Nothing
+crashes; the agent proceeds confidently on a bad result. <strong>Sequential execution
+was hiding the coupling, not removing it.</strong></p>
+<h2>2. Architecture</h2>
+<pre class="mermaid">%% GENERATED - do not edit by hand.
+%% Edit the source header in architecture.mmd, then rebuild.
+%% From a model tool call to a result
+
+flowchart TB
+    model([&quot;Model&quot;])
+    decl[&quot;Tool declarations, derived from signatures&quot;]
+    registry[&quot;Registry&quot;]
+    dispatch[&quot;Dispatcher&quot;]
+    validate[&quot;Argument validation&quot;]
+    classify[&quot;Parallel safety and confirmation flags&quot;]
+    runner[&quot;Bounded execution&quot;]
+    trim[&quot;Result size limit&quot;]
+    handlers[&quot;Tool functions&quot;]
+    person([&quot;Person&quot;])
+    external{{&quot;External systems&quot;}}
+
+    decl --&gt;|&quot;one entry per tool&quot;| registry
+    registry --&gt;|&quot;the declared tool list&quot;| model
+    model --&gt;|&quot;one or more calls in a turn&quot;| dispatch
+    dispatch --&gt;|&quot;per call&quot;| validate
+    validate -.-&gt;|&quot;invalid arguments come back as a correctable error&quot;| model
+    validate --&gt; classify
+    classify -.-&gt;|&quot;a tool marked as needing confirmation waits&quot;| person
+    classify --&gt;|&quot;independent calls concurrently, the rest in order&quot;| runner
+    runner --&gt;|&quot;each with its own deadline&quot;| handlers
+    handlers --&gt; external
+    runner -.-&gt;|&quot;timeout or failure, in a shape it can recover from&quot;| model
+    handlers --&gt; trim
+    trim --&gt;|&quot;result, correlated by call id&quot;| model
+
+    classDef service fill:#eff6ff,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b;
+    classDef datastore fill:#e9faf3,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b;
+    classDef external fill:#fff4ed,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b;
+    classDef actor fill:#f0eefc,stroke:#4a3aa7,stroke-width:1.5px,color:#0b0b0b;
+    class decl,registry,dispatch,validate,classify,runner,trim,handlers service;
+    class external external;
+    class model,person actor;</pre>
+<p>The rule the diagram encodes: <strong>nothing reaches a handler without passing through
+validation and classification.</strong> They are two gates on one path, not helpers a
+call site may choose to use. A second entry point into the handlers is how a tool
+ends up being called with arguments nobody checked.</p>
+<h2>3. Project structure</h2>
+<div class="hl"><pre><span></span><code>app/tools/
+├── registry.py     the decorator, the schema derivation, the lookup
+├── dispatch.py     validate, classify, run, correlate, trim
+├── policy.py       per-tool deadline, result limit, parallel safety
+└── handlers/
+    ├── orders.py
+    └── search.py
+</code></pre></div>
+
+<p><strong>One rule: a tool exists only by being registered.</strong> No handler is importable and
+callable as a plain function from elsewhere in the agent path. If it is, someone
+will call it directly, and every guarantee in <code>dispatch.py</code> becomes optional.</p>
+<h2>4. Reference implementation</h2>
+<div class="hl"><pre><span></span><code><span class="c1"># app/tools/registry.py</span>
+<span class="kn">import</span> <span class="nn">inspect</span>
+<span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span>
+<span class="kn">from</span> <span class="nn">pydantic</span> <span class="kn">import</span> <span class="n">create_model</span>
+
+
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span> <span class="nc">Tool</span><span class="p">:</span>
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">description</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">args_model</span><span class="p">:</span> <span class="nb">type</span>          <span class="c1"># derived, never hand-written</span>
+    <span class="n">fn</span><span class="p">:</span> <span class="n">callable</span>
+    <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">max_result_chars</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="c1"># Three independent properties, and a tool needs all three to be safe to run</span>
+    <span class="c1"># beside another. Collapsing them into one &quot;safe&quot; flag loses the reason, and</span>
+    <span class="c1"># the reason is what someone needs when adding the twenty-first tool.</span>
+    <span class="n">atomic</span><span class="p">:</span> <span class="nb">bool</span>              <span class="c1"># one operation, no observable intermediate state</span>
+    <span class="n">idempotent</span><span class="p">:</span> <span class="nb">bool</span>          <span class="c1"># running it twice leaves the same world</span>
+    <span class="n">independent</span><span class="p">:</span> <span class="nb">bool</span>         <span class="c1"># touches no state another tool touches</span>
+    <span class="c1"># Set this when the tool&#39;s effect cannot be undone by the agent itself within</span>
+    <span class="c1"># the same run. That is the whole test, and it is decidable per tool without</span>
+    <span class="c1"># knowing anything about how approval is presented: reading a record, running a</span>
+    <span class="c1"># query, calling a read-only API - false. Sending a message, moving money,</span>
+    <span class="c1"># deleting, writing to a system someone else observes, or anything a human would</span>
+    <span class="c1"># have to unwind by hand - true. Reversibility is a property of the tool, so it</span>
+    <span class="c1"># belongs beside the tool; how an approval is requested, held or expired is a</span>
+    <span class="c1"># separate design and does not change which tools carry this flag.</span>
+    <span class="n">requires_confirmation</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+
+
+<span class="n">_REGISTRY</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tool</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+
+
+<span class="k">def</span> <span class="nf">tool</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span> <span class="n">max_result_chars</span><span class="o">=</span><span class="mi">8000</span><span class="p">,</span>
+         <span class="n">atomic</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">idempotent</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">independent</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+         <span class="n">requires_confirmation</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">decorator</span><span class="p">(</span><span class="n">fn</span><span class="p">):</span>
+        <span class="n">sig</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">signature</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
+        <span class="c1"># The schema is built from the signature and its annotations. A hand-written</span>
+        <span class="c1"># copy is a second description of the same function that nothing checks</span>
+        <span class="c1"># against the first — rename a parameter and the model keeps sending the old</span>
+        <span class="c1"># name for as long as nobody notices.</span>
+        <span class="n">fields</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">name</span><span class="p">:</span> <span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">annotation</span><span class="p">,</span>
+                   <span class="o">...</span> <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">default</span> <span class="ow">is</span> <span class="n">inspect</span><span class="o">.</span><span class="n">Parameter</span><span class="o">.</span><span class="n">empty</span> <span class="k">else</span> <span class="n">p</span><span class="o">.</span><span class="n">default</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">sig</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+        <span class="p">}</span>
+        <span class="n">args_model</span> <span class="o">=</span> <span class="n">create_model</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">fn</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">_args&quot;</span><span class="p">,</span> <span class="o">**</span><span class="n">fields</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">fn</span><span class="o">.</span><span class="vm">__doc__</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># The description is what the model selects on. An undescribed tool is</span>
+            <span class="c1"># one it will use wrongly, and failing here is cheaper than debugging that.</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">fn</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">: a tool needs a docstring&quot;</span><span class="p">)</span>
+
+        <span class="n">_REGISTRY</span><span class="p">[</span><span class="n">fn</span><span class="o">.</span><span class="vm">__name__</span><span class="p">]</span> <span class="o">=</span> <span class="n">Tool</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="n">fn</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="n">inspect</span><span class="o">.</span><span class="n">getdoc</span><span class="p">(</span><span class="n">fn</span><span class="p">),</span> <span class="n">args_model</span><span class="o">=</span><span class="n">args_model</span><span class="p">,</span>
+            <span class="n">fn</span><span class="o">=</span><span class="n">fn</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">,</span> <span class="n">max_result_chars</span><span class="o">=</span><span class="n">max_result_chars</span><span class="p">,</span>
+            <span class="n">atomic</span><span class="o">=</span><span class="n">atomic</span><span class="p">,</span> <span class="n">idempotent</span><span class="o">=</span><span class="n">idempotent</span><span class="p">,</span> <span class="n">independent</span><span class="o">=</span><span class="n">independent</span><span class="p">,</span>
+            <span class="n">requires_confirmation</span><span class="o">=</span><span class="n">requires_confirmation</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">fn</span>
+    <span class="k">return</span> <span class="n">decorator</span>
+
+
+<span class="k">def</span> <span class="nf">declarations</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
+    <span class="sd">&quot;&quot;&quot;What the model is told exists. Generated, so it cannot disagree with the code.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="p">[{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">t</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="n">t</span><span class="o">.</span><span class="n">description</span><span class="p">,</span>
+             <span class="s2">&quot;input_schema&quot;</span><span class="p">:</span> <span class="n">t</span><span class="o">.</span><span class="n">args_model</span><span class="o">.</span><span class="n">model_json_schema</span><span class="p">()}</span>
+            <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">_REGISTRY</span><span class="o">.</span><span class="n">values</span><span class="p">()]</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/tools/dispatch.py</span>
+<span class="kn">import</span> <span class="nn">asyncio</span>
+<span class="kn">from</span> <span class="nn">pydantic</span> <span class="kn">import</span> <span class="n">ValidationError</span>
+
+
+<span class="k">def</span> <span class="nf">parallel_safe</span><span class="p">(</span><span class="n">tool</span><span class="p">:</span> <span class="n">Tool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+    <span class="c1"># All three, not any. A tool that is idempotent but shares state still races;</span>
+    <span class="c1"># one that is independent but not atomic can be observed half-done. Sequential</span>
+    <span class="c1"># execution was hiding this coupling — enabling concurrency reveals it, and it</span>
+    <span class="c1"># reveals it as wrong answers rather than as crashes.</span>
+    <span class="k">return</span> <span class="n">tool</span><span class="o">.</span><span class="n">atomic</span> <span class="ow">and</span> <span class="n">tool</span><span class="o">.</span><span class="n">idempotent</span> <span class="ow">and</span> <span class="n">tool</span><span class="o">.</span><span class="n">independent</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">dispatch</span><span class="p">(</span><span class="n">calls</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">ToolCall</span><span class="p">],</span> <span class="n">context</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">ToolResult</span><span class="p">]:</span>
+    <span class="n">safe</span> <span class="o">=</span> <span class="p">[</span><span class="n">c</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">calls</span> <span class="k">if</span> <span class="n">_lookup</span><span class="p">(</span><span class="n">c</span><span class="p">)</span> <span class="ow">and</span> <span class="n">parallel_safe</span><span class="p">(</span><span class="n">_lookup</span><span class="p">(</span><span class="n">c</span><span class="p">))]</span>
+    <span class="n">rest</span> <span class="o">=</span> <span class="p">[</span><span class="n">c</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">calls</span> <span class="k">if</span> <span class="n">c</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">safe</span><span class="p">]</span>
+
+    <span class="n">results</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span><span class="o">*</span><span class="p">(</span><span class="n">run_one</span><span class="p">(</span><span class="n">c</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">safe</span><span class="p">)))</span>
+    <span class="k">for</span> <span class="n">call</span> <span class="ow">in</span> <span class="n">rest</span><span class="p">:</span>                     <span class="c1"># in the order the model asked for them</span>
+        <span class="n">results</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="k">await</span> <span class="n">run_one</span><span class="p">(</span><span class="n">call</span><span class="p">,</span> <span class="n">context</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">results</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">run_one</span><span class="p">(</span><span class="n">call</span><span class="p">:</span> <span class="n">ToolCall</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ToolResult</span><span class="p">:</span>
+    <span class="n">tool</span> <span class="o">=</span> <span class="n">_REGISTRY</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">call</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">tool</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="c1"># A hallucinated tool name. Naming what does exist turns a dead end into a</span>
+        <span class="c1"># correctable one — the model retries with a real tool instead of repeating.</span>
+        <span class="k">return</span> <span class="n">ToolResult</span><span class="p">(</span><span class="n">call</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">is_error</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                          <span class="n">content</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;No tool named </span><span class="si">{</span><span class="n">call</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2">. Available: &quot;</span>
+                                  <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="s1">&#39;, &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">_REGISTRY</span><span class="p">))</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="n">tool</span><span class="o">.</span><span class="n">args_model</span><span class="o">.</span><span class="n">model_validate</span><span class="p">(</span><span class="n">call</span><span class="o">.</span><span class="n">arguments</span><span class="p">)</span>
+    <span class="k">except</span> <span class="n">ValidationError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+        <span class="c1"># Returned to the model, not raised. The model produced these arguments and</span>
+        <span class="c1"># it is the only thing that can fix them; an exception here ends the turn</span>
+        <span class="c1"># instead of correcting it. The message says which field and why.</span>
+        <span class="k">return</span> <span class="n">ToolResult</span><span class="p">(</span><span class="n">call</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">is_error</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                          <span class="n">content</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;Invalid arguments: </span><span class="si">{</span><span class="n">_fields</span><span class="p">(</span><span class="n">exc</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">tool</span><span class="o">.</span><span class="n">requires_confirmation</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">context</span><span class="o">.</span><span class="n">confirmed</span><span class="p">(</span><span class="n">call</span><span class="o">.</span><span class="n">id</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">ToolResult</span><span class="p">(</span><span class="n">call</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">is_error</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                          <span class="n">content</span><span class="o">=</span><span class="s2">&quot;This action needs confirmation before it runs.&quot;</span><span class="p">)</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">async</span> <span class="k">with</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">timeout</span><span class="p">(</span><span class="n">tool</span><span class="o">.</span><span class="n">timeout</span><span class="p">):</span>
+            <span class="n">output</span> <span class="o">=</span> <span class="k">await</span> <span class="n">tool</span><span class="o">.</span><span class="n">fn</span><span class="p">(</span><span class="o">**</span><span class="n">args</span><span class="o">.</span><span class="n">model_dump</span><span class="p">())</span>
+    <span class="k">except</span> <span class="ne">TimeoutError</span><span class="p">:</span>
+        <span class="c1"># Also recoverable: the model may narrow the query and try again. Without a</span>
+        <span class="c1"># per-tool deadline, one slow integration holds the whole turn, and with a</span>
+        <span class="c1"># single global deadline a fast tool inherits a slow tool&#39;s budget.</span>
+        <span class="k">return</span> <span class="n">ToolResult</span><span class="p">(</span><span class="n">call</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">is_error</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                          <span class="n">content</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">tool</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> timed out after </span><span class="si">{</span><span class="n">tool</span><span class="o">.</span><span class="n">timeout</span><span class="si">}</span><span class="s2">s. &quot;</span>
+                                  <span class="sa">f</span><span class="s2">&quot;Try a narrower request.&quot;</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+        <span class="c1"># The internal error never goes to the model: it carries connection strings,</span>
+        <span class="c1"># file paths and internal identifiers straight into the context — and the</span>
+        <span class="c1"># context is often shown to the user.</span>
+        <span class="n">log</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="s2">&quot;tool failed&quot;</span><span class="p">,</span> <span class="n">extra</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;tool&quot;</span><span class="p">:</span> <span class="n">tool</span><span class="o">.</span><span class="n">name</span><span class="p">})</span>
+        <span class="k">return</span> <span class="n">ToolResult</span><span class="p">(</span><span class="n">call</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">is_error</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                          <span class="n">content</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">tool</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> failed. The error has been logged.&quot;</span><span class="p">)</span>
+
+    <span class="n">text</span> <span class="o">=</span> <span class="n">serialise</span><span class="p">(</span><span class="n">output</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">text</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">tool</span><span class="o">.</span><span class="n">max_result_chars</span><span class="p">:</span>
+        <span class="c1"># An unbounded result is a context-window failure with a delay on it: the</span>
+        <span class="c1"># turn succeeds, and three turns later the conversation is truncated from</span>
+        <span class="c1"># the front and the agent has forgotten its instructions.</span>
+        <span class="n">text</span> <span class="o">=</span> <span class="n">text</span><span class="p">[:</span><span class="n">tool</span><span class="o">.</span><span class="n">max_result_chars</span><span class="p">]</span> <span class="o">+</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">[truncated at </span><span class="si">{</span><span class="n">tool</span><span class="o">.</span><span class="n">max_result_chars</span><span class="si">}</span><span class="s2"> characters; &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;narrow the request to see more]&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">ToolResult</span><span class="p">(</span><span class="n">call</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="n">text</span><span class="p">)</span>
+</code></pre></div>
+
+<h2>5. Golden-standard rules</h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Forbidden:</strong> a hand-written schema beside the function it describes</td>
+<td>Two descriptions of one function that nothing checks against each other. The first rename breaks it silently.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> calling a handler with unvalidated arguments</td>
+<td>The model generates text shaped like your types, not values bound by them. This boundary is the same as an HTTP one, with a more inventive caller.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> raising out of the dispatcher for a recoverable failure</td>
+<td>Bad arguments, a missing tool and a timeout are all things the model can correct. Raising ends the turn instead.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> an internal exception message reaching the model</td>
+<td>It carries connection strings, paths and identifiers into the context, and the context is often shown to the user.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> running tools concurrently without the three-part check</td>
+<td>Atomic, idempotent <em>and</em> independent. Sequential order was hiding the coupling, and concurrency reveals it as confident wrong answers.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> an unbounded tool result</td>
+<td>It is a context-window failure with a delay: the turn succeeds, and later the conversation is truncated from the front.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> a handler reachable except through the dispatcher</td>
+<td>One direct call and every guarantee here becomes optional.</td>
+</tr>
+<tr>
+<td>A tool needs confirmation when the agent cannot undo it in the same run</td>
+<td>It is a property of the tool, decidable where the tool is declared. Deferring the decision to whoever wires up approvals means it is made by someone who cannot see what the tool does.</td>
+</tr>
+<tr>
+<td>Every tool has its own deadline</td>
+<td>A single global budget lets one slow integration spend a fast tool's time.</td>
+</tr>
+<tr>
+<td>Every result is correlated by call id</td>
+<td>With several calls in one turn, position is not identity, and a mismatched result is a wrong answer the model cannot detect.</td>
+</tr>
+<tr>
+<td>An unknown tool name is answered with the list of real ones</td>
+<td>It converts a dead end into a correctable one.</td>
+</tr>
+<tr>
+<td>Parallel safety is three recorded properties, not one flag</td>
+<td>The reason is what the next person needs when adding a tool. A boolean loses it.</td>
+</tr>
+<tr>
+<td>Every tool has a description, enforced at registration</td>
+<td>The description is what the model selects on; failing at start-up is cheaper than debugging a wrong choice.</td>
+</tr>
+</tbody>
+</table>
+<h2>6. Data contracts</h2>
+<div class="hl"><pre><span></span><code><span class="n">ToolCall</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="s2">&quot;toolu_01...&quot;</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;get_order&quot;</span><span class="p">,</span> <span class="n">arguments</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;order_id&quot;</span><span class="p">:</span> <span class="s2">&quot;42&quot;</span><span class="p">})</span>
+<span class="n">ToolResult</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="s2">&quot;toolu_01...&quot;</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="s2">&quot;...&quot;</span><span class="p">,</span> <span class="n">is_error</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</code></pre></div>
+
+<p>The <code>id</code> is the contract. A turn can contain several calls, results can be
+produced out of order, and the model matches them by identifier — so a dispatcher
+that returns results positionally is correct exactly until the first concurrent
+turn, and wrong silently after that.</p>
+<p><code>is_error</code> is the other half. An error returned as ordinary content is
+indistinguishable from a successful answer that happens to describe a failure, and
+the model treats it as data. Marked as an error, it is something to recover from.</p>
+<h2>7. Build order</h2>
+<ol>
+<li><strong>The registry with schemas derived from signatures</strong>, and a test that renaming
+   a parameter changes the generated schema — proving drift is impossible.</li>
+<li><strong>The dispatcher with validation</strong>, and a test feeding deliberately wrong
+   arguments that asserts a correctable error is returned rather than raised.</li>
+<li><strong>Per-tool timeouts</strong>, with a test on a deliberately slow tool.</li>
+<li><strong>Correlation by id</strong>, with a test that returns results out of order.</li>
+<li><strong>The three-part parallel classification</strong>, and a concurrency test that runs two
+   tools sharing state and asserts they were not run together.</li>
+<li><strong>Result size limits</strong>, with a test on a tool returning far too much.</li>
+<li><strong>The confirmation flag</strong>, with a test that a marked tool does not execute
+   without one.</li>
+</ol>
+<p>Step 5 needs a test that deliberately races. Classified by reading rather than by
+testing, the parallel decision is an opinion, and it is wrong in exactly the cases
+that matter.</p>
+<h2>8. Blocks to pull in</h2>
+<p>Nothing here is a prerequisite. These are adjacent problems, by name only —
+resolve them separately if they apply.</p>
+<ul>
+<li>LLM tool design — what one good tool looks like, which matters more than any of this</li>
+<li>The agent loop — the turn this dispatcher runs inside</li>
+<li>Human-in-the-loop approval — approval queues, sandboxed and dry-run execution, and what to do about approval fatigue</li>
+<li>Idempotency keys and safe retries — how to make a tool safe to run twice</li>
+<li>LLM observability and tracing — per-tool latency, error rate and truncation counts</li>
+</ul>
+<h2>9. Metrics</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Schemas that disagree with their function signature</td>
+<td>0, structurally impossible</td>
+</tr>
+<tr>
+<td>Handler invocations with unvalidated arguments</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Turns ended by an exception from a tool</td>
+<td>0 — recoverable failures come back as results</td>
+</tr>
+<tr>
+<td>Tool results exceeding the context budget</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Concurrent executions of tools that share state</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Recovery rate after a validation error is returned</td>
+<td>&gt; 80% — below that, the message is not actionable</td>
+</tr>
+<tr>
+<td>p95 latency per tool</td>
+<td>Under that tool's own deadline</td>
+</tr>
+</tbody>
+</table>
+<h2>10. Failure modes</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The model keeps sending an argument name that no longer exists</td>
+<td>The schema is hand-written and was not updated with the signature</td>
+<td>Derive the schema from the function</td>
+</tr>
+<tr>
+<td>A tool receives a value of the wrong type and fails deep inside</td>
+<td>Arguments were not validated at the boundary</td>
+<td>Validate against the derived schema before calling</td>
+</tr>
+<tr>
+<td>A turn ends with a stack trace instead of the agent recovering</td>
+<td>The dispatcher raised for something the model could have fixed</td>
+<td>Return validation, timeout and unknown-tool failures as error results</td>
+</tr>
+<tr>
+<td>A connection string appears in the conversation</td>
+<td>An internal exception message was returned as tool content</td>
+<td>Log the exception; return a fixed message</td>
+</tr>
+<tr>
+<td>One integration being slow makes every turn slow</td>
+<td>One global deadline instead of per-tool ones</td>
+<td>A deadline per tool, recorded in the registry</td>
+</tr>
+<tr>
+<td>The agent acts on the result of the wrong tool</td>
+<td>Results were matched positionally rather than by id</td>
+<td>Correlate by call id</td>
+</tr>
+<tr>
+<td>With concurrency enabled, answers become subtly wrong</td>
+<td>Tools that were coupled ran together; sequential order had been hiding it</td>
+<td>Classify by atomic, idempotent and independent; run only tools passing all three together</td>
+</tr>
+<tr>
+<td>Two tools update the same record and one update disappears</td>
+<td>Shared state mutated concurrently</td>
+<td>The same classification — <code>independent</code> is false for both</td>
+</tr>
+<tr>
+<td>The agent forgets its instructions after a few tool calls</td>
+<td>An unbounded result filled the context and the history was truncated from the front</td>
+<td>Cap results and say they were capped</td>
+</tr>
+<tr>
+<td>The model repeats a call to a tool that does not exist</td>
+<td>The error did not say what does exist</td>
+<td>List the available tools in the error</td>
+</tr>
+<tr>
+<td>A destructive action ran without approval</td>
+<td>The handler was reachable outside the dispatcher</td>
+<td>Make registration the only path</td>
+</tr>
+</tbody>
+</table>
+<h2>11. Definition of done</h2>
+<ul>
+<li class="task">Every tool schema is generated from its function signature; a test renames a parameter and asserts the generated schema changed</li>
+<li class="task">No handler is called anywhere except through the dispatcher, checked by grep in CI</li>
+<li class="task">Arguments of the wrong type or with unknown fields produce a returned error naming the field, covered by a test</li>
+<li class="task">An unknown tool name returns an error listing the real tools, covered by a test</li>
+<li class="task">Every tool has a deadline, and exceeding it returns a recoverable error rather than raising — covered by a test</li>
+<li class="task">No internal exception text reaches the model, covered by a test that fails a tool with a recognisable secret and asserts its absence</li>
+<li class="task">Results are correlated by call id, covered by a test that completes them out of order</li>
+<li class="task">Each tool records <code>atomic</code>, <code>idempotent</code> and <code>independent</code>, and a test asserts none is left at its default</li>
+<li class="task">Two tools sharing state are never executed concurrently, covered by a test that would detect the race</li>
+<li class="task">A result over its limit is truncated and says so, covered by a test</li>
+<li class="task">Every tool records whether the agent can undo it in the same run, and a test asserts none is left at its default</li>
+<li class="task">A tool marked as requiring confirmation does not execute without one, covered by a test</li>
+<li class="task">Registering a tool without a description fails at start-up, covered by a test</li>
+</ul>
+  </article>
+
+  <aside class="tailpiece">
+    <h2>Use this blueprint</h2>
+    <p>
+      Copy the file into your project and point your agent at it. It works with Claude Code,
+      Cursor, Copilot, ChatGPT and anything else that reads a file — there is nothing to install.
+    </p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/tool-registry" target="_blank" rel="noopener">Open on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Browse all blueprints</a>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p><a href="/">Awesome Blueprints</a> — same request, same architecture, every time.</p>
+    <p class="dim">MIT · awesomeblueprints.com</p>
+  </div>
+</footer>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'neutral' });
+</script>
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const now = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', now);
+    try { localStorage.setItem('ab-theme', now); } catch (e) {}
+    location.reload();   // the diagram is themed at render time
+  });
+</script>
+
+</body>
+</html>

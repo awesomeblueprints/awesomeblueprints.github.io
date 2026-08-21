@@ -1,0 +1,609 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MCP Server over HTTP — Blueprint for AI Coding Agents | Awesome Blueprints</title>
+<meta name="description" content="An MCP server over HTTP: authorization, multi-tenancy, rate limits, transport and deployment for agents outside your own organisation." />
+<link rel="canonical" href="https://awesomeblueprints.com/blueprints/mcp-server-remote/" />
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="Awesome Blueprints" />
+<meta property="og:url" content="https://awesomeblueprints.com/blueprints/mcp-server-remote/" />
+<meta property="og:title" content="MCP Server over HTTP — Architecture Blueprint" />
+<meta property="og:description" content="An MCP server over HTTP: authorization, multi-tenancy, rate limits, transport and deployment for agents outside your own organisation." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="MCP Server over HTTP — Architecture Blueprint" />
+<meta name="twitter:description" content="An MCP server over HTTP: authorization, multi-tenancy, rate limits, transport and deployment for agents outside your own organisation." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/page.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "MCP Server over HTTP", "description": "An MCP server over HTTP: authorization, multi-tenancy, rate limits, transport and deployment for agents outside your own organisation.", "url": "https://awesomeblueprints.com/blueprints/mcp-server-remote/", "dateModified": "2026-08-19", "keywords": "MCP, Agents", "isAccessibleForFree": true, "license": "https://opensource.org/licenses/MIT", "publisher": {"@type": "Organization", "name": "Awesome Blueprints", "url": "https://awesomeblueprints.com"}}</script>
+<script>
+  (function () {
+    var t;
+    try { t = localStorage.getItem('ab-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">Awesome Blueprints</a>
+    <div class="nav-right">
+      <a class="nav-link" href="/#blueprints">Catalogue</a>
+      <a class="nav-link" href="/#faq">FAQ</a>
+      <a class="nav-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/mcp-server-remote" target="_blank" rel="noopener">GitHub ↗</a>
+      <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Switch theme">◑</button>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/">Home</a> <span>/</span> <a href="/#blueprints">Blueprints</a> <span>/</span>
+    <span>MCP Server over HTTP</span>
+  </nav>
+
+  <header class="page-head">
+    <p class="eyebrow">mcp-server-remote</p>
+    <h1>MCP Server over HTTP</h1>
+    <p class="lede">An MCP server over HTTP: authorization, multi-tenancy, rate limits, transport and deployment for agents outside your own organisation.</p>
+    <div class="facts"><span>high</span><span>1–2 weeks</span><span>Verified 2026-08-19</span></div>
+    <div class="tags"><span class="tag">MCP</span><span class="tag">Agents</span></div>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/mcp-server-remote" target="_blank" rel="noopener">Read it on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Back to the catalogue</a>
+    </div>
+  </header>
+
+  <article class="doc">
+<blockquote>
+<p>A public MCP server: one POST endpoint, authorization built for clients you have
+never met, tenant data that cannot leak through a tool, and an audit trail of
+everything an agent did on someone's behalf.</p>
+</blockquote>
+<p><strong>Complexity:</strong> high · <strong>Typical build:</strong> 1–2 weeks · <strong>Verified:</strong> 2026-08-19 (re-check after ~90 days)</p>
+<p><strong>Examples in:</strong> Python. The architecture is language-agnostic: sections 5, 10 and 11 hold wherever you build this. Section 4 is illustrative — if your project is in another language, your agent translates the idioms rather than importing them, and nothing is lost. The protocol details below are from the specification revision named on the Verified line, and that revision changed the transport substantially — treat any example older than it as wrong until checked.</p>
+<p><strong>Use when:</strong> people outside your organisation should be able to point their agent at your service — a product with an API, an internal platform used by several teams, anything where the caller is not the person who deployed the server.</p>
+<p><strong>Not for:</strong> a server for your own machine. That runs on the standard streams as a subprocess with your own permissions, needs no authorization and no deployment, and takes an afternoon. Building this instead means paying for tenancy, tokens and operations to solve a problem you do not have.</p>
+<hr />
+<h2>⚙️ INSTRUCTIONS FOR THE AI — READ BEFORE WRITING ANY CODE</h2>
+<p><strong>Do not start coding.</strong></p>
+<p><strong>Step 1 — Refresh.</strong> Verify the protocol revision and read its transport section
+directly, because the current one removed a great deal that older examples still
+show. There are <strong>no protocol-level sessions and no session header</strong>, <strong>no
+<code>initialize</code> handshake</strong> — each request carries its protocol version and client
+capabilities in <code>_meta</code> — <strong>no GET stream endpoint</strong>, and <strong>no resumable
+streams</strong>. <code>server/discover</code> is now required. Server-initiated requests are gone:
+where the server needs input it returns a result asking for it and the client
+retries the original request. On authorization, verify the current client
+registration mechanism: <strong>Dynamic Client Registration is deprecated</strong> in favour of
+client identifiers that are HTTPS URLs resolving to a metadata document. Report
+what you verified and what turned out wrong.</p>
+<p><strong>Step 2 — Read the project, then audit what already exists.</strong> Establish the
+tenancy model first, because it constrains everything: what identifies a tenant,
+where that identity comes from in a token, and whether any existing query can
+return rows without it. List every tool you intend to expose and, for each, what
+it can read and what it can write — a public MCP server is an API whose caller is
+a language model, and a tool that writes is reachable by whatever that model was
+persuaded to do. Find whether an authorization server already exists or whether
+one is part of this work. Then audit §11 item by item, each marked <em>already true</em>,
+<em>partly true</em> or <em>absent</em>, with the file that decides it, reported before anything
+is proposed.</p>
+<p>Assume the project is right until it demonstrably is not; code satisfying an item
+stays even where its shape differs from §4; replacing something that works needs a
+one-line reason; never delete a working path to make room for the blueprint's
+version. The same holds for language — §4 is illustrative, its idioms get
+translated into the project's language, and §11 is what has to become true rather
+than the syntax.</p>
+<p><strong>Step 3 — Write a plan for the gap only, and get it approved</strong>, including a
+<code>## Proposed stack</code> section, the tenancy design, the scope per tool, and what
+happens when a tool is called with a token that is valid but not entitled. Do not
+ask open framework questions — propose, and ask for confirmation once. Say what
+you are adding, what you are leaving alone, and what you propose to change, and
+touch nothing else.</p>
+<p><strong>Step 4 — Build in the order in §7.</strong> <strong>Step 5 — §11 is the definition of done.</strong></p>
+<hr />
+<h2>1. Two things this is, that a local server is not</h2>
+<p>The protocol is the same. Everything around it is different, and two differences
+account for most of the work.</p>
+<table>
+<thead>
+<tr>
+<th>A local server</th>
+<th>A public one</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Runs as the user; permissions are inherited</td>
+<td>Runs as itself; every request must prove who it is for</td>
+</tr>
+<tr>
+<td>One user, no isolation to get wrong</td>
+<td>Every query is scoped to a tenant, and a missed scope is a disclosure</td>
+</tr>
+<tr>
+<td>A client you configured</td>
+<td>Clients you have never met, registering without you</td>
+</tr>
+<tr>
+<td>Nothing to audit — the user watched</td>
+<td>An agent acted on someone's behalf, and someone will ask what it did</td>
+</tr>
+</tbody>
+</table>
+<p>The third row is the one with a recent answer. A public server cannot pre-register
+every client, and the old solution — clients registering themselves dynamically —
+<strong>is deprecated</strong> in the current revision. The replacement is that a client's
+identifier <em>is</em> an HTTPS URL, and that URL serves a small JSON document describing
+the client. Your authorization server fetches it, checks that the document's own
+identifier matches the URL it came from, and validates the redirect against the
+list inside. The practical consequences are worth stating: there is no
+registration endpoint to protect, the client identity is portable across
+authorization servers because it is self-hosted, and the trust decision becomes
+one about the domain hosting that document.</p>
+<p>The second row is where the real damage lives. A tool is a function called by a
+language model on behalf of a caller, and the model can be persuaded — by a
+document it read, a page it fetched, a ticket it summarised. <strong>Tenancy therefore
+cannot be a parameter the model supplies.</strong> It comes from the token, it is applied
+below the tool, and no tool signature accepts it. Anything else is one convincing
+sentence away from being another customer's data.</p>
+<h2>2. Architecture</h2>
+<pre class="mermaid">%% GENERATED - do not edit by hand.
+%% Edit the source header in architecture.mmd, then rebuild.
+%% One endpoint, many strangers
+
+flowchart TB
+    agent([&quot;Someone else&#x27;s agent&quot;])
+    as{{&quot;Authorization server&quot;}}
+    cimd{{&quot;Client metadata document&quot;}}
+    endpoint[&quot;Single POST endpoint&quot;]
+    origin[&quot;Origin check&quot;]
+    headers[&quot;Header and body validation&quot;]
+    token[&quot;Token validation and scopes&quot;]
+    tenancy[&quot;Tenant from the token&quot;]
+    tools[&quot;Tool handlers&quot;]
+    limits[&quot;Limits per tenant&quot;]
+    audit[&quot;Audit log&quot;]
+    store[(&quot;Tenant data&quot;)]
+    denied([&quot;Rejected&quot;])
+
+    agent --&gt;|&quot;authorization&quot;| as
+    as --&gt;|&quot;fetches the client metadata&quot;| cimd
+    as -.-&gt;|&quot;access token&quot;| agent
+    agent --&gt;|&quot;POST with the token and the required headers&quot;| endpoint
+    endpoint --&gt; origin
+    origin -.-&gt;|&quot;bad origin&quot;| denied
+    endpoint --&gt;|&quot;headers must match the body&quot;| headers
+    headers -.-&gt;|&quot;mismatch&quot;| denied
+    headers --&gt; token
+    token -.-&gt;|&quot;missing scope&quot;| denied
+    token --&gt;|&quot;identity comes from here, never from arguments&quot;| tenancy
+    tenancy --&gt; limits
+    limits -.-&gt;|&quot;over quota&quot;| denied
+    limits --&gt; tools
+    tools --&gt;|&quot;every query scoped by tenant&quot;| store
+    tools --&gt;|&quot;who, what, which tenant, what result&quot;| audit
+    tools --&gt;|&quot;bounded result&quot;| agent
+
+    classDef service fill:#eff6ff,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b;
+    classDef datastore fill:#e9faf3,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b;
+    classDef external fill:#fff4ed,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b;
+    classDef actor fill:#f0eefc,stroke:#4a3aa7,stroke-width:1.5px,color:#0b0b0b;
+    class endpoint,origin,headers,token,tenancy,tools,limits,audit service;
+    class store datastore;
+    class as,cimd external;
+    class agent,denied actor;</pre>
+<p>The rule the diagram encodes: <strong>the tenant arrow comes from the token and enters
+below the tools.</strong> There is no path from the request body to tenancy. A tool that
+could receive a tenant as an argument is a tool a persuaded model can point
+anywhere.</p>
+<h2>3. Project structure</h2>
+<div class="hl"><pre><span></span><code>app/mcp/
+├── endpoint.py     the single POST route: origin, headers, token, dispatch
+├── auth.py         token validation, scopes, and the tenant claim
+├── tenancy.py      the scoped session — the only way tools reach data
+├── tools/
+│   └── orders.py   handlers; none takes a tenant argument
+├── limits.py       per-tenant quotas
+└── audit.py        one record per call, written before the result is returned
+</code></pre></div>
+
+<p><strong>One rule: tools receive a scoped data accessor, never a raw one.</strong> The scoping
+happens once, from the token, above every handler. A handler that can construct
+its own query is a handler that can construct an unscoped one, and that mistake is
+invisible in review because the code looks ordinary.</p>
+<h2>4. Reference implementation</h2>
+<div class="hl"><pre><span></span><code><span class="c1"># app/mcp/endpoint.py</span>
+<span class="n">PROTOCOL_VERSION</span> <span class="o">=</span> <span class="s2">&quot;2026-07-28&quot;</span>
+
+
+<span class="nd">@router</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="s2">&quot;/mcp&quot;</span><span class="p">)</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">mcp_endpoint</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">):</span>
+    <span class="c1"># One endpoint, POST only. The current revision removed the GET stream and</span>
+    <span class="c1"># protocol-level sessions; an older client sending GET or DELETE gets 405,</span>
+    <span class="c1"># and a session header is ignored rather than echoed.</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">origin</span> <span class="o">:=</span> <span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;origin&quot;</span><span class="p">))</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">allowed_origin</span><span class="p">(</span><span class="n">origin</span><span class="p">):</span>
+        <span class="c1"># Required by the spec, and it is what stops a page in someone&#39;s browser</span>
+        <span class="c1"># from driving this server through their session.</span>
+        <span class="k">return</span> <span class="n">JSONResponse</span><span class="p">({</span><span class="s2">&quot;jsonrpc&quot;</span><span class="p">:</span> <span class="s2">&quot;2.0&quot;</span><span class="p">,</span> <span class="s2">&quot;error&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;code&quot;</span><span class="p">:</span> <span class="o">-</span><span class="mi">32600</span><span class="p">,</span>
+                             <span class="s2">&quot;message&quot;</span><span class="p">:</span> <span class="s2">&quot;Origin not allowed&quot;</span><span class="p">}},</span> <span class="n">status_code</span><span class="o">=</span><span class="mi">403</span><span class="p">)</span>
+
+    <span class="n">body</span> <span class="o">=</span> <span class="k">await</span> <span class="n">request</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+    <span class="n">meta</span> <span class="o">=</span> <span class="n">body</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;params&quot;</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;_meta&quot;</span><span class="p">,</span> <span class="p">{})</span>
+
+    <span class="c1"># Headers mirror body fields so gateways can route without parsing JSON. If</span>
+    <span class="c1"># they disagree, reject: otherwise a load balancer routes on one value while</span>
+    <span class="c1"># this server executes on another, and the two decisions diverge.</span>
+    <span class="k">if</span> <span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;MCP-Protocol-Version&quot;</span><span class="p">)</span> <span class="o">!=</span> <span class="n">meta</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+            <span class="s2">&quot;io.modelcontextprotocol/protocolVersion&quot;</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">_error</span><span class="p">(</span><span class="n">body</span><span class="p">,</span> <span class="o">-</span><span class="mi">32020</span><span class="p">,</span> <span class="s2">&quot;Header mismatch: protocol version&quot;</span><span class="p">,</span> <span class="mi">400</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;Mcp-Method&quot;</span><span class="p">)</span> <span class="o">!=</span> <span class="n">body</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;method&quot;</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">_error</span><span class="p">(</span><span class="n">body</span><span class="p">,</span> <span class="o">-</span><span class="mi">32020</span><span class="p">,</span> <span class="s2">&quot;Header mismatch: method&quot;</span><span class="p">,</span> <span class="mi">400</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">meta</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;io.modelcontextprotocol/protocolVersion&quot;</span><span class="p">)</span> <span class="o">!=</span> <span class="n">PROTOCOL_VERSION</span><span class="p">:</span>
+        <span class="c1"># Name what is supported. A client that guesses wrong can correct itself;</span>
+        <span class="c1"># one told only &quot;no&quot; cannot.</span>
+        <span class="k">return</span> <span class="n">_error</span><span class="p">(</span><span class="n">body</span><span class="p">,</span> <span class="o">-</span><span class="mi">32022</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Supported versions: </span><span class="si">{</span><span class="n">PROTOCOL_VERSION</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="mi">400</span><span class="p">)</span>
+
+    <span class="n">principal</span> <span class="o">=</span> <span class="k">await</span> <span class="n">authenticate</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>          <span class="c1"># 401 with WWW-Authenticate if absent</span>
+    <span class="k">return</span> <span class="k">await</span> <span class="n">dispatch</span><span class="p">(</span><span class="n">body</span><span class="p">,</span> <span class="n">principal</span><span class="p">)</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/mcp/auth.py</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">authenticate</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Principal</span><span class="p">:</span>
+    <span class="n">token</span> <span class="o">=</span> <span class="n">_bearer</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
+    <span class="n">claims</span> <span class="o">=</span> <span class="n">jwt</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span>
+        <span class="n">token</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="n">jwks_for</span><span class="p">(</span><span class="n">settings</span><span class="o">.</span><span class="n">issuer</span><span class="p">),</span>
+        <span class="c1"># The allowlist, not the token&#39;s own header. Without it the token chooses</span>
+        <span class="c1"># how it is verified, which is the whole family of algorithm-confusion</span>
+        <span class="c1"># attacks in one missing argument.</span>
+        <span class="n">algorithms</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;RS256&quot;</span><span class="p">],</span>
+        <span class="n">audience</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">resource_identifier</span><span class="p">,</span>       <span class="c1"># this server, specifically</span>
+        <span class="n">issuer</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">issuer</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">Principal</span><span class="p">(</span>
+        <span class="n">subject</span><span class="o">=</span><span class="n">claims</span><span class="p">[</span><span class="s2">&quot;sub&quot;</span><span class="p">],</span>
+        <span class="c1"># The tenant comes from here and from nowhere else. Not from an argument,</span>
+        <span class="c1"># not from a header the client controls. A model that has read an</span>
+        <span class="c1"># attacker&#39;s document must not be able to reach another tenant by asking.</span>
+        <span class="n">tenant_id</span><span class="o">=</span><span class="n">claims</span><span class="p">[</span><span class="s2">&quot;tenant_id&quot;</span><span class="p">],</span>
+        <span class="n">scopes</span><span class="o">=</span><span class="nb">set</span><span class="p">(</span><span class="n">claims</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;scope&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">()),</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">require_scope</span><span class="p">(</span><span class="n">scope</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">principal</span><span class="p">:</span> <span class="n">Principal</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">scope</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">principal</span><span class="o">.</span><span class="n">scopes</span><span class="p">:</span>
+        <span class="c1"># 403, not 401: the token is valid and refreshing it changes nothing.</span>
+        <span class="c1"># Collapsing the two makes well-behaved clients refresh in a loop.</span>
+        <span class="k">raise</span> <span class="n">Forbidden</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;This action requires the </span><span class="si">{</span><span class="n">scope</span><span class="si">}</span><span class="s2"> scope.&quot;</span><span class="p">)</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/mcp/tenancy.py</span>
+<span class="nd">@asynccontextmanager</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">scoped</span><span class="p">(</span><span class="n">principal</span><span class="p">:</span> <span class="n">Principal</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;The only way a tool reaches data.</span>
+
+<span class="sd">    Scoping is applied once, above every handler, so no handler can be written</span>
+<span class="sd">    without it. Passing a raw session down and trusting each tool to filter is</span>
+<span class="sd">    the arrangement where one missed filter is a disclosure — and it looks like</span>
+<span class="sd">    ordinary code in review.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">async</span> <span class="k">with</span> <span class="n">session_factory</span><span class="p">()</span> <span class="k">as</span> <span class="n">session</span><span class="p">:</span>
+        <span class="k">await</span> <span class="n">session</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">text</span><span class="p">(</span><span class="s2">&quot;SET LOCAL app.tenant_id = :t&quot;</span><span class="p">),</span>
+                              <span class="p">{</span><span class="s2">&quot;t&quot;</span><span class="p">:</span> <span class="n">principal</span><span class="o">.</span><span class="n">tenant_id</span><span class="p">})</span>
+        <span class="k">yield</span> <span class="n">TenantScopedSession</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="n">principal</span><span class="o">.</span><span class="n">tenant_id</span><span class="p">)</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/mcp/tools/orders.py</span>
+<span class="nd">@tool</span><span class="p">(</span><span class="n">scope</span><span class="o">=</span><span class="s2">&quot;orders:read&quot;</span><span class="p">,</span> <span class="n">max_result_chars</span><span class="o">=</span><span class="mi">8000</span><span class="p">)</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">search_orders</span><span class="p">(</span><span class="n">db</span><span class="p">:</span> <span class="n">TenantScopedSession</span><span class="p">,</span> <span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">limit</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">20</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Search this account&#39;s orders by reference, customer name or product.</span>
+
+<span class="sd">    Returns the reference, status, total and date. Use get_order for the full</span>
+<span class="sd">    contents of one order.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># No tenant parameter, and none possible: `db` is already scoped. The</span>
+    <span class="c1"># signature is the guarantee — a reviewer can see that this tool cannot be</span>
+    <span class="c1"># pointed somewhere else, without reading the body.</span>
+    <span class="n">rows</span> <span class="o">=</span> <span class="k">await</span> <span class="n">db</span><span class="o">.</span><span class="n">search_orders</span><span class="p">(</span><span class="n">query</span><span class="o">=</span><span class="n">query</span><span class="p">,</span> <span class="n">limit</span><span class="o">=</span><span class="nb">min</span><span class="p">(</span><span class="n">limit</span><span class="p">,</span> <span class="mi">50</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">render</span><span class="p">(</span><span class="n">rows</span><span class="p">)</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/mcp/audit.py</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">record</span><span class="p">(</span><span class="n">principal</span><span class="p">:</span> <span class="n">Principal</span><span class="p">,</span> <span class="n">method</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+                 <span class="n">arguments</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">outcome</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;One record per call, written whatever the outcome.</span>
+
+<span class="sd">    An agent acted on someone&#39;s behalf and somebody will eventually ask what it</span>
+<span class="sd">    did — after an incident, during an audit, or because a customer wants to</span>
+<span class="sd">    know. Recording only successes leaves out exactly the calls that get asked</span>
+<span class="sd">    about. Arguments are redacted by field, not by hoping they are harmless.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">await</span> <span class="n">audit_store</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">AuditRecord</span><span class="p">(</span>
+        <span class="n">at</span><span class="o">=</span><span class="n">utcnow</span><span class="p">(),</span> <span class="n">tenant_id</span><span class="o">=</span><span class="n">principal</span><span class="o">.</span><span class="n">tenant_id</span><span class="p">,</span> <span class="n">subject</span><span class="o">=</span><span class="n">principal</span><span class="o">.</span><span class="n">subject</span><span class="p">,</span>
+        <span class="n">client_id</span><span class="o">=</span><span class="n">principal</span><span class="o">.</span><span class="n">client_id</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="n">method</span><span class="p">,</span> <span class="n">tool</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
+        <span class="n">arguments</span><span class="o">=</span><span class="n">redact</span><span class="p">(</span><span class="n">arguments</span><span class="p">),</span> <span class="n">outcome</span><span class="o">=</span><span class="n">outcome</span><span class="p">))</span>
+</code></pre></div>
+
+<h2>5. Golden-standard rules</h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Forbidden:</strong> a tenant identifier that can arrive in a tool's arguments</td>
+<td>A model can be persuaded by anything it reads. Tenancy comes from the token and enters below the tools.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> a tool holding an unscoped data accessor</td>
+<td>One missed filter is a disclosure, and it looks like ordinary code. Scope once, above the handlers.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> verifying a token without an explicit algorithm allowlist</td>
+<td>Otherwise the token chooses how it is verified — the whole family of algorithm-confusion attacks in one missing argument.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> skipping the origin check</td>
+<td>It is required, and it is what stops a page in a victim's browser from driving this server through their session.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> accepting a request whose headers disagree with its body</td>
+<td>A gateway may route on the header while the server executes on the body, and the two decisions then diverge.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> building on protocol-level sessions or a GET stream</td>
+<td>Both were removed. An older client sending them gets 405, and a session header is ignored rather than echoed.</td>
+</tr>
+<tr>
+<td>Client registration uses the current mechanism, not the deprecated one</td>
+<td>Self-registration is deprecated; identifiers that resolve to a hosted metadata document replace it, and the trust decision moves to the domain.</td>
+</tr>
+<tr>
+<td>Scopes are per tool, and 403 is distinct from 401</td>
+<td>401 says get a new token; 403 says this one will never do. Collapsing them makes clients refresh forever.</td>
+</tr>
+<tr>
+<td>Every call is audited, including failures</td>
+<td>Recording only successes omits exactly the calls that get asked about later.</td>
+</tr>
+<tr>
+<td>Limits are per tenant, not per address</td>
+<td>One customer's agent in a loop must not consume another's capacity, and both may share an address.</td>
+</tr>
+<tr>
+<td>Every result is bounded by the server</td>
+<td>It is the caller's context, but the size is your decision, and an unbounded result is a denial of service you shipped.</td>
+</tr>
+<tr>
+<td>Tool schemas are versioned, and removal is announced</td>
+<td>Clients are configured by people you cannot contact; a silent removal breaks agents you will never hear about.</td>
+</tr>
+</tbody>
+</table>
+<h2>6. Data contracts</h2>
+<div class="hl"><pre><span></span><code><span class="err">POST /mcp</span>
+<span class="err">Accept: application/json, text/event-stream</span>
+<span class="err">Authorization: Bearer &lt;token&gt;</span>
+<span class="err">MCP-Protocol-Version: 2026-07-28</span>
+<span class="err">Mcp-Method: tools/call</span>
+<span class="err">Mcp-Name: search_orders</span>
+</code></pre></div>
+
+<p>One endpoint, POST only, headers mirroring the body and validated against it. The
+server answers with either a single JSON object or an SSE stream, chosen per
+request — clients must accept both, which is why the <code>Accept</code> header lists both.</p>
+<p>Three protocol properties change how the server is written:</p>
+<div class="hl"><pre><span></span><code>no sessions      each request stands alone; nothing is remembered between them,
+                 so cross-call state is an explicit handle you mint and they pass
+no resumption    a broken stream cancels its request; there is nothing to resume
+no server calls  where the server needs input it returns a result asking for it,
+                 and the client retries the original request carrying the answer
+</code></pre></div>
+
+<p>Closing a stream <em>is</em> the cancellation signal. There is no message to wait for, so
+a handler that ignores disconnection keeps working — and keeps billing — for a
+request nobody will read.</p>
+<h2>7. Build order</h2>
+<ol>
+<li><strong>The endpoint answering <code>server/discover</code> and <code>tools/list</code>, unauthenticated,
+   with the header validation in place.</strong> Prove the transport against a real
+   client before adding anything.</li>
+<li><strong>Token validation with the algorithm allowlist and audience check</strong>, and the
+   attack tests: a token with the algorithm switched, and one minted for a
+   different audience. Both must fail before anything depends on this.</li>
+<li><strong>Tenancy</strong>, with the scoped accessor and a test that two tenants' data never
+   crosses. Written before the second tool exists.</li>
+<li><strong>One tool, with a scope</strong>, and tests for 401, 403 and success.</li>
+<li><strong>Result budgets and per-tenant limits.</strong></li>
+<li><strong>The audit log</strong>, covering success, failure and rejection.</li>
+<li><strong>Client registration and a real third-party client</strong>, which is where the
+   assumptions from step 2 are tested by someone else's implementation.</li>
+</ol>
+<p>Step 3 before the second tool because tenancy is structural. Retrofitting it means
+auditing every handler written in the meantime, and the failure it prevents is the
+one that ends up in a disclosure notice.</p>
+<h2>8. Blocks to pull in</h2>
+<p>Nothing here is a prerequisite. These are adjacent problems, by name only —
+resolve them separately if they apply.</p>
+<ul>
+<li>MCP server over stdio — the local version, with none of this</li>
+<li>MCP client integration — the other side of this protocol</li>
+<li>JWT access token authentication — the token validation this depends on</li>
+<li>Redis rate limiting — the per-tenant quotas</li>
+<li>LLM observability and tracing — where the audit trail and per-tool latency land</li>
+</ul>
+<h2>9. Metrics</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Queries reaching data without a tenant scope</td>
+<td>0, structurally impossible</td>
+</tr>
+<tr>
+<td>Tools accepting a tenant argument</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Calls without an audit record</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Requests accepted with mismatched headers and body</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Tokens accepted with an unexpected algorithm or audience</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Result size, p99</td>
+<td>Under the per-tool budget</td>
+</tr>
+<tr>
+<td>Time from a scope being revoked to it being enforced</td>
+<td>≤ the token's lifetime</td>
+</tr>
+</tbody>
+</table>
+<h2>10. Failure modes</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>One customer's data appears in another's agent</td>
+<td>A tenant identifier was accepted as an argument, or a query ran unscoped</td>
+<td>Tenancy from the token, below the tools; a scoped accessor with no raw alternative</td>
+</tr>
+<tr>
+<td>A forged token is accepted</td>
+<td>Verification used the token's own algorithm header</td>
+<td>Pass an explicit algorithm allowlist</td>
+</tr>
+<tr>
+<td>A token issued for another service works here</td>
+<td>The audience was not validated</td>
+<td>Validate audience and issuer explicitly</td>
+</tr>
+<tr>
+<td>A user's browser session was used to drive the server</td>
+<td>No origin check</td>
+<td>Validate the origin; reject with 403</td>
+</tr>
+<tr>
+<td>A gateway routed one way and the server acted another</td>
+<td>Headers and body disagreed and were not compared</td>
+<td>Reject mismatches with the header-mismatch error</td>
+</tr>
+<tr>
+<td>A well-behaved client refreshes tokens in a loop</td>
+<td>An authorization failure returned 401 instead of 403</td>
+<td>Distinguish them</td>
+</tr>
+<tr>
+<td>An older client cannot connect at all</td>
+<td>It expects sessions, a GET stream or the handshake, all removed</td>
+<td>Answer 405 to GET and DELETE, ignore session headers, and state the supported version in the error</td>
+</tr>
+<tr>
+<td>A client waits forever after a dropped stream</td>
+<td>It expected to resume; resumability was removed</td>
+<td>Streams are not resumable; the request is cancelled</td>
+</tr>
+<tr>
+<td>A handler keeps running and billing after the caller left</td>
+<td>Stream closure is the cancellation signal and was ignored</td>
+<td>Treat disconnection as cancellation and stop</td>
+</tr>
+<tr>
+<td>Nobody can answer what an agent did during an incident</td>
+<td>Only successes were audited</td>
+<td>Audit every call and its outcome</td>
+</tr>
+<tr>
+<td>One customer's runaway agent degrades everyone</td>
+<td>Limits are per address rather than per tenant</td>
+<td>Quota per tenant</td>
+</tr>
+<tr>
+<td>Clients broke overnight after a tool was renamed</td>
+<td>The change was silent and the clients are configured by people you cannot reach</td>
+<td>Version schemas; announce removals; keep the old name working through a window</td>
+</tr>
+</tbody>
+</table>
+<h2>11. Definition of done</h2>
+<ul>
+<li class="task">No tool signature accepts a tenant identifier, checked by inspecting every handler in a test</li>
+<li class="task">Tools cannot obtain an unscoped data accessor, checked by grep in CI</li>
+<li class="task">A test asserts one tenant's token never returns another tenant's rows, for every tool</li>
+<li class="task">A token with a switched algorithm and a token with the wrong audience are both rejected, each covered by a test</li>
+<li class="task">A request with an invalid origin is rejected with 403, covered by a test</li>
+<li class="task">A request whose headers disagree with its body is rejected with the header-mismatch error, covered by a test</li>
+<li class="task">Missing authentication returns 401 with the challenge header; a valid token lacking the scope returns 403 — both covered</li>
+<li class="task">GET and DELETE to the endpoint return 405, and a session header is ignored rather than echoed, covered by tests</li>
+<li class="task">Closing the response stream stops the work, covered by a test asserting the handler was cancelled</li>
+<li class="task">Every call produces an audit record with tenant, subject, client, tool and outcome — including rejected calls, covered by a test per path</li>
+<li class="task">Every tool result is bounded by the server, covered by a test with an oversized result</li>
+<li class="task">Rate limits are enforced per tenant, covered by a test with two tenants</li>
+<li class="task">A request for an unsupported protocol version is answered with the supported ones named, covered by a test</li>
+</ul>
+  </article>
+
+  <aside class="tailpiece">
+    <h2>Use this blueprint</h2>
+    <p>
+      Copy the file into your project and point your agent at it. It works with Claude Code,
+      Cursor, Copilot, ChatGPT and anything else that reads a file — there is nothing to install.
+    </p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/mcp-server-remote" target="_blank" rel="noopener">Open on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Browse all blueprints</a>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p><a href="/">Awesome Blueprints</a> — same request, same architecture, every time.</p>
+    <p class="dim">MIT · awesomeblueprints.com</p>
+  </div>
+</footer>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'neutral' });
+</script>
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const now = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', now);
+    try { localStorage.setItem('ab-theme', now); } catch (e) {}
+    location.reload();   // the diagram is themed at render time
+  });
+</script>
+
+</body>
+</html>

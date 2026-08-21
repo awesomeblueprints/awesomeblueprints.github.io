@@ -1,0 +1,564 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LLM Eval Harness — Blueprint for AI Coding Agents | Awesome Blueprints</title>
+<meta name="description" content="An LLM eval harness: fixed test sets, deterministic checks, regression gates in CI and scores you can compare between prompt versions." />
+<link rel="canonical" href="https://awesomeblueprints.com/blueprints/eval-harness-design/" />
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="Awesome Blueprints" />
+<meta property="og:url" content="https://awesomeblueprints.com/blueprints/eval-harness-design/" />
+<meta property="og:title" content="LLM Eval Harness — Architecture Blueprint" />
+<meta property="og:description" content="An LLM eval harness: fixed test sets, deterministic checks, regression gates in CI and scores you can compare between prompt versions." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="LLM Eval Harness — Architecture Blueprint" />
+<meta name="twitter:description" content="An LLM eval harness: fixed test sets, deterministic checks, regression gates in CI and scores you can compare between prompt versions." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/page.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "LLM Eval Harness", "description": "An LLM eval harness: fixed test sets, deterministic checks, regression gates in CI and scores you can compare between prompt versions.", "url": "https://awesomeblueprints.com/blueprints/eval-harness-design/", "dateModified": "2026-08-19", "keywords": "Evals", "isAccessibleForFree": true, "license": "https://opensource.org/licenses/MIT", "publisher": {"@type": "Organization", "name": "Awesome Blueprints", "url": "https://awesomeblueprints.com"}}</script>
+<script>
+  (function () {
+    var t;
+    try { t = localStorage.getItem('ab-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">Awesome Blueprints</a>
+    <div class="nav-right">
+      <a class="nav-link" href="/#blueprints">Catalogue</a>
+      <a class="nav-link" href="/#faq">FAQ</a>
+      <a class="nav-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/eval-harness-design" target="_blank" rel="noopener">GitHub ↗</a>
+      <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Switch theme">◑</button>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/">Home</a> <span>/</span> <a href="/#blueprints">Blueprints</a> <span>/</span>
+    <span>LLM Eval Harness</span>
+  </nav>
+
+  <header class="page-head">
+    <p class="eyebrow">eval-harness-design</p>
+    <h1>LLM Eval Harness</h1>
+    <p class="lede">An LLM eval harness: fixed test sets, deterministic checks, regression gates in CI and scores you can compare between prompt versions.</p>
+    <div class="facts"><span>medium</span><span>3–5 days</span><span>Verified 2026-08-19</span></div>
+    <div class="tags"><span class="tag">Evals</span></div>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/eval-harness-design" target="_blank" rel="noopener">Read it on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Back to the catalogue</a>
+    </div>
+  </header>
+
+  <article class="doc">
+<blockquote>
+<p>The dataset, the scorers and the runner that turn "this feels better" into a
+number you can compare across changes — and the CI gate that stops a
+regression from shipping while the aggregate still looks fine.</p>
+</blockquote>
+<p><strong>Complexity:</strong> medium · <strong>Typical build:</strong> 3–5 days · <strong>Verified:</strong> 2026-08-19 (re-check after ~90 days)</p>
+<p><strong>Examples in:</strong> Python. Only §4 and §6 are language-specific — the rules, failure modes and definition of done hold anywhere, and your agent translates the code.</p>
+<p><strong>Use when:</strong> you are about to make the second change to any system built on a model. The first change you can eyeball; from the second onwards you are trading one set of failures for another and cannot see it.</p>
+<p><strong>Not for:</strong> a prototype nobody depends on yet, and not as a substitute for production monitoring. An offline harness measures a fixed set of inputs; it says nothing about the inputs you have not thought of.</p>
+<hr />
+<h2>⚙️ INSTRUCTIONS FOR THE AI — READ BEFORE WRITING ANY CODE</h2>
+<p><strong>Do not start coding.</strong></p>
+<p><strong>Step 1 — Refresh.</strong> Search the web and verify: which of the current eval
+frameworks are actively maintained and what each locks you into — dataset
+format, hosted storage, scorer interface; whether the provider in use offers
+batch or async pricing that changes what a full run costs; the current strongest
+model available to act as a judge and its rate limits. Report what you verified
+and where your assumptions were wrong.</p>
+<p><strong>Step 2 — Read the project, then audit what exists.</strong> Find anything that
+already resembles evaluation: a test that calls the model, a notebook of
+examples, a spreadsheet of good and bad outputs, a list of bugs users reported.
+Real production inputs, wherever they are logged, matter more than any of it.</p>
+<p><strong>Then audit what exists.</strong> Walk §11 item by item, marking each <em>already true</em>,
+<em>partly true</em> or <em>absent</em> with the file that decides it. Report that before
+proposing anything.</p>
+<p>Assume the project is right until it demonstrably is not. Code that satisfies an
+item stays, whatever its shape — §4 is illustrative, and its idioms translate
+into this project's language. Replacing something that works needs a one-line
+reason. Never delete a working path to make room for the version written here.
+If nothing relevant exists, say so and use §3.</p>
+<p>The same applies to language. §4 is illustrative: translate its idioms into this
+project's language and libraries rather than importing its shape. §11 is what has
+to become true — not the syntax it happens to be written in.</p>
+<p><strong>Step 3 — Write a plan for the gap only, and get it approved.</strong> List: where the
+cases come from, the categories and how many cases each needs, which checks are
+deterministic and which genuinely need a judge, and what the CI gate blocks.</p>
+<p><strong>In that plan, include a <code>## Proposed stack</code> section.</strong> Do not ask an open
+question. <em>Propose</em> whether to write the runner directly or adopt a framework —
+with a one-line reason, the versions verified in Step 1, and what would change
+the decision. Ask the user to confirm once.</p>
+<p>Name what you are adding, leaving alone, and changing. Touch nothing else.</p>
+<hr />
+<h2>1. Why spot-checking fails, and what a harness replaces it with</h2>
+<p>Systems built on models fail non-deterministically and improve
+non-monotonically. A prompt edit that fixes three cases breaks five others, and
+manual checking finds the three — because those are the cases you were thinking
+about when you made the edit.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Spot-checking</th>
+<th>A harness</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>What is measured</td>
+<td>The cases you remembered</td>
+<td>A fixed set, every time</td>
+</tr>
+<tr>
+<td>A regression shows up</td>
+<td>When a user reports it</td>
+<td>Before merge</td>
+</tr>
+<tr>
+<td>"Quality dropped" resolves to</td>
+<td>An argument</td>
+<td>A category and a list of failing case ids</td>
+</tr>
+<tr>
+<td>Cost of checking a change</td>
+<td>An afternoon</td>
+<td>Minutes and cents</td>
+</tr>
+<tr>
+<td>What you can debug afterwards</td>
+<td>A memory</td>
+<td>The stored output of every failing case</td>
+</tr>
+</tbody>
+</table>
+<p>The attribution point is the one people underrate. "Quality dropped" is not
+actionable. "Refund questions fell from 0.91 to 0.62 while everything else held"
+is a fix rather than a rewrite.</p>
+<p><strong>And the most common failure is not a bad harness — it is a dataset that does
+not resemble production.</strong> Everything below depends on the cases being real. A
+set written by the same person who wrote the prompt, from imagination, measures
+how well the prompt handles what its author was already thinking about.</p>
+<h2>2. Architecture</h2>
+<pre class="mermaid">%% GENERATED - do not edit by hand.
+%% Edit the source header in architecture.mmd, then rebuild.
+%% Eval Harness
+
+flowchart TB
+    dataset[(&quot;Dataset - versioned in the repo&quot;)]
+    baseline[(&quot;Baseline - reviewed commit&quot;)]
+    hash[&quot;Config Hash - prompt, model, params&quot;]
+    runner[&quot;Runner - bounded concurrency&quot;]
+    sut[&quot;System Under Test&quot;]
+    det[&quot;Deterministic Scorers - first, free, exact&quot;]
+    judge[&quot;Model Judge - only what code cannot decide&quot;]
+    agg[&quot;Aggregate - overall and per category&quot;]
+    diff[&quot;Baseline Diff - tolerance per slice&quot;]
+    store[(&quot;Failure Store - raw outputs&quot;)]
+    ci([&quot;CI Gate&quot;])
+
+    dataset --&gt;|&quot;cases&quot;| runner
+    hash --&gt;|&quot;results are comparable only within one hash&quot;| runner
+    runner --&gt;|&quot;input&quot;| sut
+    sut -.-&gt;|&quot;output&quot;| det
+    det --&gt;|&quot;only the undecided ones&quot;| judge
+    det --&gt;|&quot;scores&quot;| agg
+    judge --&gt;|&quot;scores&quot;| agg
+    agg --&gt; diff
+    baseline --&gt;|&quot;previous run, same hash&quot;| diff
+    diff --&gt;|&quot;pass or regression&quot;| ci
+    runner ---|&quot;every output, passing or failing&quot;| store
+
+    classDef service fill:#eff6ff,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b;
+    classDef datastore fill:#e9faf3,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b;
+    classDef external fill:#fff4ed,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b;
+    classDef actor fill:#f0eefc,stroke:#4a3aa7,stroke-width:1.5px,color:#0b0b0b;
+    class hash,runner,sut,det,judge,agg,diff service;
+    class dataset,baseline,store datastore;
+    class ci actor;</pre>
+<p><strong>The rule this diagram encodes:</strong> deterministic scorers run before the judge,
+and the judge only sees what code could not decide. Reversing that order is how
+an eval suite becomes too expensive to run on every commit, which is the same as
+not having one.</p>
+<h2>3. Project structure</h2>
+<div class="hl"><pre><span></span><code>evals/
+├── cases/
+│   ├── extraction.jsonl     # one file per category. Versioned with the code.
+│   └── refunds.jsonl
+├── scorers/
+│   ├── deterministic.py     # exact match, schema, coverage, code execution
+│   └── judge.py             # rubric-based, temperature 0, one criterion at a time
+├── runner.py                # execute, aggregate, diff, report
+├── baselines/
+│   └── &lt;config-hash&gt;.json   # updated only by a reviewed commit
+└── artifacts/               # raw outputs, kept per run. Gitignored.
+</code></pre></div>
+
+<p><strong>The rule that keeps this maintainable:</strong> the dataset lives in the repository
+next to the code it measures, and moves with it. A dataset in someone's cloud
+account drifts out of step with the prompt within a month, and nobody notices
+until a comparison silently stops meaning anything.</p>
+<h2>4. Reference implementation</h2>
+<p><strong>The runner.</strong> An exception is a failing case, not a crashed run:</p>
+<div class="hl"><pre><span></span><code><span class="k">async</span> <span class="k">def</span> <span class="nf">run_eval</span><span class="p">(</span><span class="n">cases</span><span class="p">,</span> <span class="n">system</span><span class="p">,</span> <span class="n">scorers</span><span class="p">,</span> <span class="n">cfg</span><span class="p">,</span> <span class="n">concurrency</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">EvalReport</span><span class="p">:</span>
+    <span class="n">sem</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Semaphore</span><span class="p">(</span><span class="n">concurrency</span><span class="p">)</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">one</span><span class="p">(</span><span class="n">case</span><span class="p">):</span>
+        <span class="k">async</span> <span class="k">with</span> <span class="n">sem</span><span class="p">:</span>
+            <span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">out</span> <span class="o">=</span> <span class="k">await</span> <span class="n">system</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="o">**</span><span class="n">case</span><span class="o">.</span><span class="n">input</span><span class="p">)</span>
+                <span class="n">scores</span> <span class="o">=</span> <span class="p">{}</span>
+                <span class="k">for</span> <span class="n">scorer</span> <span class="ow">in</span> <span class="n">scorers</span><span class="p">:</span>            <span class="c1"># deterministic ones first</span>
+                    <span class="n">scores</span> <span class="o">|=</span> <span class="n">scorer</span><span class="p">(</span><span class="n">case</span><span class="p">,</span> <span class="n">out</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">CaseResult</span><span class="p">(</span><span class="n">case_id</span><span class="o">=</span><span class="n">case</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">output</span><span class="o">=</span><span class="n">out</span><span class="p">,</span> <span class="n">scores</span><span class="o">=</span><span class="n">scores</span><span class="p">,</span>
+                                  <span class="n">passed</span><span class="o">=</span><span class="nb">all</span><span class="p">(</span><span class="n">v</span> <span class="o">&gt;=</span> <span class="mf">0.5</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">scores</span><span class="o">.</span><span class="n">values</span><span class="p">()),</span>
+                                  <span class="n">latency_ms</span><span class="o">=</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span> <span class="o">-</span> <span class="n">start</span><span class="p">)</span> <span class="o">*</span> <span class="mi">1000</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="c1"># One broken case must not cost you the other hundred and forty-nine.</span>
+                <span class="k">return</span> <span class="n">CaseResult</span><span class="p">(</span><span class="n">case_id</span><span class="o">=</span><span class="n">case</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">output</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">scores</span><span class="o">=</span><span class="p">{},</span> <span class="n">passed</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                                  <span class="n">error</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="n">results</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span><span class="o">*</span><span class="p">[</span><span class="n">one</span><span class="p">(</span><span class="n">c</span><span class="p">)</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">cases</span><span class="p">])</span>
+    <span class="k">return</span> <span class="n">aggregate</span><span class="p">(</span><span class="n">cases</span><span class="p">,</span> <span class="n">results</span><span class="p">,</span> <span class="n">config_hash</span><span class="p">(</span><span class="n">cfg</span><span class="p">))</span>
+</code></pre></div>
+
+<p><strong>The config hash</strong> is what makes two numbers comparable. Anything that changes
+behaviour goes into it:</p>
+<div class="hl"><pre><span></span><code><span class="k">def</span> <span class="nf">config_hash</span><span class="p">(</span><span class="n">cfg</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="c1"># prompt text, model id, temperature, retrieval k, chunk size - all of it.</span>
+    <span class="k">return</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">sha256</span><span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">cfg</span><span class="p">,</span> <span class="n">sort_keys</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">encode</span><span class="p">())</span><span class="o">.</span><span class="n">hexdigest</span><span class="p">()[:</span><span class="mi">12</span><span class="p">]</span>
+</code></pre></div>
+
+<p><strong>Deterministic scorers</strong> — free, exact, reproducible, and they should cover most
+of the suite:</p>
+<div class="hl"><pre><span></span><code><span class="k">def</span> <span class="nf">exact_match</span><span class="p">(</span><span class="n">case</span><span class="p">,</span> <span class="n">out</span><span class="p">):</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;exact_match&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">out</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="o">==</span> <span class="nb">str</span><span class="p">(</span><span class="n">case</span><span class="o">.</span><span class="n">expected</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">())}</span>
+
+<span class="k">def</span> <span class="nf">schema_valid</span><span class="p">(</span><span class="n">model_cls</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">scorer</span><span class="p">(</span><span class="n">case</span><span class="p">,</span> <span class="n">out</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">model_cls</span><span class="o">.</span><span class="n">model_validate</span><span class="p">(</span><span class="n">out</span><span class="p">);</span> <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;schema_valid&quot;</span><span class="p">:</span> <span class="mf">1.0</span><span class="p">}</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;schema_valid&quot;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">}</span>
+    <span class="k">return</span> <span class="n">scorer</span>
+
+<span class="k">def</span> <span class="nf">coverage</span><span class="p">(</span><span class="n">case</span><span class="p">,</span> <span class="n">out</span><span class="p">):</span>
+    <span class="n">required</span> <span class="o">=</span> <span class="n">case</span><span class="o">.</span><span class="n">expected</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;must_contain&quot;</span><span class="p">,</span> <span class="p">[])</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">required</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">{}</span>
+    <span class="n">hit</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="mi">1</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">required</span> <span class="k">if</span> <span class="n">s</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="n">out</span><span class="p">)</span><span class="o">.</span><span class="n">lower</span><span class="p">())</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;coverage&quot;</span><span class="p">:</span> <span class="n">hit</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="n">required</span><span class="p">)}</span>
+</code></pre></div>
+
+<p><strong>The gate.</strong> A per-category regression is the one that matters, because the
+aggregate hides it:</p>
+<div class="hl"><pre><span></span><code><span class="k">def</span> <span class="nf">check_regression</span><span class="p">(</span><span class="n">report</span><span class="p">,</span> <span class="n">baseline</span><span class="p">,</span> <span class="n">tol</span><span class="o">=</span><span class="mf">0.02</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">baseline</span><span class="o">.</span><span class="n">config_hash</span> <span class="o">!=</span> <span class="n">report</span><span class="o">.</span><span class="n">config_hash</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;config changed - this comparison is informational only&quot;</span><span class="p">)</span>
+    <span class="n">problems</span> <span class="o">=</span> <span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">m</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">baseline</span><span class="o">.</span><span class="n">overall</span><span class="p">[</span><span class="n">m</span><span class="p">]</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> -&gt; </span><span class="si">{</span><span class="n">v</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="k">for</span> <span class="n">m</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">report</span><span class="o">.</span><span class="n">overall</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+                <span class="k">if</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">baseline</span><span class="o">.</span><span class="n">overall</span> <span class="ow">and</span> <span class="n">v</span> <span class="o">&lt;</span> <span class="n">baseline</span><span class="o">.</span><span class="n">overall</span><span class="p">[</span><span class="n">m</span><span class="p">]</span> <span class="o">-</span> <span class="n">tol</span><span class="p">]</span>
+    <span class="k">for</span> <span class="n">cat</span><span class="p">,</span> <span class="n">metrics</span> <span class="ow">in</span> <span class="n">report</span><span class="o">.</span><span class="n">by_category</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">for</span> <span class="n">m</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">metrics</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">before</span> <span class="o">=</span> <span class="n">baseline</span><span class="o">.</span><span class="n">by_category</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">cat</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">m</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">before</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">v</span> <span class="o">&lt;</span> <span class="n">before</span> <span class="o">-</span> <span class="n">tol</span> <span class="o">*</span> <span class="mi">2</span><span class="p">:</span>
+                <span class="n">problems</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[</span><span class="si">{</span><span class="n">cat</span><span class="si">}</span><span class="s2">] </span><span class="si">{</span><span class="n">m</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">before</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> -&gt; </span><span class="si">{</span><span class="n">v</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">problems</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">SystemExit</span><span class="p">(</span><span class="s2">&quot;REGRESSION:</span><span class="se">\n</span><span class="s2">  &quot;</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">  &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">problems</span><span class="p">))</span>
+</code></pre></div>
+
+<h2>5. Golden-standard rules</h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Cases come from real usage, not from imagination</td>
+<td>A set written by the prompt's author measures what its author already thought of</td>
+</tr>
+<tr>
+<td>The person who wrote the prompt does not write the eval set alone</td>
+<td>The blind spot is the same blind spot in both</td>
+</tr>
+<tr>
+<td>The dataset lives in the repository and is versioned with the code</td>
+<td>A dataset elsewhere drifts out of step, and comparisons quietly stop meaning anything</td>
+</tr>
+<tr>
+<td>Every case has a category; every category has at least eight cases</td>
+<td>Below that, a slice metric is noise</td>
+</tr>
+<tr>
+<td>The set contains adversarial, unanswerable and should-fail cases</td>
+<td>The failures that matter most are otherwise invisible</td>
+</tr>
+<tr>
+<td>Deterministic scorers run first and cover everything code can decide</td>
+<td>They are exact, free and reproducible; a judge is none of the three</td>
+</tr>
+<tr>
+<td>A judge is used only where code cannot decide, at temperature 0, one criterion at a time</td>
+<td>Multi-criterion judging collapses into a single vague impression</td>
+</tr>
+<tr>
+<td>The judge model is never weaker than the system under test</td>
+<td>It becomes the ceiling on what you can measure</td>
+</tr>
+<tr>
+<td>Raw output is stored for every case, passing or failing</td>
+<td>A score with no artefact cannot be debugged</td>
+</tr>
+<tr>
+<td>Every report carries a config hash</td>
+<td>Two numbers from different configurations are not a comparison</td>
+</tr>
+<tr>
+<td>The baseline is updated by a reviewed commit, never automatically</td>
+<td>An auto-updating baseline absorbs every regression silently</td>
+</tr>
+<tr>
+<td>CI gates on per-category regression, not only the overall number</td>
+<td>One collapsed slice inside a flat aggregate is the normal case</td>
+</tr>
+<tr>
+<td>An exception is recorded as a failure and the run continues</td>
+<td>One broken case must not cost you the rest</td>
+</tr>
+<tr>
+<td>Every production bug becomes a permanent case</td>
+<td>Otherwise the same bug ships twice</td>
+</tr>
+<tr>
+<td>Temperature 0 everywhere, in the system and in the judge</td>
+<td>Variance you did not remove is variance you will read as signal</td>
+</tr>
+</tbody>
+</table>
+<h2>6. Data contracts</h2>
+<div class="hl"><pre><span></span><code><span class="k">class</span> <span class="nc">EvalCase</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="nb">id</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="nb">input</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
+    <span class="n">expected</span><span class="p">:</span> <span class="n">Any</span>                 <span class="c1"># reference output, or the criteria a judge applies</span>
+    <span class="n">category</span><span class="p">:</span> <span class="nb">str</span>                 <span class="c1"># every case has one; slices are the point</span>
+    <span class="n">difficulty</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;easy&quot;</span><span class="p">,</span> <span class="s2">&quot;medium&quot;</span><span class="p">,</span> <span class="s2">&quot;hard&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;medium&quot;</span>
+    <span class="n">source</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;production&quot;</span><span class="p">,</span> <span class="s2">&quot;synthetic&quot;</span><span class="p">,</span> <span class="s2">&quot;bug-report&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;production&quot;</span>
+
+<span class="k">class</span> <span class="nc">CaseResult</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">case_id</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">output</span><span class="p">:</span> <span class="n">Any</span>                   <span class="c1"># ALWAYS stored - a score alone is not debuggable</span>
+    <span class="n">scores</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span>
+    <span class="n">passed</span><span class="p">:</span> <span class="nb">bool</span>
+    <span class="n">latency_ms</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">error</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+<span class="k">class</span> <span class="nc">EvalReport</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">config_hash</span><span class="p">:</span> <span class="nb">str</span>              <span class="c1"># results compare ONLY within one hash</span>
+    <span class="n">n_cases</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">overall</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span>
+    <span class="n">by_category</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]</span>
+    <span class="n">failures</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">CaseResult</span><span class="p">]</span>
+    <span class="n">cost_usd</span><span class="p">:</span> <span class="nb">float</span>
+</code></pre></div>
+
+<h2>7. Build order</h2>
+<ol>
+<li><strong>Collect fifty real cases.</strong> From logs, support tickets, whatever exists.
+   Synthetic cases are allowed only where reality is unavailable, and a human
+   reviews each one.</li>
+<li><strong>Categorise them</strong>, and note which categories have fewer than eight cases.
+   Those are the gaps to fill first.</li>
+<li><strong>The runner</strong>, with bounded concurrency, exceptions recorded as failures, and
+   every raw output stored.</li>
+<li><strong>Deterministic scorers</strong> for everything code can decide: schema, exact match,
+   required substrings, executed code.</li>
+<li><strong>The config hash</strong>, recorded in every report.</li>
+<li><strong>A stored baseline</strong>, committed deliberately.</li>
+<li><strong>The CI gate</strong> — overall first, then per category with a wider tolerance.</li>
+<li><strong>A judge</strong>, only for what remains: rubric, temperature 0, one criterion per
+   call, calibrated against fifty human labels before you trust it.</li>
+<li><strong>Adversarial and unanswerable cases</strong>, once the happy path is measured.</li>
+<li><strong>A standing rule</strong> that every production bug is added as a case before its
+    fix merges.</li>
+</ol>
+<h2>8. Related reading</h2>
+<p>Every blueprint here stands on its own: nothing below is a prerequisite, and
+nothing above needs any of it to be implemented. These are adjacent problems you
+will meet next, listed so you know they have been thought about.</p>
+<ul>
+<li><strong>Prompt Structure</strong> — the thing most often changed between two eval runs.</li>
+<li><strong>Structured Model Output</strong> — what makes most scorers deterministic instead of judged.</li>
+<li><strong>Observability and Tracing</strong> — where the real cases come from.</li>
+<li><strong>The Agent Loop</strong> — evaluating a trajectory rather than a single answer.</li>
+</ul>
+<h2>9. Metrics</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Dataset size</td>
+<td>≥ 150 cases; below 50, a five-point difference is indistinguishable from noise</td>
+</tr>
+<tr>
+<td>Categories with at least eight cases</td>
+<td>100% — a thinner slice reports noise as a number</td>
+</tr>
+<tr>
+<td>Score variance across identical runs</td>
+<td>&lt; 1 point; above 3 you are reading noise as improvement</td>
+</tr>
+<tr>
+<td>Share of scores computed without a model</td>
+<td>≥ 60%; below 30% the suite is too expensive to run often</td>
+</tr>
+<tr>
+<td>Full-suite runtime</td>
+<td>&lt; 10 minutes, or it stops being run</td>
+</tr>
+<tr>
+<td>Cost per full run</td>
+<td>&lt; $5</td>
+</tr>
+<tr>
+<td>Production bugs represented as permanent cases</td>
+<td>100%</td>
+</tr>
+</tbody>
+</table>
+<h2>10. Failure modes</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Eval scores high, users unhappy</td>
+<td>The dataset does not resemble production</td>
+<td>Source cases from real logs; compare the input distributions</td>
+</tr>
+<tr>
+<td>Scores move between identical runs</td>
+<td>Non-determinism left in</td>
+<td>Temperature 0 everywhere; report variance across three runs</td>
+</tr>
+<tr>
+<td>Aggregate flat, one slice collapsed</td>
+<td>No per-category reporting</td>
+<td>Report and gate per category</td>
+</tr>
+<tr>
+<td>A failure cannot be investigated</td>
+<td>Only scores were kept</td>
+<td>Store the raw output of every case</td>
+</tr>
+<tr>
+<td>The baseline creeps upward on its own</td>
+<td>It is updated automatically</td>
+<td>Make it a reviewed commit</td>
+</tr>
+<tr>
+<td>Two runs disagree for no reason</td>
+<td>The configuration changed between them</td>
+<td>Compare only within one config hash; re-baseline on change</td>
+</tr>
+<tr>
+<td>Eval passes, production breaks</td>
+<td>Only happy paths in the set</td>
+<td>Add adversarial, unanswerable and should-fail cases</td>
+</tr>
+<tr>
+<td>Judge cost dominates the run</td>
+<td>A model is checking what code could check</td>
+<td>Deterministic scorers first, always</td>
+</tr>
+<tr>
+<td>The judge prefers longer answers</td>
+<td>Uncalibrated rubric</td>
+<td>Calibrate against human labels; score one criterion at a time</td>
+</tr>
+<tr>
+<td>Nobody runs it any more</td>
+<td>It takes half an hour</td>
+<td>Split: deterministic scorers on every commit, full suite nightly</td>
+</tr>
+</tbody>
+</table>
+<h2>11. Definition of done</h2>
+<ul>
+<li class="task">The dataset lives in the repository and is versioned with the code.</li>
+<li class="task">Cases are sourced from real usage where possible; synthetic ones are human-reviewed.</li>
+<li class="task">Every case has a category, and every category has at least eight cases.</li>
+<li class="task">Adversarial, unanswerable and should-fail cases are present.</li>
+<li class="task">Deterministic scorers run first and cover everything code can decide.</li>
+<li class="task">A judge is used only where code cannot decide, at temperature 0, one criterion at a time.</li>
+<li class="task">The judge is calibrated against human labels before its scores are trusted.</li>
+<li class="task">Raw outputs are stored for every case, passing or failing.</li>
+<li class="task">Every report carries a config hash, and comparisons happen only within one hash.</li>
+<li class="task">The baseline is a reviewed commit and is never updated automatically.</li>
+<li class="task">CI gates on overall <strong>and</strong> per-category regression.</li>
+<li class="task">Exceptions are recorded as failures and the run completes.</li>
+<li class="task">Every production bug is added as a permanent case before its fix merges.</li>
+</ul>
+  </article>
+
+  <aside class="tailpiece">
+    <h2>Use this blueprint</h2>
+    <p>
+      Copy the file into your project and point your agent at it. It works with Claude Code,
+      Cursor, Copilot, ChatGPT and anything else that reads a file — there is nothing to install.
+    </p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/eval-harness-design" target="_blank" rel="noopener">Open on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Browse all blueprints</a>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p><a href="/">Awesome Blueprints</a> — same request, same architecture, every time.</p>
+    <p class="dim">MIT · awesomeblueprints.com</p>
+  </div>
+</footer>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'neutral' });
+</script>
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const now = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', now);
+    try { localStorage.setItem('ab-theme', now); } catch (e) {}
+    location.reload();   // the diagram is themed at render time
+  });
+</script>
+
+</body>
+</html>

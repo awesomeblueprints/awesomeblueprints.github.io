@@ -1,0 +1,568 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>pgvector: Vector Search in Postgres — Blueprint for AI Coding Agents | Awesome Blueprints</title>
+<meta name="description" content="pgvector in PostgreSQL: index choice, HNSW tuning, filtered search and the post-filtering trap, without adding a second datastore to operate." />
+<link rel="canonical" href="https://awesomeblueprints.com/blueprints/pgvector/" />
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="Awesome Blueprints" />
+<meta property="og:url" content="https://awesomeblueprints.com/blueprints/pgvector/" />
+<meta property="og:title" content="pgvector: Vector Search in Postgres — Architecture Blueprint" />
+<meta property="og:description" content="pgvector in PostgreSQL: index choice, HNSW tuning, filtered search and the post-filtering trap, without adding a second datastore to operate." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="pgvector: Vector Search in Postgres — Architecture Blueprint" />
+<meta name="twitter:description" content="pgvector in PostgreSQL: index choice, HNSW tuning, filtered search and the post-filtering trap, without adding a second datastore to operate." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/page.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "pgvector: Vector Search in Postgres", "description": "pgvector in PostgreSQL: index choice, HNSW tuning, filtered search and the post-filtering trap, without adding a second datastore to operate.", "url": "https://awesomeblueprints.com/blueprints/pgvector/", "dateModified": "2026-08-19", "keywords": "PostgreSQL, Vector search", "isAccessibleForFree": true, "license": "https://opensource.org/licenses/MIT", "publisher": {"@type": "Organization", "name": "Awesome Blueprints", "url": "https://awesomeblueprints.com"}}</script>
+<script>
+  (function () {
+    var t;
+    try { t = localStorage.getItem('ab-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">Awesome Blueprints</a>
+    <div class="nav-right">
+      <a class="nav-link" href="/#blueprints">Catalogue</a>
+      <a class="nav-link" href="/#faq">FAQ</a>
+      <a class="nav-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/pgvector" target="_blank" rel="noopener">GitHub ↗</a>
+      <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Switch theme">◑</button>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/">Home</a> <span>/</span> <a href="/#blueprints">Blueprints</a> <span>/</span>
+    <span>pgvector: Vector Search in Postgres</span>
+  </nav>
+
+  <header class="page-head">
+    <p class="eyebrow">pgvector</p>
+    <h1>pgvector: Vector Search in Postgres</h1>
+    <p class="lede">pgvector in PostgreSQL: index choice, HNSW tuning, filtered search and the post-filtering trap, without adding a second datastore to operate.</p>
+    <div class="facts"><span>medium</span><span>2–4 days</span><span>Verified 2026-08-19</span></div>
+    <div class="tags"><span class="tag">PostgreSQL</span><span class="tag">Vector search</span></div>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/pgvector" target="_blank" rel="noopener">Read it on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Back to the catalogue</a>
+    </div>
+  </header>
+
+  <article class="doc">
+<blockquote>
+<p>Vector search in the database you already run: the index chosen and sized for
+the data, filters that do not quietly destroy recall, and a way to tell whether
+the search is still finding what it should as the table grows.</p>
+</blockquote>
+<p><strong>Complexity:</strong> medium · <strong>Typical build:</strong> 2–4 days · <strong>Verified:</strong> 2026-08-19 (re-check after ~90 days)</p>
+<p><strong>Examples in:</strong> SQL and Python, with Postgres and pgvector. The architecture is language-agnostic: sections 5, 10 and 11 hold wherever you build this. Section 4 is illustrative — if your project is in another language, your agent translates the idioms rather than importing them, and nothing is lost. The index-sizing and filtered-recall concerns are properties of approximate nearest-neighbour search and apply to any store; the specific behaviour described here is pgvector's.</p>
+<p><strong>Use when:</strong> the data is already in Postgres, the corpus is large enough that a full scan is too slow, and you would rather have transactions, backups and joins than a second datastore to operate.</p>
+<p><strong>Not for:</strong> a corpus small enough to scan exhaustively — a few thousand vectors compare faster than an approximate index can be tuned, and an exact scan has perfect recall for free. Also not for search where the query is a product code, an error identifier or an exact phrase: embeddings are near-blind to those, and no amount of index tuning fixes it.</p>
+<hr />
+<h2>⚙️ INSTRUCTIONS FOR THE AI — READ BEFORE WRITING ANY CODE</h2>
+<p><strong>Do not start coding.</strong></p>
+<p><strong>Step 1 — Refresh.</strong> Verify the installed pgvector version and its extension
+name. Confirm the index types available and their current parameter names and
+defaults — <code>m</code>, <code>ef_construction</code> and <code>ef_search</code> for the graph index; <code>lists</code> and
+<code>probes</code> for the clustered one. <strong>Confirm the maximum dimensions each index type
+supports and the dimensionality of the embedding model in use</strong>, because they do
+not always agree and the mismatch appears at index creation, after the column
+already has data. Verify whether the iterative-scan setting for filtered queries
+exists in this version and what its modes are. Report what you verified and what
+turned out wrong.</p>
+<p><strong>Step 2 — Read the project, then audit what already exists.</strong> Find the embedding
+model and its dimensionality, and whether it is recorded anywhere in the schema —
+if two models' output ever share a column, the search is silently wrong and the
+only fix is a full re-embed. Find the row count now and the expected count in a
+year, since the index parameters follow from it. Find every query that will filter
+alongside the vector search — a tenant, a document type, a date range — because
+that list decides the entire index strategy. Find <code>maintenance_work_mem</code>. Then
+audit §11 item by item, each marked <em>already true</em>, <em>partly true</em> or <em>absent</em>,
+with the file that decides it, reported before anything is proposed.</p>
+<p>Assume the project is right until it demonstrably is not; code satisfying an item
+stays even where its shape differs from §4; replacing something that works needs a
+one-line reason; never delete a working path to make room for the blueprint's
+version. The same holds for language — §4 is illustrative, its idioms get
+translated into the project's language, and §11 is what has to become true rather
+than the syntax.</p>
+<p><strong>Step 3 — Write a plan for the gap only, and get it approved</strong>, including a
+<code>## Proposed stack</code> section, the index type with the arithmetic behind its
+parameters, and the recall measurement you will use to know whether it works. Do
+not ask open framework questions — propose, and ask for confirmation once. Say
+what you are adding, what you are leaving alone, and what you propose to change,
+and touch nothing else.</p>
+<p><strong>Step 4 — Build in the order in §7.</strong> <strong>Step 5 — §11 is the definition of done.</strong></p>
+<hr />
+<h2>1. The failure that returns ten rows and no error</h2>
+<p>An approximate index trades exactness for speed. That trade is invisible: the
+query returns the number of rows you asked for, quickly, and nothing indicates
+that better matches existed and were missed.</p>
+<table>
+<thead>
+<tr>
+<th>Adding the index and moving on</th>
+<th>Sizing it and measuring it</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Parameters are left at their defaults, which are tuned for nothing in particular</td>
+<td>Parameters follow from the row count and are recorded with the arithmetic</td>
+</tr>
+<tr>
+<td>A <code>WHERE</code> clause is added and recall silently collapses</td>
+<td>Filtering is designed for, and its cost is measured</td>
+</tr>
+<tr>
+<td>Quality is judged by reading a few results</td>
+<td>Recall is measured against exact search on a fixed question set</td>
+</tr>
+<tr>
+<td>Growth is noticed when someone complains</td>
+<td>Recall is re-measured as the table grows</td>
+</tr>
+</tbody>
+</table>
+<p>The second row is the one that catches people who did everything else right.
+<strong>pgvector applies the filter after the index scan, not before.</strong> The graph search
+returns a fixed number of candidates — forty by default — ranked purely by
+similarity, and only then is the <code>WHERE</code> clause applied. Ask for ten results with
+a tenant filter and you may get three: the other thirty-seven candidates belonged
+to other tenants. The rows you wanted exist, are indexed, and were never
+considered.</p>
+<p>This is the single most important thing to understand about this extension,
+because it is not a bug and it does not announce itself. There are three ways to
+live with it, and they suit different situations: raise the candidate count so
+more survive filtering, enable iterative scanning so the search re-runs until it
+has enough, or build a partial index per known filter value so the filter is
+implicit in which index is used. The last is the only one that is genuinely
+pre-filtering, and it only works when the filter values are known in advance.</p>
+<h2>2. Architecture</h2>
+<pre class="mermaid">%% GENERATED - do not edit by hand.
+%% Edit the source header in architecture.mmd, then rebuild.
+%% Vector search inside the working database
+
+flowchart TB
+    client([&quot;Application&quot;])
+    embed[&quot;Embedding call&quot;]
+    query[&quot;Search query&quot;]
+    params[&quot;Session parameters&quot;]
+    filters[&quot;Filter strategy&quot;]
+    recall[&quot;Recall measurement&quot;]
+    rows[(&quot;Table with the vector column&quot;)]
+    ann[(&quot;Approximate index&quot;)]
+    partial[(&quot;Partial indexes per known filter&quot;)]
+    golden[(&quot;Golden question set&quot;)]
+
+    client --&gt;|&quot;query text&quot;| embed
+    embed --&gt;|&quot;query vector&quot;| query
+    params ---|&quot;candidate list size per request&quot;| query
+    query --&gt;|&quot;approximate nearest neighbours&quot;| ann
+    ann --&gt;|&quot;candidate rows&quot;| rows
+    filters ---|&quot;known values use a partial index&quot;| query
+    partial --&gt; rows
+    rows --&gt;|&quot;ranked results&quot;| client
+    golden --&gt;|&quot;exact search compared with approximate&quot;| recall
+    recall -.-&gt;|&quot;tune, then measure again&quot;| params
+
+    classDef service fill:#eff6ff,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b;
+    classDef datastore fill:#e9faf3,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b;
+    classDef external fill:#fff4ed,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b;
+    classDef actor fill:#f0eefc,stroke:#4a3aa7,stroke-width:1.5px,color:#0b0b0b;
+    class embed,query,params,filters,recall service;
+    class rows,ann,partial,golden datastore;
+    class client actor;</pre>
+<p>The rule the diagram encodes: <strong>the arrow from measurement back to the parameters
+is the loop that matters.</strong> Index settings without a recall measurement are
+guesses that happen to run. Everything else here is mechanics.</p>
+<h2>3. Project structure</h2>
+<div class="hl"><pre><span></span><code>migrations/
+├── 0006_add_pgvector.py          the extension, one revision of its own
+├── 0007_add_embedding_column.py  the column, with the model recorded beside it
+└── 0008_add_hnsw_index.py        the index, concurrently, in its own revision
+app/search/
+├── query.py                      search, with the session parameters set per request
+├── params.py                     the sizing arithmetic, written down
+└── recall.py                     approximate against exact, on a fixed question set
+</code></pre></div>
+
+<p><strong>One rule: the embedding model is a column, not an assumption.</strong> Every row
+records which model produced its vector. Two models' output in one column is a
+search that returns confident nonsense, no error is raised, and the only remedy is
+re-embedding everything — which you cannot even scope without that column.</p>
+<h2>4. Reference implementation</h2>
+<div class="hl"><pre><span></span><code><span class="c1">-- The table. The dimension is fixed at column creation and changing it later</span>
+<span class="c1">-- means rewriting the table, so it is worth being sure about the model first.</span>
+<span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">document_chunks</span><span class="w"> </span><span class="p">(</span><span class="w"></span>
+<span class="w">    </span><span class="n">id</span><span class="w">            </span><span class="n">BIGSERIAL</span><span class="w"> </span><span class="k">PRIMARY</span><span class="w"> </span><span class="k">KEY</span><span class="p">,</span><span class="w"></span>
+<span class="w">    </span><span class="n">tenant_id</span><span class="w">     </span><span class="nb">BIGINT</span><span class="w">      </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span><span class="w"></span>
+<span class="w">    </span><span class="n">document_id</span><span class="w">   </span><span class="nb">BIGINT</span><span class="w">      </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span><span class="w"></span>
+<span class="w">    </span><span class="n">content</span><span class="w">       </span><span class="nb">TEXT</span><span class="w">        </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span><span class="w"></span>
+<span class="w">    </span><span class="n">embedding</span><span class="w">     </span><span class="n">vector</span><span class="p">(</span><span class="mi">1536</span><span class="p">)</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span><span class="w"></span>
+<span class="w">    </span><span class="c1">-- Which model produced this vector. Without it, a model upgrade silently</span>
+<span class="w">    </span><span class="c1">-- mixes two vector spaces in one column and every search is subtly wrong</span>
+<span class="w">    </span><span class="c1">-- with nothing to indicate it.</span>
+<span class="w">    </span><span class="n">embedding_model</span><span class="w"> </span><span class="nb">TEXT</span><span class="w">      </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span><span class="w"></span>
+<span class="w">    </span><span class="n">created_at</span><span class="w">    </span><span class="n">TIMESTAMPTZ</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="n">now</span><span class="p">()</span><span class="w"></span>
+<span class="p">);</span><span class="w"></span>
+
+<span class="c1">-- A payload index on anything filtered alongside the vector. Without it the</span>
+<span class="c1">-- filter is evaluated by reading rows the vector index already returned, which</span>
+<span class="c1">-- is the slow half of an otherwise fast query.</span>
+<span class="k">CREATE</span><span class="w"> </span><span class="k">INDEX</span><span class="w"> </span><span class="n">ix_chunks_tenant</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="n">document_chunks</span><span class="w"> </span><span class="p">(</span><span class="n">tenant_id</span><span class="p">);</span><span class="w"></span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1">-- The vector index, in its own migration and built concurrently: a plain build</span>
+<span class="c1">-- holds a lock for its whole duration, and on a large table that is measured in</span>
+<span class="c1">-- minutes of blocked writes.</span>
+<span class="c1">--</span>
+<span class="c1">-- m and ef_construction are build-time and cannot be changed without rebuilding.</span>
+<span class="c1">-- Higher values mean better recall and a slower, larger build. The defaults are</span>
+<span class="c1">-- reasonable; raising m helps most when the data has many near-duplicates.</span>
+<span class="c1">--</span>
+<span class="c1">-- Raise maintenance_work_mem first: the build is dramatically faster when the</span>
+<span class="c1">-- graph fits in memory, and Postgres emits a notice when it does not.</span>
+<span class="k">SET</span><span class="w"> </span><span class="n">maintenance_work_mem</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;2GB&#39;</span><span class="p">;</span><span class="w"></span>
+<span class="k">CREATE</span><span class="w"> </span><span class="k">INDEX</span><span class="w"> </span><span class="n">CONCURRENTLY</span><span class="w"> </span><span class="n">ix_chunks_embedding</span><span class="w"></span>
+<span class="w">    </span><span class="k">ON</span><span class="w"> </span><span class="n">document_chunks</span><span class="w"> </span><span class="k">USING</span><span class="w"> </span><span class="n">hnsw</span><span class="w"> </span><span class="p">(</span><span class="n">embedding</span><span class="w"> </span><span class="n">vector_cosine_ops</span><span class="p">)</span><span class="w"></span>
+<span class="w">    </span><span class="k">WITH</span><span class="w"> </span><span class="p">(</span><span class="n">m</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">16</span><span class="p">,</span><span class="w"> </span><span class="n">ef_construction</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">64</span><span class="p">);</span><span class="w"></span>
+
+<span class="c1">-- The operator class must match the distance operator used at query time.</span>
+<span class="c1">-- Cosine here means queries use &lt;=&gt;; using &lt;-&gt; against this index falls back to</span>
+<span class="c1">-- a sequential scan, which is fast on a laptop and catastrophic in production.</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/search/query.py</span>
+<span class="n">SEARCH</span> <span class="o">=</span> <span class="n">text</span><span class="p">(</span><span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">    SELECT id, content, 1 - (embedding &lt;=&gt; :q) AS similarity</span>
+<span class="s2">      FROM document_chunks</span>
+<span class="s2">     WHERE tenant_id = :tenant</span>
+<span class="s2">       AND embedding_model = :model</span>
+<span class="s2">     ORDER BY embedding &lt;=&gt; :q</span>
+<span class="s2">     LIMIT :k</span>
+<span class="s2">&quot;&quot;&quot;</span><span class="p">)</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">search</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="n">query_vector</span><span class="p">,</span> <span class="n">tenant_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span><span class="p">):</span>
+    <span class="c1"># ef_search is per session, not per index, and it is the main quality dial at</span>
+    <span class="c1"># query time. The default candidate list is small; with a filter applied</span>
+    <span class="c1"># afterwards, most of those candidates can be discarded and the query returns</span>
+    <span class="c1"># fewer rows than asked for — with no error and no warning.</span>
+    <span class="k">await</span> <span class="n">session</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">text</span><span class="p">(</span><span class="s2">&quot;SET LOCAL hnsw.ef_search = :ef&quot;</span><span class="p">),</span> <span class="p">{</span><span class="s2">&quot;ef&quot;</span><span class="p">:</span> <span class="nb">max</span><span class="p">(</span><span class="mi">40</span><span class="p">,</span> <span class="n">k</span> <span class="o">*</span> <span class="mi">8</span><span class="p">)})</span>
+
+    <span class="c1"># Iterative scan re-runs the index search when post-filtering leaves too few</span>
+    <span class="c1"># rows, instead of returning a short list. It costs latency on selective</span>
+    <span class="c1"># filters and it is off by default. Turn it on deliberately, and measure —</span>
+    <span class="c1"># on an unselective filter it changes nothing and costs nothing.</span>
+    <span class="k">await</span> <span class="n">session</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">text</span><span class="p">(</span><span class="s2">&quot;SET LOCAL hnsw.iterative_scan = &#39;relaxed_order&#39;&quot;</span><span class="p">))</span>
+
+    <span class="k">return</span> <span class="p">(</span><span class="k">await</span> <span class="n">session</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">SEARCH</span><span class="p">,</span> <span class="p">{</span>
+        <span class="s2">&quot;q&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">query_vector</span><span class="p">),</span> <span class="s2">&quot;tenant&quot;</span><span class="p">:</span> <span class="n">tenant_id</span><span class="p">,</span>
+        <span class="s2">&quot;model&quot;</span><span class="p">:</span> <span class="n">settings</span><span class="o">.</span><span class="n">embedding_model</span><span class="p">,</span> <span class="s2">&quot;k&quot;</span><span class="p">:</span> <span class="n">k</span><span class="p">,</span>
+    <span class="p">}))</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1">-- A partial index per known filter value. This is the only option here that is</span>
+<span class="c1">-- genuinely pre-filtering: the filter is implicit in which index is chosen, so</span>
+<span class="c1">-- every candidate the graph returns already satisfies it.</span>
+<span class="c1">--</span>
+<span class="c1">-- It only works for values known in advance and few in number. One index per</span>
+<span class="c1">-- tenant is right for five large tenants and absurd for fifty thousand.</span>
+<span class="k">CREATE</span><span class="w"> </span><span class="k">INDEX</span><span class="w"> </span><span class="n">CONCURRENTLY</span><span class="w"> </span><span class="n">ix_chunks_embedding_docs</span><span class="w"></span>
+<span class="w">    </span><span class="k">ON</span><span class="w"> </span><span class="n">document_chunks</span><span class="w"> </span><span class="k">USING</span><span class="w"> </span><span class="n">hnsw</span><span class="w"> </span><span class="p">(</span><span class="n">embedding</span><span class="w"> </span><span class="n">vector_cosine_ops</span><span class="p">)</span><span class="w"></span>
+<span class="w">    </span><span class="k">WHERE</span><span class="w"> </span><span class="n">tenant_id</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span><span class="w"></span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/search/recall.py</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">measure_recall</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="n">questions</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Vector</span><span class="p">],</span> <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Approximate results compared with exact ones, on a fixed question set.</span>
+
+<span class="sd">    The only way to know whether the index is working. An approximate search</span>
+<span class="sd">    always returns k rows quickly; whether they are the right k is invisible</span>
+<span class="sd">    without this comparison, and it drifts as the table grows.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">hits</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">for</span> <span class="n">q</span> <span class="ow">in</span> <span class="n">questions</span><span class="p">:</span>
+        <span class="c1"># Exact search: disable the index for this statement only. Slow on</span>
+        <span class="c1"># purpose — this is ground truth, not a query path.</span>
+        <span class="k">await</span> <span class="n">session</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">text</span><span class="p">(</span><span class="s2">&quot;SET LOCAL enable_indexscan = off&quot;</span><span class="p">))</span>
+        <span class="n">exact</span> <span class="o">=</span> <span class="p">{</span><span class="n">r</span><span class="o">.</span><span class="n">id</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="k">await</span> <span class="n">session</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">SEARCH_EXACT</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;q&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">q</span><span class="p">),</span> <span class="s2">&quot;k&quot;</span><span class="p">:</span> <span class="n">k</span><span class="p">})}</span>
+        <span class="k">await</span> <span class="n">session</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">text</span><span class="p">(</span><span class="s2">&quot;SET LOCAL enable_indexscan = on&quot;</span><span class="p">))</span>
+        <span class="n">approx</span> <span class="o">=</span> <span class="p">{</span><span class="n">r</span><span class="o">.</span><span class="n">id</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="k">await</span> <span class="n">session</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">SEARCH</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;q&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">q</span><span class="p">),</span> <span class="s2">&quot;k&quot;</span><span class="p">:</span> <span class="n">k</span><span class="p">})}</span>
+        <span class="n">hits</span> <span class="o">+=</span> <span class="nb">len</span><span class="p">(</span><span class="n">exact</span> <span class="o">&amp;</span> <span class="n">approx</span><span class="p">)</span> <span class="o">/</span> <span class="n">k</span>
+    <span class="k">return</span> <span class="n">hits</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="n">questions</span><span class="p">)</span>
+</code></pre></div>
+
+<h2>5. Golden-standard rules</h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Forbidden:</strong> shipping an approximate index without measuring recall against exact search</td>
+<td>It always returns k rows quickly. Whether they are the right rows is invisible, and it is the only thing that matters.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> two embedding models sharing one column</td>
+<td>The vector spaces are unrelated, so the search returns confident nonsense with no error. Record the model per row.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> a distance operator that does not match the index's operator class</td>
+<td>The index is ignored and the query becomes a sequential scan — fast on a laptop, catastrophic on real data.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> building the vector index without <code>CONCURRENTLY</code> on a populated table</td>
+<td>It holds a lock for the whole build, which on a large table is minutes of blocked writes.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> assuming a <code>WHERE</code> clause narrows the search</td>
+<td>It filters <em>after</em> the index returned its candidates, so a selective filter can leave almost nothing.</td>
+</tr>
+<tr>
+<td>Every field filtered alongside the vector has its own index</td>
+<td>Otherwise the filter is evaluated by reading rows, which is the slow half of a fast query.</td>
+</tr>
+<tr>
+<td>The candidate list size is set per request, from k</td>
+<td>It is a session parameter and the default is small. With filtering it is the difference between ten results and three.</td>
+</tr>
+<tr>
+<td>Index parameters are derived from the row count, with the arithmetic recorded</td>
+<td>They are build-time and cannot be changed without a rebuild, so the reasoning has to outlive the person.</td>
+</tr>
+<tr>
+<td>Build memory is raised before creating the index</td>
+<td>The build is dramatically faster when the graph fits in memory, and Postgres tells you when it does not.</td>
+</tr>
+<tr>
+<td>Partial indexes are used only for few, known filter values</td>
+<td>They are the only real pre-filtering available here — and one index per tenant is right for five tenants and absurd for fifty thousand.</td>
+</tr>
+<tr>
+<td>Recall is re-measured as the table grows</td>
+<td>An index tuned at a hundred thousand rows is not tuned at ten million, and nothing announces the change.</td>
+</tr>
+<tr>
+<td>Iterative scanning is enabled deliberately and measured</td>
+<td>It fixes short result sets on selective filters and costs latency; on unselective ones it changes nothing.</td>
+</tr>
+</tbody>
+</table>
+<h2>6. Data contracts</h2>
+<div class="hl"><pre><span></span><code><span class="n">embedding</span><span class="w">        </span><span class="n">vector</span><span class="p">(</span><span class="mi">1536</span><span class="p">)</span><span class="w">   </span><span class="c1">-- the dimension is fixed at column creation</span>
+<span class="n">embedding_model</span><span class="w">  </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="w">  </span><span class="c1">-- which model produced it; not optional</span>
+</code></pre></div>
+
+<p>The model column is the contract that makes an upgrade survivable. Changing
+embedding model means every stored vector is in a different space from every new
+one, and a search across both is meaningless — but nothing raises. With the column,
+the migration is a filter on old rows and a backfill you can run in batches. Without
+it, the only honest option is to re-embed everything and hope nothing was served
+wrongly in the meantime.</p>
+<p>Similarity scores are not comparable across models or corpora. A threshold tuned
+here is a measured property of this system, not a number to carry anywhere else —
+including from this document.</p>
+<h2>7. Build order</h2>
+<ol>
+<li><strong>Extension, column and exact search — no index.</strong> Prove the query and the
+   distance operator are right while recall is trivially perfect.</li>
+<li><strong>The golden question set and the recall measurement</strong>, built now, against
+   exact results. Every later step is judged by it.</li>
+<li><strong>The index</strong>, built concurrently with recorded parameters. Measure recall and
+   latency. If recall is unacceptable, the parameters are wrong and this is the
+   moment to find out.</li>
+<li><strong>Filters</strong>, with recall measured <em>with the filter applied</em> — a separate
+   number, and usually a much worse one.</li>
+<li><strong>Iterative scanning or partial indexes</strong>, chosen from what step 4 showed, then
+   measured again.</li>
+<li><strong>Payload indexes and the session parameter derived from k.</strong></li>
+<li><strong>A recall check that runs on a schedule</strong> against production-sized data.</li>
+</ol>
+<p>Step 2 before step 3 is the whole discipline. An index added before there is a way
+to measure it is an index nobody can tune, and the first measurement will be taken
+after someone complains.</p>
+<h2>8. Blocks to pull in</h2>
+<p>Nothing here is a prerequisite. These are adjacent problems, by name only —
+resolve them separately if they apply.</p>
+<ul>
+<li>Chunking and embeddings for retrieval — what goes into this table</li>
+<li>Hybrid search: keyword and vector with RRF — for queries containing identifiers and exact phrases</li>
+<li>Alembic migrations — where the extension, column and index changes live</li>
+<li>PostgreSQL connection pool and lifecycle — the pool these queries run on</li>
+<li>LLM eval harness — how to judge whether a retrieval change helped</li>
+</ul>
+<h2>9. Metrics</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Recall at 10 against exact search, unfiltered</td>
+<td>&gt; 0.95</td>
+</tr>
+<tr>
+<td>Recall at 10 with the most selective production filter</td>
+<td>Measured separately; &gt; 0.90 or a documented reason</td>
+</tr>
+<tr>
+<td>Query latency, p95</td>
+<td>&lt; 50 ms at production row count</td>
+</tr>
+<tr>
+<td>Queries falling back to a sequential scan</td>
+<td>0, checked with the planner</td>
+</tr>
+<tr>
+<td>Rows whose embedding model is unrecorded</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Time since recall was last measured</td>
+<td>&lt; 30 days</td>
+</tr>
+<tr>
+<td>Index build memory notices in the log</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<h2>10. Failure modes</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A filtered search returns far fewer rows than requested</td>
+<td>Filtering is applied after the index returned its candidates, and most were discarded</td>
+<td>Raise the candidate list size, enable iterative scanning, or use a partial index</td>
+</tr>
+<tr>
+<td>Results look plausible and the right document is never found</td>
+<td>Recall is poor and nothing reports it</td>
+<td>Measure against exact search on a fixed question set</td>
+</tr>
+<tr>
+<td>The query is suddenly slow after a model change</td>
+<td>The distance operator no longer matches the index's operator class, so the index is skipped</td>
+<td>Match the operator to the operator class; check with the planner</td>
+</tr>
+<tr>
+<td>Search returns unrelated results after an embedding upgrade</td>
+<td>Two models' vectors share one column</td>
+<td>Record the model per row; filter and backfill</td>
+</tr>
+<tr>
+<td>Creating the index blocked writes for minutes</td>
+<td>It was built without <code>CONCURRENTLY</code></td>
+<td>Build concurrently, in its own migration</td>
+</tr>
+<tr>
+<td>The index build takes hours</td>
+<td>The graph does not fit in build memory, and Postgres said so in a notice nobody read</td>
+<td>Raise <code>maintenance_work_mem</code> for the build</td>
+</tr>
+<tr>
+<td>Recall was fine at launch and is poor a year later</td>
+<td>Parameters were sized for the original row count</td>
+<td>Re-measure on a schedule; rebuild with new parameters when it drops</td>
+</tr>
+<tr>
+<td>Latency is fine and the filter is slow</td>
+<td>The filtered column has no index of its own</td>
+<td>Add one</td>
+</tr>
+<tr>
+<td>A query for a product code or error identifier returns nothing useful</td>
+<td>Embeddings are near-blind to exact tokens</td>
+<td>This is not an index problem; add a lexical branch</td>
+</tr>
+<tr>
+<td>A similarity threshold copied from a benchmark rejects everything</td>
+<td>Scores are not comparable across models or corpora</td>
+<td>Calibrate against this corpus</td>
+</tr>
+<tr>
+<td>One tenant's search is slow and others are fast</td>
+<td>A partial index exists for some tenants and not that one</td>
+<td>Either partial indexes for all known values or none</td>
+</tr>
+</tbody>
+</table>
+<h2>11. Definition of done</h2>
+<ul>
+<li class="task">Recall at 10 against exact search is measured on a committed question set, and the number is recorded</li>
+<li class="task">Recall is measured a second time with the most selective production filter applied, and both numbers are recorded</li>
+<li class="task">Every row records the embedding model that produced its vector, enforced as <code>NOT NULL</code></li>
+<li class="task">A test asserts that querying with the wrong distance operator does not use the index, so the mismatch is caught rather than discovered by latency</li>
+<li class="task">The query planner is checked in a test to confirm the vector index is used, not a sequential scan</li>
+<li class="task">The vector index was created concurrently, verified in the migration</li>
+<li class="task">Index parameters appear in the migration with the arithmetic that produced them in a comment</li>
+<li class="task">Every field filtered alongside the vector has its own index, verified against the catalogue</li>
+<li class="task">The candidate list size is set per request and derived from k, covered by a test</li>
+<li class="task">A scheduled job re-measures recall and fails or alerts when it drops below the target</li>
+<li class="task"><code>maintenance_work_mem</code> is raised for index builds, and no build notice appears in the log</li>
+<li class="task">The similarity threshold in use was calibrated against this corpus, and the calibration questions are committed</li>
+</ul>
+  </article>
+
+  <aside class="tailpiece">
+    <h2>Use this blueprint</h2>
+    <p>
+      Copy the file into your project and point your agent at it. It works with Claude Code,
+      Cursor, Copilot, ChatGPT and anything else that reads a file — there is nothing to install.
+    </p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/pgvector" target="_blank" rel="noopener">Open on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Browse all blueprints</a>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p><a href="/">Awesome Blueprints</a> — same request, same architecture, every time.</p>
+    <p class="dim">MIT · awesomeblueprints.com</p>
+  </div>
+</footer>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'neutral' });
+</script>
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const now = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', now);
+    try { localStorage.setItem('ab-theme', now); } catch (e) {}
+    location.reload();   // the diagram is themed at render time
+  });
+</script>
+
+</body>
+</html>

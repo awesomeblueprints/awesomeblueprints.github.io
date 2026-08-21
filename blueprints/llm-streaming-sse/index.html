@@ -1,0 +1,587 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Streaming LLM Output over SSE — Blueprint for AI Coding Agents | Awesome Blueprints</title>
+<meta name="description" content="Streaming LLM output over SSE from FastAPI: event framing, backpressure, client disconnects, proxy buffering and cancelling the model call." />
+<link rel="canonical" href="https://awesomeblueprints.com/blueprints/llm-streaming-sse/" />
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="Awesome Blueprints" />
+<meta property="og:url" content="https://awesomeblueprints.com/blueprints/llm-streaming-sse/" />
+<meta property="og:title" content="Streaming LLM Output over SSE — Architecture Blueprint" />
+<meta property="og:description" content="Streaming LLM output over SSE from FastAPI: event framing, backpressure, client disconnects, proxy buffering and cancelling the model call." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Streaming LLM Output over SSE — Architecture Blueprint" />
+<meta name="twitter:description" content="Streaming LLM output over SSE from FastAPI: event framing, backpressure, client disconnects, proxy buffering and cancelling the model call." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/page.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "Streaming LLM Output over SSE", "description": "Streaming LLM output over SSE from FastAPI: event framing, backpressure, client disconnects, proxy buffering and cancelling the model call.", "url": "https://awesomeblueprints.com/blueprints/llm-streaming-sse/", "dateModified": "2026-08-19", "keywords": "Streaming", "isAccessibleForFree": true, "license": "https://opensource.org/licenses/MIT", "publisher": {"@type": "Organization", "name": "Awesome Blueprints", "url": "https://awesomeblueprints.com"}}</script>
+<script>
+  (function () {
+    var t;
+    try { t = localStorage.getItem('ab-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">Awesome Blueprints</a>
+    <div class="nav-right">
+      <a class="nav-link" href="/#blueprints">Catalogue</a>
+      <a class="nav-link" href="/#faq">FAQ</a>
+      <a class="nav-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/llm-streaming-sse" target="_blank" rel="noopener">GitHub ↗</a>
+      <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Switch theme">◑</button>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/">Home</a> <span>/</span> <a href="/#blueprints">Blueprints</a> <span>/</span>
+    <span>Streaming LLM Output over SSE</span>
+  </nav>
+
+  <header class="page-head">
+    <p class="eyebrow">llm-streaming-sse</p>
+    <h1>Streaming LLM Output over SSE</h1>
+    <p class="lede">Streaming LLM output over SSE from FastAPI: event framing, backpressure, client disconnects, proxy buffering and cancelling the model call.</p>
+    <div class="facts"><span>medium</span><span>2–3 days</span><span>Verified 2026-08-19</span></div>
+    <div class="tags"><span class="tag">Streaming</span></div>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/llm-streaming-sse" target="_blank" rel="noopener">Read it on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Back to the catalogue</a>
+    </div>
+  </header>
+
+  <article class="doc">
+<blockquote>
+<p>A server-sent events endpoint that emits tokens as they are generated, reports
+failures that happen after the headers are already gone, and stops paying for
+generation the moment the client walks away.</p>
+</blockquote>
+<p><strong>Complexity:</strong> medium · <strong>Typical build:</strong> 2–3 days · <strong>Verified:</strong> 2026-08-19 (re-check after ~90 days)</p>
+<p><strong>Examples in:</strong> Python, with FastAPI. The architecture is language-agnostic: sections 5, 10 and 11 hold wherever you build this. Section 4 is illustrative — if your project is in another language, your agent translates the idioms rather than importing them, and nothing is lost. The equivalents are a <code>ReadableStream</code> response in Node, <code>http.Flusher</code> in Go, and <code>Plug.Conn.chunk/2</code> in Elixir — and the proxy configuration in §5 is the same wherever the code runs.</p>
+<p><strong>Use when:</strong> a model call takes long enough that waiting for the whole answer feels broken — a chat reply, a generated document, a long summary — and the user should see it arrive.</p>
+<p><strong>Not for:</strong> a response the client cannot use until it is complete, such as structured output that has to parse before anything can be done with it. Streaming a JSON object token by token gives the user a progress bar made of syntax and costs you the ability to validate before sending. Also not for two-way traffic: if the client sends messages during generation, that is a WebSocket.</p>
+<hr />
+<h2>⚙️ INSTRUCTIONS FOR THE AI — READ BEFORE WRITING ANY CODE</h2>
+<p><strong>Do not start coding.</strong></p>
+<p><strong>Step 1 — Refresh.</strong> Verify the model SDK's streaming API and, specifically, how
+it surfaces a cancellation — that is what stops the meter when a client leaves.
+Verify how the framework detects a disconnected client mid-response.
+<strong>Establish what sits between the application and the browser and how it is
+configured</strong>: a reverse proxy, a CDN, an API gateway or a serverless platform each
+buffer by default, and every one of them turns a working stream into one slow
+batch. This is the single most valuable thing to check before writing code,
+because it is invisible in development. Report what you verified and what turned
+out wrong.</p>
+<p><strong>Step 2 — Read the project, then audit what already exists.</strong> Find any existing
+model call and whether it is already streaming internally. Find the response path:
+middleware that touches the body, a compression layer, anything that reads the
+whole response before sending it — each of these defeats streaming silently. Find
+how errors are currently rendered, because the existing handler cannot help once
+the status line has been sent. Find whether token usage is recorded today. Then
+audit §11 item by item, each marked <em>already true</em>, <em>partly true</em> or <em>absent</em>,
+with the file that decides it, reported before anything is proposed.</p>
+<p>Assume the project is right until it demonstrably is not; code satisfying an item
+stays even where its shape differs from §4; replacing something that works needs a
+one-line reason; never delete a working path to make room for the blueprint's
+version. The same holds for language — §4 is illustrative, its idioms get
+translated into the project's language, and §11 is what has to become true rather
+than the syntax.</p>
+<p><strong>Step 3 — Write a plan for the gap only, and get it approved</strong>, including a
+<code>## Proposed stack</code> section and the proxy configuration this depends on, named
+explicitly. Do not ask open framework questions — propose, and ask for
+confirmation once. Say what you are adding, what you are leaving alone, and what
+you propose to change, and touch nothing else.</p>
+<p><strong>Step 4 — Build in the order in §7.</strong> <strong>Step 5 — §11 is the definition of done.</strong></p>
+<hr />
+<h2>1. Why streaming works locally and batches in production</h2>
+<p>The endpoint is easy. Everything that makes it fail is somewhere else.</p>
+<table>
+<thead>
+<tr>
+<th>The obvious streaming endpoint</th>
+<th>This one</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Works on <code>localhost</code>, arrives as one lump through the proxy</td>
+<td>Sends the header that disables buffering, and names the proxy settings it needs</td>
+</tr>
+<tr>
+<td>A failure after the first token has no way to be reported</td>
+<td>Errors are in-band events, because the status code is already spent</td>
+</tr>
+<tr>
+<td>A client that closes the tab leaves generation running to completion</td>
+<td>Disconnect cancels the call, and the meter stops</td>
+</tr>
+<tr>
+<td>Token usage is recorded on completion, so cancelled runs are invisible</td>
+<td>Usage is recorded on every path, including cancellation</td>
+</tr>
+</tbody>
+</table>
+<p>The first row is the one everybody hits, and the reason is worth stating exactly:
+<strong>a reverse proxy buffers responses by default.</strong> It reads the whole body before
+forwarding, which is right for ordinary responses and fatal here. Nothing errors —
+the user simply waits for the full answer and then sees it appear at once, which
+looks like a slow model rather than a configuration problem. Compression makes it
+worse, caching makes it worse again, and a default read timeout will cut a long
+generation off mid-sentence.</p>
+<p>Two defences, and you want both: the proxy configured properly, and the
+<code>X-Accel-Buffering: no</code> response header, which works even where you do not control
+the proxy's configuration file.</p>
+<p>The second row is the structural one. <strong>Once the first byte is sent, the status
+code is spent.</strong> A model that fails on token four hundred cannot produce a 500 —
+the client has had <code>200 OK</code> for a second already. Every serious failure after that
+point has to be a message in the stream, and clients have to be built to expect
+one.</p>
+<h2>2. Architecture</h2>
+<pre class="mermaid">%% GENERATED - do not edit by hand.
+%% Edit the source header in architecture.mmd, then rebuild.
+%% Token stream from model to client
+
+flowchart TB
+    client([&quot;Browser client&quot;])
+    proxy{{&quot;Reverse proxy or CDN&quot;}}
+    model{{&quot;Model provider&quot;}}
+    endpoint[&quot;Streaming endpoint&quot;]
+    guard[&quot;Limits and validation, before the first byte&quot;]
+    generator[&quot;Async generator&quot;]
+    encoder[&quot;Event encoder&quot;]
+    cancel[&quot;Disconnect detection&quot;]
+    usage[&quot;Usage and cost recording&quot;]
+    store[(&quot;Conversation store&quot;)]
+
+    client --&gt;|&quot;request&quot;| proxy
+    proxy --&gt;|&quot;buffering disabled, long read timeout&quot;| endpoint
+    endpoint --&gt;|&quot;rejected here can still be a real status code&quot;| guard
+    guard -.-&gt;|&quot;rejected before the stream starts&quot;| client
+    guard --&gt;|&quot;accepted&quot;| generator
+    generator --&gt;|&quot;streamed completion&quot;| model
+    model -.-&gt;|&quot;deltas&quot;| generator
+    generator --&gt; encoder
+    encoder -.-&gt;|&quot;one event per delta&quot;| proxy
+    proxy -.-&gt; client
+    cancel --&gt;|&quot;client gone, stop generating&quot;| generator
+    generator --&gt;|&quot;on every exit path&quot;| usage
+    usage --&gt; store
+    generator -.-&gt;|&quot;failure becomes an in band error event&quot;| encoder
+
+    classDef service fill:#eff6ff,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b;
+    classDef datastore fill:#e9faf3,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b;
+    classDef external fill:#fff4ed,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b;
+    classDef actor fill:#f0eefc,stroke:#4a3aa7,stroke-width:1.5px,color:#0b0b0b;
+    class endpoint,guard,generator,encoder,cancel,usage service;
+    class store datastore;
+    class proxy,model external;
+    class client actor;</pre>
+<p>The rule the diagram encodes: <strong>there is exactly one point where a real HTTP
+status can still be returned, and it is before the generator starts.</strong> Everything
+after that arrow is in-band. Validation, authentication, rate limits and quota
+checks all belong on the left of it — moving any of them inside the generator
+turns a clean 429 into an error message the client has to parse.</p>
+<h2>3. Project structure</h2>
+<div class="hl"><pre><span></span><code>app/streaming/
+├── events.py      the event envelope and the encoder — one place
+├── endpoint.py    the route: validate, then hand off to the generator
+├── generate.py    the async generator that talks to the model
+└── usage.py       recording, called on every exit path
+</code></pre></div>
+
+<p><strong>One rule: the generator never raises out of itself.</strong> An exception escaping a
+streaming generator closes the connection with no explanation, and the client sees
+a truncated answer indistinguishable from a network drop. Catch inside, emit an
+error event, return.</p>
+<h2>4. Reference implementation</h2>
+<div class="hl"><pre><span></span><code><span class="c1"># app/streaming/events.py</span>
+<span class="kn">import</span> <span class="nn">json</span>
+<span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span>
+
+
+<span class="k">def</span> <span class="nf">encode</span><span class="p">(</span><span class="n">event</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;One SSE frame.</span>
+
+<span class="sd">    The blank line terminates the event and is not optional — without it the</span>
+<span class="sd">    client buffers indefinitely waiting for the end of a frame that never comes.</span>
+<span class="sd">    A single newline inside `data` would also split the frame, which is why the</span>
+<span class="sd">    payload is always JSON rather than raw text.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;event: </span><span class="si">{</span><span class="n">event</span><span class="si">}</span><span class="se">\n</span><span class="s2">data: </span><span class="si">{</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">ensure_ascii</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="si">}</span><span class="se">\n\n</span><span class="s2">&quot;</span>
+
+
+<span class="n">COMMENT_KEEPALIVE</span> <span class="o">=</span> <span class="s2">&quot;: keepalive</span><span class="se">\n\n</span><span class="s2">&quot;</span>   <span class="c1"># ignored by clients; resets idle timers</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/streaming/endpoint.py</span>
+<span class="kn">from</span> <span class="nn">fastapi</span> <span class="kn">import</span> <span class="n">APIRouter</span><span class="p">,</span> <span class="n">Request</span>
+<span class="kn">from</span> <span class="nn">fastapi.responses</span> <span class="kn">import</span> <span class="n">StreamingResponse</span>
+
+<span class="n">router</span> <span class="o">=</span> <span class="n">APIRouter</span><span class="p">()</span>
+
+
+<span class="nd">@router</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="s2">&quot;/chat/stream&quot;</span><span class="p">)</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">chat_stream</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">,</span> <span class="n">payload</span><span class="p">:</span> <span class="n">ChatRequest</span><span class="p">,</span> <span class="n">user</span><span class="o">=</span><span class="n">Depends</span><span class="p">(</span><span class="n">current_user</span><span class="p">)):</span>
+    <span class="c1"># Everything that could reject the request happens here, before the response</span>
+    <span class="c1"># starts. This is the last moment a real status code exists: after the first</span>
+    <span class="c1"># byte the client already has 200, and a 429 raised inside the generator can</span>
+    <span class="c1"># only ever arrive as an error message in the body.</span>
+    <span class="k">await</span> <span class="n">enforce_rate_limit</span><span class="p">(</span><span class="n">user</span><span class="p">)</span>
+    <span class="k">await</span> <span class="n">enforce_quota</span><span class="p">(</span><span class="n">user</span><span class="p">)</span>
+    <span class="n">conversation</span> <span class="o">=</span> <span class="k">await</span> <span class="n">load_conversation</span><span class="p">(</span><span class="n">payload</span><span class="o">.</span><span class="n">conversation_id</span><span class="p">,</span> <span class="n">user</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">StreamingResponse</span><span class="p">(</span>
+        <span class="n">generate</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="n">conversation</span><span class="p">,</span> <span class="n">payload</span><span class="p">,</span> <span class="n">user</span><span class="p">),</span>
+        <span class="n">media_type</span><span class="o">=</span><span class="s2">&quot;text/event-stream&quot;</span><span class="p">,</span>
+        <span class="n">headers</span><span class="o">=</span><span class="p">{</span>
+            <span class="c1"># Belt and braces. proxy_buffering off in the nginx config is the</span>
+            <span class="c1"># primary fix; this header works even where you do not control that</span>
+            <span class="c1"># file — a managed gateway, a platform you deploy to, a CDN in front.</span>
+            <span class="s2">&quot;X-Accel-Buffering&quot;</span><span class="p">:</span> <span class="s2">&quot;no&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;Cache-Control&quot;</span><span class="p">:</span> <span class="s2">&quot;no-cache, no-transform&quot;</span><span class="p">,</span>   <span class="c1"># no-transform also stops</span>
+                                                          <span class="c1"># intermediaries compressing</span>
+            <span class="s2">&quot;Connection&quot;</span><span class="p">:</span> <span class="s2">&quot;keep-alive&quot;</span><span class="p">,</span>
+        <span class="p">},</span>
+    <span class="p">)</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/streaming/generate.py</span>
+<span class="kn">import</span> <span class="nn">asyncio</span><span class="o">,</span> <span class="nn">time</span>
+<span class="kn">from</span> <span class="nn">app.streaming.events</span> <span class="kn">import</span> <span class="n">encode</span><span class="p">,</span> <span class="n">COMMENT_KEEPALIVE</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">generate</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="n">conversation</span><span class="p">,</span> <span class="n">payload</span><span class="p">,</span> <span class="n">user</span><span class="p">):</span>
+    <span class="n">started</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span>
+    <span class="n">text_so_far</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">finish</span> <span class="o">=</span> <span class="s2">&quot;error&quot;</span>
+    <span class="n">seq</span> <span class="o">=</span> <span class="mi">0</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="c1"># Metadata first, before any token. The client needs the message id to</span>
+        <span class="c1"># attach the text to, and it needs it before there is text — otherwise it</span>
+        <span class="c1"># buffers the first tokens with nowhere to put them.</span>
+        <span class="k">yield</span> <span class="n">encode</span><span class="p">(</span><span class="s2">&quot;start&quot;</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;message_id&quot;</span><span class="p">:</span> <span class="n">message_id</span><span class="p">,</span> <span class="s2">&quot;model&quot;</span><span class="p">:</span> <span class="n">payload</span><span class="o">.</span><span class="n">model</span><span class="p">})</span>
+
+        <span class="k">async</span> <span class="k">with</span> <span class="n">model</span><span class="o">.</span><span class="n">stream</span><span class="p">(</span><span class="n">conversation</span><span class="o">.</span><span class="n">messages</span><span class="p">)</span> <span class="k">as</span> <span class="n">stream</span><span class="p">:</span>
+            <span class="n">last_beat</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span>
+            <span class="k">async</span> <span class="k">for</span> <span class="n">delta</span> <span class="ow">in</span> <span class="n">stream</span><span class="p">:</span>
+                <span class="c1"># The client has gone: a closed tab, a navigation, a lost network.</span>
+                <span class="c1"># Without this check generation runs to completion and you are</span>
+                <span class="c1"># billed in full for an answer nobody will ever read.</span>
+                <span class="k">if</span> <span class="k">await</span> <span class="n">request</span><span class="o">.</span><span class="n">is_disconnected</span><span class="p">():</span>
+                    <span class="n">finish</span> <span class="o">=</span> <span class="s2">&quot;cancelled&quot;</span>
+                    <span class="k">return</span>              <span class="c1"># `finally` still records usage</span>
+
+                <span class="n">seq</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="n">text_so_far</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">delta</span><span class="p">)</span>
+                <span class="c1"># The sequence number is what makes a resumed connection possible:</span>
+                <span class="c1"># a client that dropped can ask for everything after its last seq</span>
+                <span class="c1"># instead of paying for the answer twice.</span>
+                <span class="k">yield</span> <span class="n">encode</span><span class="p">(</span><span class="s2">&quot;delta&quot;</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;seq&quot;</span><span class="p">:</span> <span class="n">seq</span><span class="p">,</span> <span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="n">delta</span><span class="p">})</span>
+
+                <span class="k">if</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span> <span class="o">-</span> <span class="n">last_beat</span> <span class="o">&gt;</span> <span class="mi">15</span><span class="p">:</span>
+                    <span class="c1"># A model that thinks for a long time before its first token</span>
+                    <span class="c1"># leaves the connection idle, and an idle connection is closed</span>
+                    <span class="c1"># by proxies on a timer. A comment frame resets that clock.</span>
+                    <span class="k">yield</span> <span class="n">COMMENT_KEEPALIVE</span>
+                    <span class="n">last_beat</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span>
+
+        <span class="n">finish</span> <span class="o">=</span> <span class="s2">&quot;stop&quot;</span>
+        <span class="k">yield</span> <span class="n">encode</span><span class="p">(</span><span class="s2">&quot;done&quot;</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;seq&quot;</span><span class="p">:</span> <span class="n">seq</span><span class="p">,</span> <span class="s2">&quot;finish_reason&quot;</span><span class="p">:</span> <span class="n">finish</span><span class="p">})</span>
+
+    <span class="k">except</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">CancelledError</span><span class="p">:</span>
+        <span class="n">finish</span> <span class="o">=</span> <span class="s2">&quot;cancelled&quot;</span>
+        <span class="k">raise</span>                            <span class="c1"># never swallow cancellation</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+        <span class="c1"># The status line is long gone, so this cannot be a 500. It has to be an</span>
+        <span class="c1"># event the client is built to expect — and it must not carry the</span>
+        <span class="c1"># exception text, which routinely contains the prompt and the API key.</span>
+        <span class="n">finish</span> <span class="o">=</span> <span class="s2">&quot;error&quot;</span>
+        <span class="n">log</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="s2">&quot;stream failed&quot;</span><span class="p">)</span>
+        <span class="k">yield</span> <span class="n">encode</span><span class="p">(</span><span class="s2">&quot;error&quot;</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;code&quot;</span><span class="p">:</span> <span class="s2">&quot;generation_failed&quot;</span><span class="p">,</span> <span class="s2">&quot;retryable&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">})</span>
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="c1"># Every exit path: success, error, cancellation. Recording only on success</span>
+        <span class="c1"># makes cancelled generations invisible, and cancelled generations are the</span>
+        <span class="c1"># ones that surprise you on the invoice.</span>
+        <span class="k">await</span> <span class="n">record_usage</span><span class="p">(</span><span class="n">user</span><span class="p">,</span> <span class="n">message_id</span><span class="p">,</span> <span class="n">text_so_far</span><span class="p">,</span> <span class="n">finish</span><span class="p">,</span>
+                           <span class="n">seconds</span><span class="o">=</span><span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span> <span class="o">-</span> <span class="n">started</span><span class="p">)</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># The proxy half. Without these the endpoint above still batches, and nothing</span>
+<span class="c1"># in the application will tell you.</span>
+<span class="k">location</span><span class="w"> </span><span class="s">/chat/stream</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="kn">proxy_pass</span><span class="w"> </span><span class="s">http://app</span><span class="p">;</span><span class="w"></span>
+<span class="w">    </span><span class="kn">proxy_http_version</span><span class="w"> </span><span class="mi">1</span><span class="s">.1</span><span class="p">;</span><span class="w">         </span><span class="c1"># 1.0 has no chunked transfer encoding</span>
+<span class="w">    </span><span class="kn">proxy_buffering</span><span class="w"> </span><span class="no">off</span><span class="p">;</span><span class="w">            </span><span class="c1"># the default reads the whole body first</span>
+<span class="w">    </span><span class="kn">proxy_cache</span><span class="w"> </span><span class="no">off</span><span class="p">;</span><span class="w">                </span><span class="c1"># a cached stream is served stale to everyone after</span>
+<span class="w">    </span><span class="kn">gzip</span><span class="w"> </span><span class="no">off</span><span class="p">;</span><span class="w">                       </span><span class="c1"># compression re-buffers what you just unbuffered</span>
+<span class="w">    </span><span class="kn">proxy_read_timeout</span><span class="w"> </span><span class="s">3600s</span><span class="p">;</span><span class="w">       </span><span class="c1"># the default cuts long generations off mid-sentence</span>
+<span class="w">    </span><span class="kn">chunked_transfer_encoding</span><span class="w"> </span><span class="no">on</span><span class="p">;</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</code></pre></div>
+
+<h2>5. Golden-standard rules</h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Forbidden:</strong> deploying without confirming the proxy does not buffer</td>
+<td>It is the failure of this blueprint. Nothing errors — the stream simply arrives as one lump, and it looks like a slow model.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> letting an exception escape the generator</td>
+<td>The connection closes with no explanation and the client cannot tell a failure from a finished answer.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> an error message carrying exception text</td>
+<td>It routinely contains the prompt, the system message and sometimes the API key. Send a code the client can map.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> validation, authentication or limits inside the generator</td>
+<td>The status code is already spent. Everything that can reject belongs before the first byte.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> generating on after the client has gone</td>
+<td>You are billed for output nobody will read, and it is the cost nobody notices because there is no user to complain.</td>
+</tr>
+<tr>
+<td>Usage is recorded on every exit path</td>
+<td>Recording only on success hides exactly the runs that were abandoned — the ones that surprise you on the invoice.</td>
+</tr>
+<tr>
+<td>Every event is JSON with a type and a sequence number</td>
+<td>Raw text breaks the frame on the first newline, and without a sequence a dropped client must regenerate rather than resume.</td>
+</tr>
+<tr>
+<td>Metadata is emitted before the first token</td>
+<td>The client needs somewhere to put the text before the text arrives.</td>
+</tr>
+<tr>
+<td>Idle periods send a keepalive comment</td>
+<td>A model that thinks before answering leaves the connection silent, and proxies close silent connections on a timer.</td>
+</tr>
+<tr>
+<td>Compression is off, and marked off</td>
+<td><code>no-transform</code> tells intermediaries not to re-compress what you deliberately left uncompressed.</td>
+</tr>
+<tr>
+<td>There is a total time budget for a stream</td>
+<td>Otherwise a stalled provider holds a connection and a worker slot until something else times out.</td>
+</tr>
+<tr>
+<td>The client contract includes the error event</td>
+<td>A client that only handles deltas and completion treats a failure as a short answer.</td>
+</tr>
+</tbody>
+</table>
+<h2>6. Data contracts</h2>
+<div class="hl"><pre><span></span><code>event: start   data: {&quot;message_id&quot;: &quot;01J...&quot;, &quot;model&quot;: &quot;...&quot;}
+event: delta   data: {&quot;seq&quot;: 1, &quot;text&quot;: &quot;Your &quot;}
+event: done    data: {&quot;seq&quot;: 412, &quot;finish_reason&quot;: &quot;stop&quot;}
+event: error   data: {&quot;code&quot;: &quot;generation_failed&quot;, &quot;retryable&quot;: true}
+</code></pre></div>
+
+<p>Exactly one terminal event — <code>done</code> or <code>error</code> — and clients rely on it. A stream
+that simply stops is indistinguishable from a dropped connection, and the client
+cannot tell whether to retry, resume or show what it has.</p>
+<p><code>seq</code> is what makes a resume cheaper than a retry: a client that reconnects sends
+its last sequence number and receives what came after, instead of paying for the
+whole answer again. Without it, every dropped mobile connection is a second
+invoice.</p>
+<h2>7. Build order</h2>
+<ol>
+<li><strong>A stream of fixed text, no model.</strong> Curl it and confirm tokens arrive over
+   time. Then deploy it and curl it through the proxy — this is where the real
+   problem lives, and finding it now costs nothing.</li>
+<li><strong>The proxy configuration and the header</strong>, and repeat the deployed test until
+   it streams.</li>
+<li><strong>The model call</strong>, with metadata first, deltas, and one terminal event.</li>
+<li><strong>Disconnect cancellation</strong>, with a test that closes the client mid-stream and
+   asserts the provider call was cancelled.</li>
+<li><strong>Errors as in-band events</strong>, with a test that forces a mid-stream failure and
+   asserts the client receives a terminal error rather than a truncated stream.</li>
+<li><strong>Usage recording on every path</strong>, with a test per path.</li>
+<li><strong>Keepalives and the total time budget.</strong></li>
+</ol>
+<p>Step 1 deploys before there is anything to deploy on purpose. The buffering
+problem cannot be reproduced locally, and every hour spent building on top of it
+is an hour spent on something that does not work yet.</p>
+<h2>8. Blocks to pull in</h2>
+<p>Nothing here is a prerequisite. These are adjacent problems, by name only —
+resolve them separately if they apply.</p>
+<ul>
+<li>Streaming model responses in the client — the other half, and where the rest of the failures are</li>
+<li>FastAPI WebSocket endpoint — the alternative when the client must also send during generation</li>
+<li>Redis rate limiting — the check that has to happen before the first byte</li>
+<li>LLM observability and tracing — where cancelled and failed generations are counted</li>
+<li>Error envelope — the shape of the rejections that happen before the stream starts</li>
+</ul>
+<h2>9. Metrics</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Time to first token, p95</td>
+<td>&lt; 1.5 s, measured at the client, not the server</td>
+</tr>
+<tr>
+<td>Streams delivered as one batch</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Generations continuing after client disconnect</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Streams ending without a terminal event</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Tokens billed but never delivered</td>
+<td>Recorded and visible, not zero — but known</td>
+</tr>
+<tr>
+<td>Connections closed by an idle timeout mid-generation</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<h2>10. Failure modes</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The whole answer appears at once after a long wait, only in production</td>
+<td>A proxy, gateway or CDN buffers the response by default</td>
+<td><code>proxy_buffering off</code> and the <code>X-Accel-Buffering: no</code> header; test through the proxy</td>
+</tr>
+<tr>
+<td>Long generations are cut off mid-sentence at a consistent duration</td>
+<td>The proxy's read timeout is shorter than the generation</td>
+<td>Raise it for this route; send keepalives during silence</td>
+</tr>
+<tr>
+<td>The stream dies while the model is still thinking, before any token</td>
+<td>The connection was idle past a timeout</td>
+<td>Keepalive comment frames during the wait</td>
+</tr>
+<tr>
+<td>The client shows a truncated answer with no error</td>
+<td>An exception escaped the generator and closed the connection</td>
+<td>Catch inside; emit a terminal error event</td>
+</tr>
+<tr>
+<td>A user's prompt or an API key appears in the browser</td>
+<td>The exception text was put into the error event</td>
+<td>Send a code, never the exception</td>
+</tr>
+<tr>
+<td>The bill is larger than the visible traffic explains</td>
+<td>Generation continues after clients disconnect, and cancelled runs are not recorded</td>
+<td>Check for disconnect each iteration; record usage on every exit path</td>
+</tr>
+<tr>
+<td>A rate-limited user gets a 200 with an error inside it</td>
+<td>The limit check runs inside the generator</td>
+<td>Move every rejection before the first byte</td>
+</tr>
+<tr>
+<td>The client hangs after the last token</td>
+<td>The final frame was not terminated by a blank line, or there is no terminal event</td>
+<td>Always emit <code>done</code>; always end frames with a blank line</td>
+</tr>
+<tr>
+<td>Every dropped mobile connection produces a duplicate charge</td>
+<td>The client can only retry from the beginning</td>
+<td>Emit sequence numbers and support resume</td>
+</tr>
+<tr>
+<td>The stream works in one environment and batches in another</td>
+<td>Only the nginx config was fixed, and the other environment has a different proxy</td>
+<td>The response header covers what the config cannot reach</td>
+</tr>
+<tr>
+<td>Text arrives with occasional replacement characters</td>
+<td>The response was compressed and re-chunked by an intermediary</td>
+<td><code>no-transform</code>, and compression off for this route</td>
+</tr>
+</tbody>
+</table>
+<h2>11. Definition of done</h2>
+<ul>
+<li class="task">Tokens arrive incrementally <strong>through the production proxy</strong>, verified with a client that timestamps each event, not only on <code>localhost</code></li>
+<li class="task">The response carries <code>X-Accel-Buffering: no</code> and <code>Cache-Control: no-transform</code>, asserted by a test on the headers</li>
+<li class="task">Closing the client mid-stream cancels the provider call within one iteration, covered by a test that asserts the call was cancelled</li>
+<li class="task">Every stream ends with exactly one terminal event, <code>done</code> or <code>error</code>, asserted by a test for each path</li>
+<li class="task">A mid-stream failure produces a terminal error event, and the response contains no exception text — covered by a test asserting a recognisable secret is absent</li>
+<li class="task">Rate limit and quota rejections return a real HTTP status before any body is sent, covered by a test</li>
+<li class="task">Usage is recorded on success, on error and on cancellation, with one test per path</li>
+<li class="task">A generation that produces no token for longer than the keepalive interval still holds the connection, covered by a test</li>
+<li class="task">Every event carries a monotonically increasing sequence number, and a client can request everything after a given one</li>
+<li class="task">A stream exceeding the total time budget is terminated with an error event rather than left open</li>
+<li class="task">The proxy configuration this endpoint depends on is committed to the repository, not only applied to a server</li>
+</ul>
+  </article>
+
+  <aside class="tailpiece">
+    <h2>Use this blueprint</h2>
+    <p>
+      Copy the file into your project and point your agent at it. It works with Claude Code,
+      Cursor, Copilot, ChatGPT and anything else that reads a file — there is nothing to install.
+    </p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/llm-streaming-sse" target="_blank" rel="noopener">Open on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Browse all blueprints</a>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p><a href="/">Awesome Blueprints</a> — same request, same architecture, every time.</p>
+    <p class="dim">MIT · awesomeblueprints.com</p>
+  </div>
+</footer>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'neutral' });
+</script>
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const now = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', now);
+    try { localStorage.setItem('ab-theme', now); } catch (e) {}
+    location.reload();   // the diagram is themed at render time
+  });
+</script>
+
+</body>
+</html>

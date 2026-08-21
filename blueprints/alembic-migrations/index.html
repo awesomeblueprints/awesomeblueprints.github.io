@@ -1,0 +1,600 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Alembic Schema Migrations — Blueprint for AI Coding Agents | Awesome Blueprints</title>
+<meta name="description" content="Alembic migrations done properly: autogenerate review, safe rollbacks, zero-downtime column changes and one ordered history across environments." />
+<link rel="canonical" href="https://awesomeblueprints.com/blueprints/alembic-migrations/" />
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="Awesome Blueprints" />
+<meta property="og:url" content="https://awesomeblueprints.com/blueprints/alembic-migrations/" />
+<meta property="og:title" content="Alembic Schema Migrations — Architecture Blueprint" />
+<meta property="og:description" content="Alembic migrations done properly: autogenerate review, safe rollbacks, zero-downtime column changes and one ordered history across environments." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Alembic Schema Migrations — Architecture Blueprint" />
+<meta name="twitter:description" content="Alembic migrations done properly: autogenerate review, safe rollbacks, zero-downtime column changes and one ordered history across environments." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/page.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "Alembic Schema Migrations", "description": "Alembic migrations done properly: autogenerate review, safe rollbacks, zero-downtime column changes and one ordered history across environments.", "url": "https://awesomeblueprints.com/blueprints/alembic-migrations/", "dateModified": "2026-08-19", "keywords": "PostgreSQL", "isAccessibleForFree": true, "license": "https://opensource.org/licenses/MIT", "publisher": {"@type": "Organization", "name": "Awesome Blueprints", "url": "https://awesomeblueprints.com"}}</script>
+<script>
+  (function () {
+    var t;
+    try { t = localStorage.getItem('ab-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">Awesome Blueprints</a>
+    <div class="nav-right">
+      <a class="nav-link" href="/#blueprints">Catalogue</a>
+      <a class="nav-link" href="/#faq">FAQ</a>
+      <a class="nav-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/alembic-migrations" target="_blank" rel="noopener">GitHub ↗</a>
+      <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Switch theme">◑</button>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/">Home</a> <span>/</span> <a href="/#blueprints">Blueprints</a> <span>/</span>
+    <span>Alembic Schema Migrations</span>
+  </nav>
+
+  <header class="page-head">
+    <p class="eyebrow">alembic-migrations</p>
+    <h1>Alembic Schema Migrations</h1>
+    <p class="lede">Alembic migrations done properly: autogenerate review, safe rollbacks, zero-downtime column changes and one ordered history across environments.</p>
+    <div class="facts"><span>medium</span><span>2–3 days</span><span>Verified 2026-08-19</span></div>
+    <div class="tags"><span class="tag">PostgreSQL</span></div>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/alembic-migrations" target="_blank" rel="noopener">Read it on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Back to the catalogue</a>
+    </div>
+  </header>
+
+  <article class="doc">
+<blockquote>
+<p>Schema changes as reviewable, reversible, ordered files — with autogenerate
+treated as a first draft, because the changes it silently omits are the ones
+that cost you data, and the ones it gets wrong lock a production table.</p>
+</blockquote>
+<p><strong>Complexity:</strong> medium · <strong>Typical build:</strong> 2–3 days · <strong>Verified:</strong> 2026-08-19 (re-check after ~90 days)</p>
+<p><strong>Examples in:</strong> Python, with Alembic and SQLAlchemy 2.0 against PostgreSQL. The architecture is language-agnostic: sections 5, 10 and 11 hold wherever you build this. Section 4 is illustrative — if your project is in another language, your agent translates the idioms rather than importing them, and nothing is lost. The equivalents are Prisma Migrate or Drizzle Kit in TypeScript, Ecto migrations in Elixir, <code>golang-migrate</code> in Go, and ActiveRecord migrations in Rails — where autogenerate's blind spots are the same blind spots.</p>
+<p><strong>Use when:</strong> more than one person or more than one environment runs the same schema, and you need the change that worked on a laptop to arrive identically in production, in order, with a way back.</p>
+<p><strong>Not for:</strong> a database whose schema is owned by another team or another service. Running migrations against a schema you do not own turns a deploy into a cross-team incident. Also not for data backfills large enough to need batching and resumption — those are jobs with progress and restartability, and hiding one inside a migration means a failed deploy halfway through a rewrite.</p>
+<hr />
+<h2>⚙️ INSTRUCTIONS FOR THE AI — READ BEFORE WRITING ANY CODE</h2>
+<p><strong>Do not start coding.</strong></p>
+<p><strong>Step 1 — Refresh.</strong> Verify the installed Alembic version and confirm these
+defaults, because two of them changed and the wrong assumption produces migrations
+that omit real changes: <code>compare_type</code> (now on by default) and
+<code>compare_server_default</code> (off by default, and it must be turned on deliberately).
+Confirm the current async <code>env.py</code> recipe — running migrations against an async
+driver needs <code>connection.run_sync</code>, and examples written for the sync engine will
+not work. Confirm what autogenerate still does not detect: renames, unnamed
+constraints, sequences, and primary key or exclusion constraint changes. Report
+what you verified and what turned out wrong.</p>
+<p><strong>Step 2 — Read the project, then audit what already exists.</strong> Determine whether
+the database already has tables that no migration created — if so, the first
+migration must be a baseline that is stamped rather than run, and getting that
+wrong drops production tables. Find the metadata object the models share and
+whether it carries a naming convention. Check for more than one head in the
+existing revision history. Find how migrations run today: a container entrypoint,
+a deploy step, a human. Find whether any migration contains a data change. Then
+audit §11 item by item, each marked <em>already true</em>, <em>partly true</em> or <em>absent</em>,
+with the file that decides it, reported before anything is proposed.</p>
+<p>Assume the project is right until it demonstrably is not; code satisfying an item
+stays even where its shape differs from §4; replacing something that works needs a
+one-line reason; never delete a working path to make room for the blueprint's
+version. The same holds for language — §4 is illustrative, its idioms get
+translated into the project's language, and §11 is what has to become true rather
+than the syntax.</p>
+<p><strong>Step 3 — Write a plan for the gap only, and get it approved</strong>, including a
+<code>## Proposed stack</code> section and, explicitly, where migrations will run and what
+happens when one fails halfway. Do not ask open framework questions — propose, and
+ask for confirmation once. Say what you are adding, what you are leaving alone,
+and what you propose to change, and touch nothing else.</p>
+<p><strong>Step 4 — Build in the order in §7.</strong> <strong>Step 5 — §11 is the definition of done.</strong></p>
+<hr />
+<h2>1. Why autogenerate is a draft, not an answer</h2>
+<p>Autogenerate diffs your models against the live schema and writes a migration. It
+is genuinely good at the common case, and the temptation is to treat its output as
+finished. The problem is not that it makes mistakes you can see. It is that its
+gaps are silent.</p>
+<table>
+<thead>
+<tr>
+<th>What it looks like it does</th>
+<th>What it actually does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Detects that you renamed a column</td>
+<td>Emits a drop of the old column and an add of the new one — the migration passes, and the data is gone</td>
+</tr>
+<tr>
+<td>Detects constraint changes</td>
+<td>Cannot compare a constraint whose name the database invented, so the change is simply absent from the file</td>
+</tr>
+<tr>
+<td>Detects type changes</td>
+<td>Compares types, but only the arguments the two types share</td>
+</tr>
+<tr>
+<td>Detects default changes</td>
+<td>Ignores server defaults entirely unless you switch that on</td>
+</tr>
+<tr>
+<td>Produces a migration you can run</td>
+<td>Produces a migration whose lock behaviour it has no opinion about</td>
+</tr>
+</tbody>
+</table>
+<p>The rename row is the expensive one. Drop-and-add is a valid migration, it applies
+cleanly, the tests pass because the tests use the new name — and the column's
+contents are gone with no error anywhere. Nothing about the workflow will tell
+you; you find out when someone asks for the old values.</p>
+<p><strong>So the rule is not "check autogenerate's work". It is: autogenerate produces a
+draft, and a human reads every line before it is committed.</strong> The parts it cannot
+see are exactly the parts that are expensive.</p>
+<p>The second theme is locks. A migration that is correct can still take a production
+table offline: on PostgreSQL, adding a non-nullable column, adding a unique or
+indexed column, or adding a constraint takes an <code>ACCESS EXCLUSIVE</code> lock, and a
+foreign key takes a share-row-exclusive lock on <em>both</em> tables. Under load the lock
+does not just block writers — it queues behind long readers and then blocks
+everything arriving after it.</p>
+<h2>2. Architecture</h2>
+<pre class="mermaid">%% GENERATED - do not edit by hand.
+%% Edit the source header in architecture.mmd, then rebuild.
+%% Migrations from author to production
+
+flowchart TB
+    subgraph authoring[&quot;Authoring&quot;]
+        direction TB
+        models[&quot;Declarative models and metadata&quot;]
+        generate[&quot;Autogenerate, a draft&quot;]
+        review[&quot;Hand edit and review&quot;]
+    end
+    subgraph history[&quot;Revision history&quot;]
+        direction TB
+        versions[&quot;Ordered revision files&quot;]
+        heads[&quot;Head check&quot;]
+    end
+    subgraph apply[&quot;Applying&quot;]
+        direction TB
+        job[&quot;Migration step, runs alone&quot;]
+        app[&quot;Application instances&quot;]
+    end
+
+    author([&quot;Developer&quot;])
+    pipeline([&quot;Deploy pipeline&quot;])
+    store[(&quot;PostgreSQL&quot;)]
+    table[(&quot;Alembic version table&quot;)]
+
+    author --- models
+    models --&gt;|&quot;diff against the live schema&quot;| generate
+    generate --&gt;|&quot;renames, constraints and locks added by hand&quot;| review
+    review --&gt;|&quot;committed&quot;| versions
+    versions --&gt;|&quot;exactly one head required&quot;| heads
+    pipeline --&gt;|&quot;before any new instance starts&quot;| job
+    job --&gt;|&quot;apply in order&quot;| store
+    job --&gt;|&quot;record the revision&quot;| table
+    job -.-&gt;|&quot;failure stops the rollout&quot;| pipeline
+    app --&gt;|&quot;only after the job succeeds&quot;| store
+
+    classDef service fill:#eff6ff,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b;
+    classDef datastore fill:#e9faf3,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b;
+    classDef external fill:#fff4ed,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b;
+    classDef actor fill:#f0eefc,stroke:#4a3aa7,stroke-width:1.5px,color:#0b0b0b;
+    class models,generate,review,versions,heads,job,app service;
+    class store,table datastore;
+    class author,pipeline actor;</pre>
+<p>The rule the diagram encodes: <strong>the migration step is not the application.</strong> There
+is one arrow from the pipeline into a job that runs alone, and the application
+instances start only after it succeeds. Running migrations from the application's
+own startup means every replica races to apply the same migration at the same
+moment.</p>
+<h2>3. Project structure</h2>
+<div class="hl"><pre><span></span><code>migrations/
+├── env.py              async-aware; imports the metadata, sets the comparison flags
+├── script.py.mako      the template every revision is generated from
+└── versions/
+    └── 20260819_1430_a1b2c3_add_orders_table.py
+alembic.ini             file naming template and logging; the URL comes from settings
+</code></pre></div>
+
+<p><strong>One rule: the database URL is read from application settings inside <code>env.py</code>,
+never written in <code>alembic.ini</code>.</strong> A URL in the ini file is a second source of
+truth that drifts from the application's, and it is the reason someone eventually
+runs a migration against staging while believing they are on a local database.</p>
+<h2>4. Reference implementation</h2>
+<div class="hl"><pre><span></span><code><span class="c1"># migrations/env.py</span>
+<span class="kn">import</span> <span class="nn">asyncio</span>
+<span class="kn">from</span> <span class="nn">alembic</span> <span class="kn">import</span> <span class="n">context</span>
+<span class="kn">from</span> <span class="nn">sqlalchemy.ext.asyncio</span> <span class="kn">import</span> <span class="n">async_engine_from_config</span>
+<span class="kn">from</span> <span class="nn">sqlalchemy</span> <span class="kn">import</span> <span class="n">pool</span>
+<span class="kn">from</span> <span class="nn">app.config</span> <span class="kn">import</span> <span class="n">get_settings</span>          <span class="c1"># one source of truth for the URL</span>
+<span class="kn">from</span> <span class="nn">app.db.base</span> <span class="kn">import</span> <span class="n">Base</span>
+<span class="kn">import</span> <span class="nn">app.models</span>                            <span class="c1"># imported for the side effect: a model</span>
+                                             <span class="c1"># module that is never imported is invisible</span>
+                                             <span class="c1"># to autogenerate, and its table is silently</span>
+                                             <span class="c1"># proposed for deletion</span>
+
+<span class="n">target_metadata</span> <span class="o">=</span> <span class="n">Base</span><span class="o">.</span><span class="n">metadata</span>
+<span class="n">config</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">config</span>
+<span class="n">config</span><span class="o">.</span><span class="n">set_main_option</span><span class="p">(</span><span class="s2">&quot;sqlalchemy.url&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">get_settings</span><span class="p">()</span><span class="o">.</span><span class="n">database_url</span><span class="p">))</span>
+
+
+<span class="k">def</span> <span class="nf">do_run_migrations</span><span class="p">(</span><span class="n">connection</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="n">context</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span>
+        <span class="n">connection</span><span class="o">=</span><span class="n">connection</span><span class="p">,</span>
+        <span class="n">target_metadata</span><span class="o">=</span><span class="n">target_metadata</span><span class="p">,</span>
+        <span class="c1"># On by default in current versions, stated explicitly so an upgrade or a</span>
+        <span class="c1"># downgrade of Alembic cannot change what your migrations detect.</span>
+        <span class="n">compare_type</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="c1"># Off by default. Without it, changing a column&#39;s server default produces an</span>
+        <span class="c1"># empty migration and the old default stays in the database forever.</span>
+        <span class="n">compare_server_default</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="c1"># Each migration in its own transaction. A failure then leaves the earlier</span>
+        <span class="c1"># migrations applied and recorded, so a retry resumes rather than restarting.</span>
+        <span class="n">transaction_per_migration</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="c1"># Postgres-specific DDL that autogenerate would otherwise render generically.</span>
+        <span class="n">include_schemas</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">with</span> <span class="n">context</span><span class="o">.</span><span class="n">begin_transaction</span><span class="p">():</span>
+        <span class="c1"># Never wait behind a long-running query for an ACCESS EXCLUSIVE lock. Failing</span>
+        <span class="c1"># fast turns a potential outage into a failed deploy you can retry off-peak.</span>
+        <span class="n">connection</span><span class="o">.</span><span class="n">exec_driver_sql</span><span class="p">(</span><span class="s2">&quot;SET lock_timeout = &#39;5s&#39;&quot;</span><span class="p">)</span>
+        <span class="n">connection</span><span class="o">.</span><span class="n">exec_driver_sql</span><span class="p">(</span><span class="s2">&quot;SET statement_timeout = &#39;300s&#39;&quot;</span><span class="p">)</span>
+        <span class="n">context</span><span class="o">.</span><span class="n">run_migrations</span><span class="p">()</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">run_async_migrations</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="n">connectable</span> <span class="o">=</span> <span class="n">async_engine_from_config</span><span class="p">(</span>
+        <span class="n">config</span><span class="o">.</span><span class="n">get_section</span><span class="p">(</span><span class="n">config</span><span class="o">.</span><span class="n">config_ini_section</span><span class="p">,</span> <span class="p">{}),</span>
+        <span class="n">poolclass</span><span class="o">=</span><span class="n">pool</span><span class="o">.</span><span class="n">NullPool</span><span class="p">,</span>      <span class="c1"># a migration run is one connection, once</span>
+    <span class="p">)</span>
+    <span class="k">async</span> <span class="k">with</span> <span class="n">connectable</span><span class="o">.</span><span class="n">connect</span><span class="p">()</span> <span class="k">as</span> <span class="n">connection</span><span class="p">:</span>
+        <span class="c1"># The migration API is synchronous; run_sync drives it inside the greenlet</span>
+        <span class="c1"># the async engine provides. This is the whole reason an async env.py differs.</span>
+        <span class="k">await</span> <span class="n">connection</span><span class="o">.</span><span class="n">run_sync</span><span class="p">(</span><span class="n">do_run_migrations</span><span class="p">)</span>
+    <span class="k">await</span> <span class="n">connectable</span><span class="o">.</span><span class="n">dispose</span><span class="p">()</span>
+
+
+<span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">run_async_migrations</span><span class="p">())</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># migrations/versions/20260819_1430_a1b2c3_add_order_status.py</span>
+<span class="sd">&quot;&quot;&quot;add order status</span>
+
+<span class="sd">Adding a NOT NULL column to a populated table rewrites it under an ACCESS EXCLUSIVE</span>
+<span class="sd">lock. This is the three-step version: add nullable with a server default, backfill,</span>
+<span class="sd">then enforce. Each step is safe to run while the application is serving.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="kn">from</span> <span class="nn">alembic</span> <span class="kn">import</span> <span class="n">op</span>
+<span class="kn">import</span> <span class="nn">sqlalchemy</span> <span class="k">as</span> <span class="nn">sa</span>
+
+<span class="n">revision</span> <span class="o">=</span> <span class="s2">&quot;a1b2c3&quot;</span>
+<span class="n">down_revision</span> <span class="o">=</span> <span class="s2">&quot;9f8e7d&quot;</span>
+
+
+<span class="k">def</span> <span class="nf">upgrade</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="c1"># Step 1 — nullable, with a server default so new rows are already correct.</span>
+    <span class="n">op</span><span class="o">.</span><span class="n">add_column</span><span class="p">(</span>
+        <span class="s2">&quot;orders&quot;</span><span class="p">,</span>
+        <span class="n">sa</span><span class="o">.</span><span class="n">Column</span><span class="p">(</span><span class="s2">&quot;status&quot;</span><span class="p">,</span> <span class="n">sa</span><span class="o">.</span><span class="n">String</span><span class="p">(</span><span class="mi">20</span><span class="p">),</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">server_default</span><span class="o">=</span><span class="s2">&quot;pending&quot;</span><span class="p">),</span>
+    <span class="p">)</span>
+    <span class="c1"># Step 2 — backfill. Small tables only. A table large enough to need batching</span>
+    <span class="c1"># belongs in a separate job: a migration that fails halfway through a rewrite</span>
+    <span class="c1"># leaves a deploy stuck with no progress to resume from.</span>
+    <span class="n">op</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&quot;UPDATE orders SET status = &#39;pending&#39; WHERE status IS NULL&quot;</span><span class="p">)</span>
+    <span class="c1"># Step 3 — enforce. Cheap here only because step 2 guaranteed no nulls remain.</span>
+    <span class="n">op</span><span class="o">.</span><span class="n">alter_column</span><span class="p">(</span><span class="s2">&quot;orders&quot;</span><span class="p">,</span> <span class="s2">&quot;status&quot;</span><span class="p">,</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">downgrade</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="c1"># Reversible on purpose. A downgrade that raises NotImplementedError is a</span>
+    <span class="c1"># migration you cannot roll back, discovered during the incident that needs it.</span>
+    <span class="n">op</span><span class="o">.</span><span class="n">drop_column</span><span class="p">(</span><span class="s2">&quot;orders&quot;</span><span class="p">,</span> <span class="s2">&quot;status&quot;</span><span class="p">)</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># migrations/versions/20260819_1500_b2c3d4_add_orders_customer_index.py</span>
+<span class="sd">&quot;&quot;&quot;add index on orders.customer_id</span>
+
+<span class="sd">CREATE INDEX takes a lock that blocks writes for its whole duration. CONCURRENTLY</span>
+<span class="sd">does not, but it cannot run inside a transaction — so this revision opts out of the</span>
+<span class="sd">per-migration transaction rather than being merged into a neighbouring one.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="kn">from</span> <span class="nn">alembic</span> <span class="kn">import</span> <span class="n">op</span>
+
+<span class="n">revision</span> <span class="o">=</span> <span class="s2">&quot;b2c3d4&quot;</span>
+<span class="n">down_revision</span> <span class="o">=</span> <span class="s2">&quot;a1b2c3&quot;</span>
+
+
+<span class="k">def</span> <span class="nf">upgrade</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">with</span> <span class="n">op</span><span class="o">.</span><span class="n">get_context</span><span class="p">()</span><span class="o">.</span><span class="n">autocommit_block</span><span class="p">():</span>
+        <span class="n">op</span><span class="o">.</span><span class="n">create_index</span><span class="p">(</span>
+            <span class="s2">&quot;ix_orders_customer_id&quot;</span><span class="p">,</span> <span class="s2">&quot;orders&quot;</span><span class="p">,</span> <span class="p">[</span><span class="s2">&quot;customer_id&quot;</span><span class="p">],</span> <span class="n">postgresql_concurrently</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">downgrade</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">with</span> <span class="n">op</span><span class="o">.</span><span class="n">get_context</span><span class="p">()</span><span class="o">.</span><span class="n">autocommit_block</span><span class="p">():</span>
+        <span class="n">op</span><span class="o">.</span><span class="n">drop_index</span><span class="p">(</span><span class="s2">&quot;ix_orders_customer_id&quot;</span><span class="p">,</span> <span class="n">postgresql_concurrently</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</code></pre></div>
+
+<h2>5. Golden-standard rules</h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Forbidden:</strong> committing an autogenerated migration unread</td>
+<td>Renames come out as drop-plus-add. The migration applies cleanly, the tests pass, and the data is gone with no error anywhere.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> running migrations from application startup</td>
+<td>Every replica races to apply the same revision at the same moment, and the losers crash-loop. Migrations are a step that runs once, alone, before instances start.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> a <code>downgrade()</code> that raises or is empty</td>
+<td>It is not reversible then, and you discover that during the incident that needs the rollback. If a step genuinely cannot be reversed, say so in the docstring and stop the release train there deliberately.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> more than one head reaching the main branch</td>
+<td>Two migrations claiming the same parent means the schema depends on which merged first. Fail CI on it.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> a large backfill inside a migration</td>
+<td>A failure halfway leaves a deploy blocked with no resumable progress. Batching and restartability make it a job, not a migration.</td>
+</tr>
+<tr>
+<td>Add a NOT NULL column in three steps</td>
+<td>Nullable with a server default, backfill, enforce. One step takes an <code>ACCESS EXCLUSIVE</code> lock and rewrites the table while the application waits.</td>
+</tr>
+<tr>
+<td>Indexes are created concurrently, in their own revision</td>
+<td>A plain <code>CREATE INDEX</code> blocks writes for its duration; the concurrent form cannot run inside a transaction, so it needs its own autocommit revision.</td>
+</tr>
+<tr>
+<td><code>lock_timeout</code> is set for every migration run</td>
+<td>Otherwise the migration queues for the lock behind a long reader — and everything arriving after it queues behind the migration. A failed deploy is cheaper than that.</td>
+</tr>
+<tr>
+<td><code>compare_server_default</code> is turned on explicitly</td>
+<td>It is off by default, and with it off a changed default produces an empty migration and the old default stays forever.</td>
+</tr>
+<tr>
+<td>Every model module is imported by <code>env.py</code></td>
+<td>A model that autogenerate cannot see is a table it proposes to drop.</td>
+</tr>
+<tr>
+<td>The database URL comes from application settings</td>
+<td>An ini file with its own URL is a second source of truth, and it is why someone eventually migrates staging while believing they are local.</td>
+</tr>
+<tr>
+<td>Constraint naming conventions exist before the first table</td>
+<td>Autogenerate cannot compare a constraint whose name the database invented, so those changes are silently absent.</td>
+</tr>
+<tr>
+<td>An existing database gets a stamped baseline, not a first migration</td>
+<td>Running a generated "initial" migration against populated tables drops them.</td>
+</tr>
+</tbody>
+</table>
+<h2>6. Data contracts</h2>
+<p>The contract is the revision graph, and it has three invariants:</p>
+<div class="hl"><pre><span></span><code>one head          every revision reachable from exactly one linear history
+reversible        upgrade() and downgrade() are inverses, proven by running both
+idempotent apply  running the same revision twice is impossible, enforced by the
+                  version table, not by the migration&#39;s own logic
+</code></pre></div>
+
+<p>A migration is also a contract with the <em>running</em> application, and this is the one
+that gets missed. During a rolling deploy, the old code runs against the new
+schema. Dropping a column the previous version still selects breaks every instance
+that has not yet been replaced. That is why removals happen a release after the
+code stops using them, never in the same one.</p>
+<h2>7. Build order</h2>
+<ol>
+<li><strong>Initialise, wire <code>env.py</code> to the models' metadata and the settings URL,
+   generate the first migration, apply it to an empty database.</strong> On a database
+   that already has tables, stamp the baseline instead and confirm nothing runs.</li>
+<li><strong>Set the comparison flags and prove them:</strong> change a column type and a server
+   default, and confirm each appears in a generated migration.</li>
+<li><strong>Prove reversibility as a habit:</strong> upgrade, downgrade, upgrade again on a
+   throwaway database, and put that sequence in CI.</li>
+<li><strong>Add the head check to CI</strong>, and confirm it fails on a deliberately branched
+   history.</li>
+<li><strong>Make migrations a deploy step that runs before instances start</strong>, with a
+   failure stopping the rollout.</li>
+<li><strong>Set <code>lock_timeout</code> and <code>transaction_per_migration</code></strong>, and write the
+   three-step NOT NULL pattern into the review checklist.</li>
+<li><strong>Practise a failure:</strong> kill a migration halfway on a copy of production and
+   confirm the retry resumes rather than restarting.</li>
+</ol>
+<p>Step 3 before step 5 deliberately. A rollback you have never executed is not a
+rollback, and the first time you run one should not be during an incident.</p>
+<h2>8. Blocks to pull in</h2>
+<p>Nothing here is a prerequisite. These are adjacent problems, by name only —
+resolve them separately if they apply.</p>
+<ul>
+<li>SQLAlchemy async ORM layer — the metadata these migrations are generated from</li>
+<li>PostgreSQL connection pool and lifecycle — the database they apply to</li>
+<li>GitHub Actions CD — where the migration step sits in a deploy</li>
+<li>Integration tests with real dependencies — where migrations are applied to a test database</li>
+<li>Background jobs and workers — where a large backfill belongs instead</li>
+</ul>
+<h2>9. Metrics</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Heads in the revision history</td>
+<td>Exactly 1, checked in CI</td>
+</tr>
+<tr>
+<td>Migrations whose <code>downgrade()</code> has been executed at least once</td>
+<td>100%, in CI</td>
+</tr>
+<tr>
+<td>Lock wait during a migration</td>
+<td>Bounded by <code>lock_timeout</code>, ≤ 5 s</td>
+</tr>
+<tr>
+<td>Application instances starting before the migration step completes</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Deploys rolled back because a migration broke the previous version still running</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Autogenerated migrations committed without a human edit or an explicit "reviewed, no changes" note</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<h2>10. Failure modes</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A column's data is gone after a deploy, and the migration applied cleanly</td>
+<td>A rename was autogenerated as drop-plus-add</td>
+<td>Hand-edit renames into <code>alter_column(new_column_name=...)</code>; this is why the draft gets read</td>
+</tr>
+<tr>
+<td>A generated migration is empty although the model changed</td>
+<td>The change was a server default, and <code>compare_server_default</code> is off by default</td>
+<td>Turn it on in <code>env.py</code></td>
+</tr>
+<tr>
+<td>A generated migration proposes dropping tables you still use</td>
+<td>The model module is not imported by <code>env.py</code>, so its tables are absent from the metadata</td>
+<td>Import every model module in <code>env.py</code></td>
+</tr>
+<tr>
+<td>The whole application stalls during a deploy, then recovers</td>
+<td>The migration queued for an <code>ACCESS EXCLUSIVE</code> lock behind a long reader, and every new query queued behind the migration</td>
+<td>Set <code>lock_timeout</code>; use the three-step pattern; create indexes concurrently</td>
+</tr>
+<tr>
+<td>Several replicas crash-loop during a deploy, one succeeds</td>
+<td>Migrations run from application startup and every replica raced for them</td>
+<td>Move migrations to a step that runs once before instances start</td>
+</tr>
+<tr>
+<td><code>Multiple head revisions are present</code></td>
+<td>Two branches each added a revision with the same parent</td>
+<td><code>alembic merge</code>, and add the head check to CI so it cannot reach the main branch again</td>
+</tr>
+<tr>
+<td>A migration fails halfway and the retry starts from the beginning</td>
+<td>Everything ran in one transaction, so nothing was recorded</td>
+<td><code>transaction_per_migration=True</code></td>
+</tr>
+<tr>
+<td>A rollback is needed and <code>downgrade()</code> raises</td>
+<td>Reversibility was never tested, and the stub was never filled in</td>
+<td>Run upgrade-downgrade-upgrade in CI on every revision</td>
+</tr>
+<tr>
+<td>A deploy breaks the previous version while it is still serving</td>
+<td>A column or table the old code still reads was dropped in the same release that stopped using it</td>
+<td>Split into two releases: stop using it, then remove it</td>
+</tr>
+<tr>
+<td>The initial migration dropped a populated production database</td>
+<td>A generated "initial" migration was run against a database that already had tables</td>
+<td>Stamp the baseline instead; never run a generated initial against existing data</td>
+</tr>
+<tr>
+<td>A concurrent index creation fails with "cannot run inside a transaction block"</td>
+<td>It was placed in an ordinary revision, which Alembic wraps in a transaction</td>
+<td>Put it in its own revision inside an autocommit block</td>
+</tr>
+<tr>
+<td>Migrations succeed locally and fail in CI with a lock timeout</td>
+<td>CI runs against a database with concurrent activity that the laptop did not have</td>
+<td>Keep the timeout; it is telling you what production will do</td>
+</tr>
+</tbody>
+</table>
+<h2>11. Definition of done</h2>
+<ul>
+<li class="task"><code>alembic heads</code> returns exactly one revision, checked in CI on every pull request</li>
+<li class="task">CI runs upgrade to head, downgrade to base, and upgrade to head again on a fresh database, and fails on any revision that cannot be reversed</li>
+<li class="task"><code>compare_type</code> and <code>compare_server_default</code> are both set explicitly in <code>env.py</code>, with a test proving a changed server default appears in a generated migration</li>
+<li class="task">Every model module is imported by <code>env.py</code>, verified by a test asserting that autogenerate against the current database produces an empty diff</li>
+<li class="task"><code>lock_timeout</code> and <code>statement_timeout</code> are set for the migration run, verified by reading the settings inside a migration</li>
+<li class="task">Migrations run as a step that completes before any application instance starts, and a failing migration stops the rollout — demonstrated once by deliberately failing one</li>
+<li class="task"><code>transaction_per_migration</code> is enabled, proven by failing the second of two migrations and confirming the first stayed applied and recorded</li>
+<li class="task">No migration file contains a data change that iterates more rows than a stated threshold, checked by review and recorded in the review checklist</li>
+<li class="task">Adding a non-nullable column is done in three revisions, with a test or a documented example of the pattern in the repository</li>
+<li class="task">Every index creation on an existing table uses the concurrent form in its own revision</li>
+<li class="task">The database URL appears in no committed file; <code>env.py</code> reads it from application settings</li>
+<li class="task">For an existing database, a baseline revision was stamped rather than run, and the version table shows it</li>
+</ul>
+  </article>
+
+  <aside class="tailpiece">
+    <h2>Use this blueprint</h2>
+    <p>
+      Copy the file into your project and point your agent at it. It works with Claude Code,
+      Cursor, Copilot, ChatGPT and anything else that reads a file — there is nothing to install.
+    </p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/alembic-migrations" target="_blank" rel="noopener">Open on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Browse all blueprints</a>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p><a href="/">Awesome Blueprints</a> — same request, same architecture, every time.</p>
+    <p class="dim">MIT · awesomeblueprints.com</p>
+  </div>
+</footer>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'neutral' });
+</script>
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const now = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', now);
+    try { localStorage.setItem('ab-theme', now); } catch (e) {}
+    location.reload();   // the diagram is themed at render time
+  });
+</script>
+
+</body>
+</html>

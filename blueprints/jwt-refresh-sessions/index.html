@@ -1,0 +1,587 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>JWT Refresh Tokens and Session Revocation — Blueprint for AI Coding Agents | Awesome Blueprints</title>
+<meta name="description" content="JWT refresh tokens and session revocation: rotation, reuse detection, logging out every device and disabling a compromised account." />
+<link rel="canonical" href="https://awesomeblueprints.com/blueprints/jwt-refresh-sessions/" />
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="Awesome Blueprints" />
+<meta property="og:url" content="https://awesomeblueprints.com/blueprints/jwt-refresh-sessions/" />
+<meta property="og:title" content="JWT Refresh Tokens and Session Revocation — Architecture Blueprint" />
+<meta property="og:description" content="JWT refresh tokens and session revocation: rotation, reuse detection, logging out every device and disabling a compromised account." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="JWT Refresh Tokens and Session Revocation — Architecture Blueprint" />
+<meta name="twitter:description" content="JWT refresh tokens and session revocation: rotation, reuse detection, logging out every device and disabling a compromised account." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/page.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "JWT Refresh Tokens and Session Revocation", "description": "JWT refresh tokens and session revocation: rotation, reuse detection, logging out every device and disabling a compromised account.", "url": "https://awesomeblueprints.com/blueprints/jwt-refresh-sessions/", "dateModified": "2026-08-19", "keywords": "Auth", "isAccessibleForFree": true, "license": "https://opensource.org/licenses/MIT", "publisher": {"@type": "Organization", "name": "Awesome Blueprints", "url": "https://awesomeblueprints.com"}}</script>
+<script>
+  (function () {
+    var t;
+    try { t = localStorage.getItem('ab-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">Awesome Blueprints</a>
+    <div class="nav-right">
+      <a class="nav-link" href="/#blueprints">Catalogue</a>
+      <a class="nav-link" href="/#faq">FAQ</a>
+      <a class="nav-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/jwt-refresh-sessions" target="_blank" rel="noopener">GitHub ↗</a>
+      <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Switch theme">◑</button>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/">Home</a> <span>/</span> <a href="/#blueprints">Blueprints</a> <span>/</span>
+    <span>JWT Refresh Tokens and Session Revocation</span>
+  </nav>
+
+  <header class="page-head">
+    <p class="eyebrow">jwt-refresh-sessions</p>
+    <h1>JWT Refresh Tokens and Session Revocation</h1>
+    <p class="lede">JWT refresh tokens and session revocation: rotation, reuse detection, logging out every device and disabling a compromised account.</p>
+    <div class="facts"><span>medium</span><span>3–5 days</span><span>Verified 2026-08-19</span></div>
+    <div class="tags"><span class="tag">Auth</span></div>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/jwt-refresh-sessions" target="_blank" rel="noopener">Read it on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Back to the catalogue</a>
+    </div>
+  </header>
+
+  <article class="doc">
+<blockquote>
+<p>Long sessions built from short access tokens, with rotation on every refresh,
+reuse detection that kills a stolen token's whole family, and a revocation path
+that makes "log out everywhere" and "disable this account now" actually work.</p>
+</blockquote>
+<p><strong>Complexity:</strong> medium-high · <strong>Typical build:</strong> 3–5 days · <strong>Verified:</strong> 2026-08-19 (re-check after ~90 days)</p>
+<p><strong>Examples in:</strong> Python, with FastAPI and PostgreSQL. The architecture is language-agnostic: sections 5, 10 and 11 hold wherever you build this. Section 4 is illustrative — if your project is in another language, your agent translates the idioms rather than importing them, and nothing is lost. The concurrency fix in §4 is a single SQL statement and translates directly; the mistake it prevents has been found in shipped authentication libraries in more than one language.</p>
+<p><strong>Use when:</strong> users must stay signed in for days or weeks, or you need to end a session on demand — a stolen device, a password change, an administrator disabling an account, a "sign out of all sessions" button.</p>
+<p><strong>Not for:</strong> a service whose clients are machines holding a long-lived key, or an API where a fifteen-minute token is simply reissued from stored credentials. This system exists to hold state about sessions, and if you have nothing to revoke it is cost with no benefit. Half of all projects genuinely do not need it; the other half need all of it.</p>
+<hr />
+<h2>⚙️ INSTRUCTIONS FOR THE AI — READ BEFORE WRITING ANY CODE</h2>
+<p><strong>Do not start coding.</strong></p>
+<p><strong>Step 1 — Refresh.</strong> Verify the database's behaviour for a conditional update
+returning affected-row counts — the whole design rests on one atomic
+compare-and-swap and on being able to tell whether it won. Verify the cookie
+attributes you intend to set and their current browser handling: <code>HttpOnly</code>,
+<code>Secure</code>, <code>SameSite</code> and the <code>__Host-</code> prefix's constraints. If a cache or session
+store is involved, confirm whether its operations are atomic in the mode you will
+run it in. Report what you verified and what turned out wrong.</p>
+<p><strong>Step 2 — Read the project, then audit what already exists.</strong> Find how access
+tokens are currently issued and verified — this blueprint sits on top of that and
+does not replace it. Determine whether any long-lived token is already in
+circulation, and how it would be revoked today; if the answer is "it cannot be",
+write that down, because it is the risk this work removes. Find every client and
+how it stores tokens now. Find whether refresh requests can arrive concurrently
+from one client — a page with several parallel requests will do this, and it is
+the failure most implementations have. Then audit §11 item by item, each marked
+<em>already true</em>, <em>partly true</em> or <em>absent</em>, with the file that decides it, reported
+before anything is proposed.</p>
+<p>Assume the project is right until it demonstrably is not; code satisfying an item
+stays even where its shape differs from §4; replacing something that works needs a
+one-line reason; never delete a working path to make room for the blueprint's
+version. The same holds for language — §4 is illustrative, its idioms get
+translated into the project's language, and §11 is what has to become true rather
+than the syntax.</p>
+<p><strong>Step 3 — Write a plan for the gap only, and get it approved</strong>, including a
+<code>## Proposed stack</code> section, the refresh lifetime with a reason, and the migration
+plan for sessions that exist today. Do not ask open framework questions — propose,
+and ask for confirmation once. Say what you are adding, what you are leaving
+alone, and what you propose to change, and touch nothing else.</p>
+<p><strong>Step 4 — Build in the order in §7.</strong> <strong>Step 5 — §11 is the definition of done.</strong></p>
+<hr />
+<h2>1. Why this is a different system, not a longer token</h2>
+<p>The tempting version is to raise the access token's expiry to thirty days. It
+removes the login prompt and it removes every control you had.</p>
+<table>
+<thead>
+<tr>
+<th>A long-lived access token</th>
+<th>Rotating refresh tokens with server-side state</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Cannot be revoked. A stolen token works until it expires, and nothing you do changes that</td>
+<td>Revocation is a row update; the next refresh fails</td>
+</tr>
+<tr>
+<td>"Log out everywhere" is a button that does nothing</td>
+<td>Deleting the user's session rows ends every session</td>
+</tr>
+<tr>
+<td>Theft is undetectable — the thief's requests are indistinguishable from the user's</td>
+<td>Rotation makes reuse of a spent token a detectable event</td>
+</tr>
+<tr>
+<td>Disabling an account takes effect whenever the token happens to expire</td>
+<td>It takes effect at the next refresh, bounded by the access token's short life</td>
+</tr>
+</tbody>
+</table>
+<p>The third row is the one that justifies the design. If a refresh token can be used
+exactly once, and the used one is replaced, then a token presented twice means two
+parties hold it — the legitimate client and someone else. You cannot tell which is
+which, and that is fine: <strong>the correct response is to invalidate the whole family
+and make both re-authenticate.</strong> The legitimate user logs in again; the attacker
+cannot.</p>
+<p><strong>This adds state, and that is the point.</strong> A stateless system cannot revoke.
+Every mechanism here is a consequence of deciding that revocation must work.</p>
+<h2>2. Architecture</h2>
+<pre class="mermaid">%% GENERATED - do not edit by hand.
+%% Edit the source header in architecture.mmd, then rebuild.
+%% Rotation, reuse detection and revocation
+
+flowchart TB
+    client([&quot;Client&quot;])
+    login[&quot;Login&quot;]
+    refresh[&quot;Refresh endpoint&quot;]
+    swap[&quot;Atomic compare and swap on the parent row&quot;]
+    detect[&quot;Reuse detection&quot;]
+    revoke[&quot;Revocation&quot;]
+    logout[&quot;Logout and logout everywhere&quot;]
+    sessions[(&quot;Session and token family rows&quot;)]
+    users[(&quot;User store&quot;)]
+    denied([&quot;Family invalidated, re authentication required&quot;])
+
+    client --&gt;|&quot;credentials&quot;| login
+    login --&gt;|&quot;open a family, issue the first refresh token&quot;| sessions
+    login -.-&gt;|&quot;access token and refresh token&quot;| client
+    client --&gt;|&quot;spent refresh token&quot;| refresh
+    refresh --&gt;|&quot;update where id matches and not yet revoked&quot;| swap
+    swap --&gt;|&quot;exactly one winner&quot;| sessions
+    swap -.-&gt;|&quot;new access and refresh token&quot;| client
+    swap -.-&gt;|&quot;lost the swap, or the token was already revoked&quot;| detect
+    detect --&gt;|&quot;kill every token in the family&quot;| revoke
+    revoke --&gt; sessions
+    revoke -.-&gt; denied
+    client --&gt;|&quot;this device, or all of them&quot;| logout
+    logout --&gt; revoke
+    users --&gt;|&quot;password change or deactivation revokes everything&quot;| revoke
+
+    classDef service fill:#eff6ff,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b;
+    classDef datastore fill:#e9faf3,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b;
+    classDef external fill:#fff4ed,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b;
+    classDef actor fill:#f0eefc,stroke:#4a3aa7,stroke-width:1.5px,color:#0b0b0b;
+    class login,refresh,swap,detect,revoke,logout service;
+    class sessions,users datastore;
+    class client,denied actor;</pre>
+<p>The rule the diagram encodes: <strong>every path to issuing a new refresh token goes
+through one atomic swap, and the losing branch is not an error — it is the
+detector.</strong> A design where validation and revocation are separate steps has a
+window between them, and that window is the vulnerability in §10's first row.</p>
+<h2>3. Project structure</h2>
+<div class="hl"><pre><span></span><code>app/auth/
+├── sessions.py     the family model, rotate(), revoke_family(), revoke_all()
+├── refresh.py      the refresh endpoint and reuse handling
+├── cookies.py      how the refresh token is set and cleared
+└── tokens.py       access tokens — unchanged from the access-token layer
+</code></pre></div>
+
+<p><strong>One rule: the refresh token is a random opaque string, stored hashed, and it is
+never a JWT.</strong> A JWT refresh token is self-validating, which is exactly the
+property you are trying to remove — the whole point is that the server decides,
+per presentation, whether this token is still alive. Hashing it means a database
+leak does not hand over live sessions.</p>
+<h2>4. Reference implementation</h2>
+<div class="hl"><pre><span></span><code><span class="c1">-- One family per login. Rotation appends to a family; detection kills one.</span>
+<span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">refresh_tokens</span><span class="w"> </span><span class="p">(</span><span class="w"></span>
+<span class="w">    </span><span class="n">id</span><span class="w">           </span><span class="n">BIGSERIAL</span><span class="w"> </span><span class="k">PRIMARY</span><span class="w"> </span><span class="k">KEY</span><span class="p">,</span><span class="w"></span>
+<span class="w">    </span><span class="n">family_id</span><span class="w">    </span><span class="n">UUID</span><span class="w">        </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span><span class="w"></span>
+<span class="w">    </span><span class="n">user_id</span><span class="w">      </span><span class="nb">BIGINT</span><span class="w">      </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="w"> </span><span class="k">REFERENCES</span><span class="w"> </span><span class="n">users</span><span class="p">(</span><span class="n">id</span><span class="p">)</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="k">DELETE</span><span class="w"> </span><span class="k">CASCADE</span><span class="p">,</span><span class="w"></span>
+<span class="w">    </span><span class="c1">-- The hash, never the token. A dump of this table must not yield live sessions.</span>
+<span class="w">    </span><span class="n">token_hash</span><span class="w">   </span><span class="n">BYTEA</span><span class="w">       </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="w"> </span><span class="k">UNIQUE</span><span class="p">,</span><span class="w"></span>
+<span class="w">    </span><span class="n">parent_id</span><span class="w">    </span><span class="nb">BIGINT</span><span class="w">      </span><span class="k">REFERENCES</span><span class="w"> </span><span class="n">refresh_tokens</span><span class="p">(</span><span class="n">id</span><span class="p">),</span><span class="w"></span>
+<span class="w">    </span><span class="n">revoked_at</span><span class="w">   </span><span class="n">TIMESTAMPTZ</span><span class="p">,</span><span class="w"></span>
+<span class="w">    </span><span class="n">expires_at</span><span class="w">   </span><span class="n">TIMESTAMPTZ</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span><span class="w"></span>
+<span class="w">    </span><span class="n">created_at</span><span class="w">   </span><span class="n">TIMESTAMPTZ</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="n">now</span><span class="p">(),</span><span class="w"></span>
+<span class="w">    </span><span class="n">user_agent</span><span class="w">   </span><span class="nb">TEXT</span><span class="p">,</span><span class="w">       </span><span class="c1">-- so a user can recognise their own sessions in a list</span>
+<span class="w">    </span><span class="n">ip</span><span class="w">           </span><span class="n">INET</span><span class="w"></span>
+<span class="p">);</span><span class="w"></span>
+<span class="k">CREATE</span><span class="w"> </span><span class="k">INDEX</span><span class="w"> </span><span class="n">ix_refresh_family</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="n">refresh_tokens</span><span class="w"> </span><span class="p">(</span><span class="n">family_id</span><span class="p">);</span><span class="w"></span>
+<span class="k">CREATE</span><span class="w"> </span><span class="k">INDEX</span><span class="w"> </span><span class="n">ix_refresh_user_live</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="n">refresh_tokens</span><span class="w"> </span><span class="p">(</span><span class="n">user_id</span><span class="p">)</span><span class="w"> </span><span class="k">WHERE</span><span class="w"> </span><span class="n">revoked_at</span><span class="w"> </span><span class="k">IS</span><span class="w"> </span><span class="k">NULL</span><span class="p">;</span><span class="w"></span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/auth/sessions.py</span>
+<span class="kn">import</span> <span class="nn">hashlib</span><span class="o">,</span> <span class="nn">secrets</span>
+<span class="kn">from</span> <span class="nn">sqlalchemy</span> <span class="kn">import</span> <span class="n">text</span>
+
+<span class="n">REFRESH_TTL</span> <span class="o">=</span> <span class="n">timedelta</span><span class="p">(</span><span class="n">days</span><span class="o">=</span><span class="mi">30</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">new_token</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bytes</span><span class="p">]:</span>
+    <span class="n">raw</span> <span class="o">=</span> <span class="n">secrets</span><span class="o">.</span><span class="n">token_urlsafe</span><span class="p">(</span><span class="mi">32</span><span class="p">)</span>          <span class="c1"># CSPRNG, not uuid4 and not the clock</span>
+    <span class="c1"># SHA-256 is right here and Argon2 is not: this is a 256-bit random value, not a</span>
+    <span class="c1"># human-chosen password, so there is nothing to brute-force and the hash is on</span>
+    <span class="c1"># the hot path of every refresh.</span>
+    <span class="k">return</span> <span class="n">raw</span><span class="p">,</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">sha256</span><span class="p">(</span><span class="n">raw</span><span class="o">.</span><span class="n">encode</span><span class="p">())</span><span class="o">.</span><span class="n">digest</span><span class="p">()</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">rotate</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="n">presented</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Spend one refresh token and issue its successor. Returns None if the token</span>
+<span class="sd">    was already spent or revoked — which the caller must treat as reuse.&quot;&quot;&quot;</span>
+    <span class="n">digest</span> <span class="o">=</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">sha256</span><span class="p">(</span><span class="n">presented</span><span class="o">.</span><span class="n">encode</span><span class="p">())</span><span class="o">.</span><span class="n">digest</span><span class="p">()</span>
+
+    <span class="c1"># THE load-bearing statement in this blueprint. Validation and revocation happen</span>
+    <span class="c1"># in one update, so there is no window between them.</span>
+    <span class="c1">#</span>
+    <span class="c1"># Read-then-revoke as two steps looks correct and is not: two concurrent refreshes</span>
+    <span class="c1"># both pass the check before either writes, and both mint successors. The family</span>
+    <span class="c1"># forks, and each branch keeps full access — surviving any single revocation.</span>
+    <span class="c1"># This exact bug has been disclosed in shipped authentication libraries.</span>
+    <span class="c1">#</span>
+    <span class="c1"># `revoked_at IS NULL` in the predicate is what makes it a compare-and-swap.</span>
+    <span class="c1"># The rowcount is the answer: 1 means we won, 0 means someone else did.</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">session</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
+        <span class="n">text</span><span class="p">(</span><span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">            UPDATE refresh_tokens</span>
+<span class="s2">               SET revoked_at = now()</span>
+<span class="s2">             WHERE token_hash = :digest</span>
+<span class="s2">               AND revoked_at IS NULL</span>
+<span class="s2">               AND expires_at &gt; now()</span>
+<span class="s2">         RETURNING id, family_id, user_id</span>
+<span class="s2">        &quot;&quot;&quot;</span><span class="p">),</span>
+        <span class="p">{</span><span class="s2">&quot;digest&quot;</span><span class="p">:</span> <span class="n">digest</span><span class="p">},</span>
+    <span class="p">)</span>
+    <span class="n">row</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">first</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">row</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>                          <span class="c1"># spent, revoked or expired — the caller decides</span>
+
+    <span class="n">raw</span><span class="p">,</span> <span class="n">new_digest</span> <span class="o">=</span> <span class="n">new_token</span><span class="p">()</span>
+    <span class="k">await</span> <span class="n">session</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
+        <span class="n">text</span><span class="p">(</span><span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">            INSERT INTO refresh_tokens</span>
+<span class="s2">                (family_id, user_id, token_hash, parent_id, expires_at)</span>
+<span class="s2">            VALUES (:family, :user, :hash, :parent, now() + :ttl)</span>
+<span class="s2">        &quot;&quot;&quot;</span><span class="p">),</span>
+        <span class="p">{</span><span class="s2">&quot;family&quot;</span><span class="p">:</span> <span class="n">row</span><span class="o">.</span><span class="n">family_id</span><span class="p">,</span> <span class="s2">&quot;user&quot;</span><span class="p">:</span> <span class="n">row</span><span class="o">.</span><span class="n">user_id</span><span class="p">,</span>
+         <span class="s2">&quot;hash&quot;</span><span class="p">:</span> <span class="n">new_digest</span><span class="p">,</span> <span class="s2">&quot;parent&quot;</span><span class="p">:</span> <span class="n">row</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="s2">&quot;ttl&quot;</span><span class="p">:</span> <span class="n">REFRESH_TTL</span><span class="p">},</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">raw</span><span class="p">,</span> <span class="n">create_access_token</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">user_id</span><span class="p">),</span> <span class="k">await</span> <span class="n">scopes_for</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="n">row</span><span class="o">.</span><span class="n">user_id</span><span class="p">))</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">revoke_family</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="n">presented</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="c1"># Reuse detected. We cannot tell the thief from the victim, so neither keeps</span>
+    <span class="c1"># access: kill every token descended from this login. The user signs in again;</span>
+    <span class="c1"># the attacker cannot.</span>
+    <span class="k">await</span> <span class="n">session</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
+        <span class="n">text</span><span class="p">(</span><span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">            UPDATE refresh_tokens SET revoked_at = now()</span>
+<span class="s2">             WHERE family_id = (SELECT family_id FROM refresh_tokens WHERE token_hash = :d)</span>
+<span class="s2">               AND revoked_at IS NULL</span>
+<span class="s2">        &quot;&quot;&quot;</span><span class="p">),</span>
+        <span class="p">{</span><span class="s2">&quot;d&quot;</span><span class="p">:</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">sha256</span><span class="p">(</span><span class="n">presented</span><span class="o">.</span><span class="n">encode</span><span class="p">())</span><span class="o">.</span><span class="n">digest</span><span class="p">()},</span>
+    <span class="p">)</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/auth/refresh.py</span>
+<span class="nd">@router</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="s2">&quot;/refresh&quot;</span><span class="p">)</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">refresh</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">,</span> <span class="n">response</span><span class="p">:</span> <span class="n">Response</span><span class="p">,</span> <span class="n">session</span><span class="o">=</span><span class="n">Depends</span><span class="p">(</span><span class="n">get_session</span><span class="p">)):</span>
+    <span class="n">presented</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">cookies</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;__Host-refresh&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">presented</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">UNAUTHORIZED</span>
+
+    <span class="n">rotated</span> <span class="o">=</span> <span class="k">await</span> <span class="n">rotate</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="n">presented</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">rotated</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="c1"># The token existed once and is being presented again — or never existed.</span>
+        <span class="c1"># Both are handled the same way, and deliberately: probing must not reveal</span>
+        <span class="c1"># which. revoke_family is a no-op for a token that was never real.</span>
+        <span class="k">await</span> <span class="n">revoke_family</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="n">presented</span><span class="p">)</span>
+        <span class="k">await</span> <span class="n">session</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span>
+        <span class="n">clear_refresh_cookie</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
+        <span class="k">await</span> <span class="n">alert_reuse_detected</span><span class="p">(</span><span class="n">presented</span><span class="p">)</span>   <span class="c1"># a security event, not a log line</span>
+        <span class="k">raise</span> <span class="n">UNAUTHORIZED</span>
+
+    <span class="n">raw</span><span class="p">,</span> <span class="n">access</span> <span class="o">=</span> <span class="n">rotated</span>
+    <span class="n">set_refresh_cookie</span><span class="p">(</span><span class="n">response</span><span class="p">,</span> <span class="n">raw</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;access_token&quot;</span><span class="p">:</span> <span class="n">access</span><span class="p">,</span> <span class="s2">&quot;token_type&quot;</span><span class="p">:</span> <span class="s2">&quot;bearer&quot;</span><span class="p">}</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/auth/cookies.py</span>
+<span class="k">def</span> <span class="nf">set_refresh_cookie</span><span class="p">(</span><span class="n">response</span><span class="p">:</span> <span class="n">Response</span><span class="p">,</span> <span class="n">raw</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="n">response</span><span class="o">.</span><span class="n">set_cookie</span><span class="p">(</span>
+        <span class="c1"># The __Host- prefix is enforced by the browser: Secure, no Domain, Path=/.</span>
+        <span class="c1"># It stops a subdomain — including one an attacker controls via a stale DNS</span>
+        <span class="c1"># record — from writing a cookie the main site will send.</span>
+        <span class="n">key</span><span class="o">=</span><span class="s2">&quot;__Host-refresh&quot;</span><span class="p">,</span>
+        <span class="n">value</span><span class="o">=</span><span class="n">raw</span><span class="p">,</span>
+        <span class="n">httponly</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>      <span class="c1"># JavaScript cannot read it, so an XSS payload cannot steal it</span>
+        <span class="n">secure</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">samesite</span><span class="o">=</span><span class="s2">&quot;strict&quot;</span><span class="p">,</span>  <span class="c1"># not sent on cross-site requests, which covers the CSRF</span>
+                            <span class="c1"># case for this endpoint without a separate token</span>
+        <span class="n">max_age</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">REFRESH_TTL</span><span class="o">.</span><span class="n">total_seconds</span><span class="p">()),</span>
+        <span class="n">path</span><span class="o">=</span><span class="s2">&quot;/auth&quot;</span><span class="p">,</span>       <span class="c1"># sent only to the endpoints that need it</span>
+    <span class="p">)</span>
+</code></pre></div>
+
+<h2>5. Golden-standard rules</h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Forbidden:</strong> validating and revoking a refresh token in two steps</td>
+<td>Two concurrent refreshes both pass validation before either writes, and the family forks into branches that each keep full access. One conditional update, and the rowcount is the answer.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> a JWT as the refresh token</td>
+<td>Self-validating is the property you are removing. The server must decide per presentation, which requires state.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> storing refresh tokens in plaintext</td>
+<td>A database dump then hands over live sessions for as long as they last. Store the hash; compare the hash.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> treating reuse as a single-token problem</td>
+<td>The token was presented twice, so two parties hold it and you cannot tell which. Invalidate the family.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> refresh tokens readable by JavaScript</td>
+<td>An XSS payload that can read the refresh token owns the account for a month. <code>HttpOnly</code>, and never in local storage.</td>
+</tr>
+<tr>
+<td>Refresh tokens are CSPRNG output</td>
+<td>A token derived from a counter, a timestamp or a v4 UUID from a seeded generator is guessable at a rate you cannot observe.</td>
+</tr>
+<tr>
+<td>Rotation happens on every refresh, without exception</td>
+<td>If a token can be used twice legitimately, reuse is no longer a signal and detection is impossible.</td>
+</tr>
+<tr>
+<td>Password change and deactivation revoke every family</td>
+<td>Otherwise "I changed my password because I was compromised" leaves the attacker's session running.</td>
+</tr>
+<tr>
+<td>Reuse detection raises an alert, not a log line</td>
+<td>It is the only high-signal indication of credential theft you will get, and it arrives once.</td>
+</tr>
+<tr>
+<td>Sessions are listable and individually revocable by the user</td>
+<td>"Sign out of this device" is only possible if a session is a row someone can point at.</td>
+</tr>
+<tr>
+<td>Expired and long-revoked rows are pruned on a schedule</td>
+<td>The table grows with every refresh — thousands of rows per active user per month — and the indexes degrade quietly.</td>
+</tr>
+<tr>
+<td>The refresh endpoint is rate-limited per family</td>
+<td>An attacker holding a stolen token otherwise gets unlimited attempts to win the rotation race.</td>
+</tr>
+</tbody>
+</table>
+<h2>6. Data contracts</h2>
+<div class="hl"><pre><span></span><code>family      one login. Rotation appends; revocation applies to all of it.
+token       opaque, 256 bits of CSPRNG output, stored only as a hash
+lifetime    access ~15 min, refresh ~30 days sliding — the refresh lifetime is
+            the maximum time a stolen token stays useful if reuse is never detected
+states      live -&gt; spent (rotated) -&gt; revoked. Terminal, never reversible.
+</code></pre></div>
+
+<p>The rowcount of the compare-and-swap is part of the contract, not an
+implementation detail: <strong>1 means this caller spent the token, 0 means somebody
+else already did.</strong> Every branch of the endpoint hangs off that number, and a
+driver or ORM that hides it makes the design unimplementable.</p>
+<h2>7. Build order</h2>
+<ol>
+<li><strong>The table and <code>rotate()</code> as one conditional update</strong>, with a test that calls
+   it twice on the same token and asserts the second returns nothing.</li>
+<li><strong>The concurrency test, immediately:</strong> fire N parallel refreshes with the same
+   token and assert exactly one succeeds. This is the whole blueprint; write it
+   before anything depends on rotation.</li>
+<li><strong>Reuse detection and family invalidation</strong>, with a test that spends a token,
+   rotates on, then replays the old one and asserts every descendant is dead.</li>
+<li><strong>Cookie handling</strong> with the prefix and attributes, asserted on the response
+   headers.</li>
+<li><strong>Logout, and logout everywhere.</strong></li>
+<li><strong>Revocation on password change and deactivation</strong>, each with a test.</li>
+<li><strong>Pruning, rate limiting, and the session list endpoint.</strong></li>
+</ol>
+<p>Step 2 before step 3 because the race is invisible in serial tests and every
+implementation passes those. If it is not tested concurrently, assume it is
+broken — that is how it reached shipped libraries.</p>
+<h2>8. Blocks to pull in</h2>
+<p>Nothing here is a prerequisite. These are adjacent problems, by name only —
+resolve them separately if they apply.</p>
+<ul>
+<li>JWT access token authentication — the short-lived token this system reissues</li>
+<li>Idempotency keys and safe retries — the same read-then-write window in a different guise</li>
+<li>Redis rate limiting — bounding attempts against the refresh endpoint</li>
+<li>Observability and tracing — where the reuse-detection alert goes</li>
+<li>Background jobs and workers — where the pruning schedule runs</li>
+</ul>
+<h2>9. Metrics</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Concurrent refreshes with one token that succeed</td>
+<td>Exactly 1, always</td>
+</tr>
+<tr>
+<td>Refresh token lifetime</td>
+<td>≤ 30 days</td>
+</tr>
+<tr>
+<td>Time from "log out everywhere" to every session failing</td>
+<td>&lt; 1 refresh cycle, ≤ 15 minutes</td>
+</tr>
+<tr>
+<td>Time from account deactivation to every session failing</td>
+<td>≤ 15 minutes</td>
+</tr>
+<tr>
+<td>Reuse-detection events reaching an alert channel</td>
+<td>100%</td>
+</tr>
+<tr>
+<td>Refresh endpoint p99</td>
+<td>&lt; 50 ms — it is on the critical path of every session</td>
+</tr>
+<tr>
+<td>Rows in the token table per active user</td>
+<td>Bounded by pruning, not growing without limit</td>
+</tr>
+</tbody>
+</table>
+<h2>10. Failure modes</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A revoked session keeps working, and revoking again does not help</td>
+<td>Concurrent refreshes forked the family; each branch is independent and revoking one leaves the others</td>
+<td>One atomic compare-and-swap; check the rowcount; add the concurrency test</td>
+</tr>
+<tr>
+<td>Users are randomly signed out, more often on slow connections</td>
+<td>A page issued parallel requests, two refreshes raced, and the loser was treated as reuse — invalidating a legitimate family</td>
+<td>Have clients serialise refresh through one in-flight promise; consider a short grace window in which the immediate predecessor is accepted without alerting</td>
+</tr>
+<tr>
+<td>A stolen token is used for weeks and nothing notices</td>
+<td>Tokens are not rotated, so reuse is indistinguishable from normal use</td>
+<td>Rotate on every refresh; detection depends on single use</td>
+</tr>
+<tr>
+<td>A database leak results in account takeovers</td>
+<td>Refresh tokens were stored in plaintext and were still live</td>
+<td>Store only the hash</td>
+</tr>
+<tr>
+<td>An XSS report is followed by long-term account compromise</td>
+<td>The refresh token was readable from JavaScript, in local storage or a non-<code>HttpOnly</code> cookie</td>
+<td><code>HttpOnly</code>, <code>Secure</code>, <code>SameSite</code>, <code>__Host-</code> prefix</td>
+</tr>
+<tr>
+<td>A user changes their password after a compromise and the attacker stays signed in</td>
+<td>Password change did not revoke existing families</td>
+<td>Revoke all families on password change and on deactivation</td>
+</tr>
+<tr>
+<td>"Sign out of all devices" appears to work and the other device keeps working</td>
+<td>Only the current family was revoked</td>
+<td>Revoke by user, not by family, and test with two live sessions</td>
+</tr>
+<tr>
+<td>Refresh latency degrades over months</td>
+<td>The token table grew unbounded and its indexes with it</td>
+<td>Prune expired and long-revoked rows on a schedule</td>
+</tr>
+<tr>
+<td>An attacker with a stolen token keeps winning the race against the real client</td>
+<td>The refresh endpoint has no rate limit, so retries are free</td>
+<td>Rate-limit per family and per address</td>
+</tr>
+<tr>
+<td>A cookie set on a subdomain overrides the session cookie</td>
+<td>No <code>__Host-</code> prefix, so a subdomain could write it</td>
+<td>Use the prefix; the browser then enforces the constraints</td>
+</tr>
+<tr>
+<td>Reuse detection fires constantly in one environment</td>
+<td>A client retries refresh automatically on network failure, replaying the same token</td>
+<td>Make the client's retry reuse the in-flight request rather than re-presenting the token</td>
+</tr>
+</tbody>
+</table>
+<h2>11. Definition of done</h2>
+<ul>
+<li class="task">Firing many parallel refreshes with the same token results in exactly one success and no forked family, asserted by a concurrency test that runs in CI</li>
+<li class="task">Presenting a token twice serially fails the second time and revokes every token in the family, covered by a test</li>
+<li class="task">Refresh tokens are stored hashed; a test asserts the presented value does not appear in the table</li>
+<li class="task">Refresh tokens come from a CSPRNG and are at least 256 bits</li>
+<li class="task">The refresh cookie carries <code>HttpOnly</code>, <code>Secure</code>, <code>SameSite</code> and the <code>__Host-</code> prefix, asserted on the response headers</li>
+<li class="task">Changing a password revokes every session for that user, covered by a test with two live sessions</li>
+<li class="task">Deactivating a user revokes every session, covered by a test</li>
+<li class="task">"Sign out of all devices" ends a session established on another client, covered by a test with two live sessions</li>
+<li class="task">A reuse-detection event reaches an alert channel, not only the log, verified once end to end</li>
+<li class="task">Expired and revoked rows are pruned on a schedule, and a test asserts the pruning removes them and nothing else</li>
+<li class="task">The refresh endpoint is rate-limited per family, covered by a test</li>
+<li class="task">A user can list their active sessions with enough detail to recognise them, and revoke one individually</li>
+</ul>
+  </article>
+
+  <aside class="tailpiece">
+    <h2>Use this blueprint</h2>
+    <p>
+      Copy the file into your project and point your agent at it. It works with Claude Code,
+      Cursor, Copilot, ChatGPT and anything else that reads a file — there is nothing to install.
+    </p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/jwt-refresh-sessions" target="_blank" rel="noopener">Open on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Browse all blueprints</a>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p><a href="/">Awesome Blueprints</a> — same request, same architecture, every time.</p>
+    <p class="dim">MIT · awesomeblueprints.com</p>
+  </div>
+</footer>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'neutral' });
+</script>
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const now = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', now);
+    try { localStorage.setItem('ab-theme', now); } catch (e) {}
+    location.reload();   // the diagram is themed at render time
+  });
+</script>
+
+</body>
+</html>

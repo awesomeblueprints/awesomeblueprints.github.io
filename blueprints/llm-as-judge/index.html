@@ -1,0 +1,622 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LLM-as-a-Judge Evaluation — Blueprint for AI Coding Agents | Awesome Blueprints</title>
+<meta name="description" content="LLM-as-a-judge evaluation: rubrics, position and verbosity bias, self-preference, and calibration against human labels so a score means something." />
+<link rel="canonical" href="https://awesomeblueprints.com/blueprints/llm-as-judge/" />
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="Awesome Blueprints" />
+<meta property="og:url" content="https://awesomeblueprints.com/blueprints/llm-as-judge/" />
+<meta property="og:title" content="LLM-as-a-Judge Evaluation — Architecture Blueprint" />
+<meta property="og:description" content="LLM-as-a-judge evaluation: rubrics, position and verbosity bias, self-preference, and calibration against human labels so a score means something." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="LLM-as-a-Judge Evaluation — Architecture Blueprint" />
+<meta name="twitter:description" content="LLM-as-a-judge evaluation: rubrics, position and verbosity bias, self-preference, and calibration against human labels so a score means something." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/page.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "LLM-as-a-Judge Evaluation", "description": "LLM-as-a-judge evaluation: rubrics, position and verbosity bias, self-preference, and calibration against human labels so a score means something.", "url": "https://awesomeblueprints.com/blueprints/llm-as-judge/", "dateModified": "2026-08-20", "keywords": "Evals", "isAccessibleForFree": true, "license": "https://opensource.org/licenses/MIT", "publisher": {"@type": "Organization", "name": "Awesome Blueprints", "url": "https://awesomeblueprints.com"}}</script>
+<script>
+  (function () {
+    var t;
+    try { t = localStorage.getItem('ab-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">Awesome Blueprints</a>
+    <div class="nav-right">
+      <a class="nav-link" href="/#blueprints">Catalogue</a>
+      <a class="nav-link" href="/#faq">FAQ</a>
+      <a class="nav-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/llm-as-judge" target="_blank" rel="noopener">GitHub ↗</a>
+      <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Switch theme">◑</button>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/">Home</a> <span>/</span> <a href="/#blueprints">Blueprints</a> <span>/</span>
+    <span>LLM-as-a-Judge Evaluation</span>
+  </nav>
+
+  <header class="page-head">
+    <p class="eyebrow">llm-as-judge</p>
+    <h1>LLM-as-a-Judge Evaluation</h1>
+    <p class="lede">LLM-as-a-judge evaluation: rubrics, position and verbosity bias, self-preference, and calibration against human labels so a score means something.</p>
+    <div class="facts"><span>medium</span><span>3–4 days</span><span>Verified 2026-08-20</span></div>
+    <div class="tags"><span class="tag">Evals</span></div>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/llm-as-judge" target="_blank" rel="noopener">Read it on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Back to the catalogue</a>
+    </div>
+  </header>
+
+  <article class="doc">
+<blockquote>
+<p>Using an LLM to grade LLM output, built so the score means something: a rubric
+that produces the same verdict twice, a measured agreement with human labels,
+and the three biases that otherwise make the number confident and wrong.</p>
+</blockquote>
+<p><strong>Complexity:</strong> medium · <strong>Typical build:</strong> 3–4 days · <strong>Verified:</strong> 2026-08-20 (re-check after ~90 days)</p>
+<p><strong>Examples in:</strong> Python. The architecture is language-agnostic: sections 5, 10 and 11 hold wherever you build this. Section 4 is illustrative — if your project is in another language, your agent translates the idioms rather than importing them, and nothing is lost. Nothing here needs an evaluation framework; the frameworks that exist are conveniences over the same rubric, the same swap, and the same calibration table.</p>
+<p><strong>Use when:</strong> you change prompts or models often enough that hand-grading has become the bottleneck, and the quality you care about cannot be checked by an assertion.</p>
+<p><strong>Not for:</strong> anything a deterministic check can decide. If the answer is valid JSON or not, contains a required field or not, matches a known result or not — assert it. A judge costs money, latency and a calibration programme, and spending all three to check something <code>==</code> could have decided is the most common way this goes wrong. Also not for a first prompt with no version to compare against: with nothing to compare, a score is a number with no meaning attached.</p>
+<hr />
+<h2>⚙️ INSTRUCTIONS FOR THE AI — READ BEFORE WRITING ANY CODE</h2>
+<p><strong>Do not start coding.</strong></p>
+<p><strong>Step 1 — Refresh.</strong> Verify the current published figures for judge reliability
+rather than trusting the ones in §1, which are dated: swap-consistency rates for
+current frontier models, measured length bias against human raters, and whether
+any provider now ships a first-party evaluation endpoint with documented
+agreement figures. Verify whether the model you intend to use as a judge supports
+structured output with a schema, and whether it exposes token log-probabilities,
+because both change what §4 can do. Report what you verified and what turned out
+wrong.</p>
+<p><strong>Step 2 — Read the project, then audit what already exists.</strong> Find every quality
+check already in the codebase — assertions, golden files, snapshot tests, a
+regression suite, a spreadsheet someone maintains — because each one is a check
+that must <em>not</em> be replaced by a judge. Find whether any human-labelled data
+exists anywhere: support tickets marked resolved, thumbs-up records, a review
+queue. That data is the scarcest input here and it is usually already present and
+unnoticed. Find how prompt versions are recorded today, since a score that cannot
+name what it scored is unusable. Then audit §11 item by item, each marked
+<em>already true</em>, <em>partly true</em> or <em>absent</em>, with the file that decides it,
+reported before anything is proposed.</p>
+<p>Assume the project is right until it demonstrably is not; code satisfying an item
+stays even where its shape differs from §4; replacing something that works needs a
+one-line reason; never delete a working path to make room for the blueprint's
+version. The same holds for language — §4 is illustrative, its idioms get
+translated into the project's language, and §11 is what has to become true rather
+than the syntax.</p>
+<p><strong>Step 3 — Write a plan for the gap only, and get it approved</strong>, including a
+<code>## Proposed stack</code> section, which judge model you propose and why it is not from
+the same family as the model being judged, and the size of the human-labelled
+calibration set you intend to build. Do not ask open questions — propose, and ask
+for confirmation once. Say what you are adding, what you are leaving alone, and
+what you propose to change, and touch nothing else.</p>
+<p><strong>Step 4 — Build in the order in §7.</strong> <strong>Step 5 — §11 is the definition of done.</strong></p>
+<hr />
+<h2>1. Three biases, with numbers</h2>
+<p>A judge is not a measuring instrument until it has been checked against one. Three
+distortions are documented well enough to design around, and all three produce
+scores that look reasonable:</p>
+<p><strong>Position bias.</strong> In pairwise comparison, the order the two answers are shown in
+changes the verdict. Published swap-consistency rates for widely used models fall
+roughly between 70% and 78%, meaning something like a quarter of verdicts flip
+when the same two answers are presented in the opposite order; the flips are not
+random, they favour whichever answer came first. <em>Design response:</em> run every
+pairwise comparison twice with the positions reversed, and treat a disagreement as
+a tie rather than picking one. This doubles the cost of pairwise judging and it is
+not optional — a pairwise judge without a swap is measuring presentation order.</p>
+<p><strong>Verbosity bias.</strong> Judges prefer longer answers, at a rate reported around 17
+percentage points above human preference for the same pairs. <em>Design response:</em>
+say so in the rubric ("a concise correct answer outranks a wordy partly-correct
+one"), which helps and does not fix it, and then measure the residue by regressing
+score on length. Length-controlled scoring — fitting the length effect and
+reporting the score with it removed — is the technique that actually works;
+published work applying it reports rank correlation with human preference rising
+from 0.94 to 0.98.</p>
+<p><strong>Self-preference.</strong> Models score text resembling their own output higher,
+independent of quality. <em>Design response:</em> never judge a model with a model from
+the same family. This is one line of configuration and it is the highest-value
+decision in this document.</p>
+<p>The conclusion those three add up to: <strong>a judge's output is a measurement whose
+error you must estimate, not a verdict.</strong> Everything in §4 is machinery for
+estimating it.</p>
+<h3>The rule about what a judge is for</h3>
+<blockquote>
+<p><strong>If a deterministic check can decide it, a judge must not.</strong></p>
+</blockquote>
+<p>Applied literally, this removes most of what people put in judge rubrics: valid
+JSON, required fields present, no forbidden strings, length within a limit,
+citations resolving to real documents, a numeric answer matching a known one. All
+assertions. What is left for the judge is genuinely and irreducibly a matter of
+degree — is this answer faithful to the source, is the tone appropriate, does it
+address what was asked — and that shorter list is also the list a judge is
+reasonably good at.</p>
+<h2>2. Architecture</h2>
+<pre class="mermaid">%% GENERATED - do not edit by hand.
+%% Edit the source header in architecture.mmd, then rebuild.
+%% Scoring a change, with the judge itself under measurement
+
+flowchart TB
+    subgraph truth[&quot;The measurement of the measurement&quot;]
+        direction TB
+        calibration[(&quot;Human-labelled set, 100 to 300 cases&quot;)]
+        audit[&quot;Calibration audit, agreement and swap consistency&quot;]
+    end
+
+    engineer([&quot;Engineer changing a prompt&quot;])
+    runner[&quot;Evaluation runner&quot;]
+    asserts[&quot;Deterministic checks, run first&quot;]
+    judge[&quot;Judge call, rubric plus schema&quot;]
+    swap[&quot;Swap pass, positions reversed&quot;]
+    aggregate[&quot;Aggregate, length control applied&quot;]
+    report[&quot;Report, per criterion and per case&quot;]
+    cases[(&quot;Evaluation cases, versioned in the repository&quot;)]
+    results[(&quot;Results, keyed by prompt version&quot;)]
+    judge_provider{{&quot;Judge provider, a different family from the model under test&quot;}}
+
+    engineer --&gt; runner
+    cases --- runner
+    runner --&gt; asserts
+    asserts --&gt;|&quot;only what cannot be asserted&quot;| judge
+    judge --&gt; judge_provider
+    judge --&gt; swap
+    swap --&gt; judge_provider
+    swap --&gt; aggregate
+    aggregate --&gt; report
+    aggregate --- results
+    calibration --- audit
+    audit --&gt;|&quot;thresholds and rubric revisions&quot;| judge
+    audit --&gt;|&quot;agreement figure attached to every score&quot;| report
+
+    classDef service fill:#eff6ff,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b;
+    classDef datastore fill:#e9faf3,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b;
+    classDef external fill:#fff4ed,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b;
+    classDef actor fill:#f0eefc,stroke:#4a3aa7,stroke-width:1.5px,color:#0b0b0b;
+    class runner,asserts,judge,swap,aggregate,report,audit service;
+    class calibration,cases,results datastore;
+    class judge_provider external;
+    class engineer actor;</pre>
+<p>The edge that most implementations lack is <code>audit -&gt; report</code>. <strong>Every reported
+score carries the judge's current agreement with human labels</strong>, because a score of
+7.4 from a judge agreeing with people 62% of the time and the same 7.4 from a
+judge at 88% are different facts, and a report that renders them identically will
+be acted on identically.</p>
+<h2>3. Project structure</h2>
+<div class="hl"><pre><span></span><code>evals/
+├── cases/
+│   └── summarisation.jsonl   inputs and any known-correct answers, versioned
+├── calibration/
+│   └── labelled.jsonl        human verdicts — the scarce, valuable file
+├── rubrics/
+│   └── faithfulness.v2.md    one criterion per rubric, version in the filename
+├── checks.py                 deterministic assertions, run before any judge call
+├── judge.py                  the judge call, schema-constrained
+├── swap.py                   the reversed-position pass and the tie rule
+├── aggregate.py              length control and per-criterion aggregation
+└── audit.py                  agreement, swap consistency, length correlation
+</code></pre></div>
+
+<p><strong>One rule: one rubric file, one criterion.</strong> A rubric asking for helpfulness,
+accuracy and tone in one call returns one number that averages three
+incommensurable things, and when it moves you cannot say which one moved. Separate
+calls cost more and are the only version that answers a question.</p>
+<h2>4. Reference implementation</h2>
+<div class="hl"><pre><span></span><code><span class="c1"># evals/judge.py</span>
+<span class="kn">from</span> <span class="nn">pydantic</span> <span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">Field</span>
+
+
+<span class="k">class</span> <span class="nc">Verdict</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="c1"># Reasoning first, deliberately: the field order is the generation order, so</span>
+    <span class="c1"># putting the score first makes the reasoning a justification written after</span>
+    <span class="c1"># the fact. This ordering is free and it measurably changes the verdict.</span>
+    <span class="n">reasoning</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">max_length</span><span class="o">=</span><span class="mi">600</span><span class="p">)</span>
+    <span class="n">score</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">ge</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">le</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span>
+    <span class="c1"># A five-point scale, not a hundred-point one. Judges do not distinguish 73</span>
+    <span class="c1"># from 76 — the extra resolution is noise that looks like signal, and it is</span>
+    <span class="c1"># the first thing to remove when scores are unstable.</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">judge</span><span class="p">(</span><span class="n">case</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">answer</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">rubric</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Verdict</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;One criterion, one call, schema-constrained.</span>
+
+<span class="sd">    The judge model must not come from the same family as the model that produced</span>
+<span class="sd">    `answer`: models score text resembling their own output higher regardless of</span>
+<span class="sd">    quality, and this configuration line is the cheapest correction available.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">assert</span> <span class="n">settings</span><span class="o">.</span><span class="n">judge_family</span> <span class="o">!=</span> <span class="n">settings</span><span class="o">.</span><span class="n">generator_family</span><span class="p">,</span> <span class="s2">&quot;self-preference&quot;</span>
+    <span class="k">return</span> <span class="k">await</span> <span class="n">judge_client</span><span class="o">.</span><span class="n">structured</span><span class="p">(</span>
+        <span class="n">model</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">judge_model</span><span class="p">,</span>
+        <span class="n">schema</span><span class="o">=</span><span class="n">Verdict</span><span class="p">,</span>
+        <span class="n">temperature</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>          <span class="c1"># A judge is a measurement; variance here is error</span>
+        <span class="n">seed</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">eval_seed</span><span class="p">,</span>
+        <span class="n">messages</span><span class="o">=</span><span class="p">[</span>
+            <span class="p">{</span><span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;system&quot;</span><span class="p">,</span> <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="n">rubric</span><span class="p">},</span>
+            <span class="p">{</span><span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;user&quot;</span><span class="p">,</span> <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="n">render_case</span><span class="p">(</span><span class="n">case</span><span class="p">,</span> <span class="n">answer</span><span class="p">)},</span>
+        <span class="p">],</span>
+    <span class="p">)</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># evals/rubrics/faithfulness.v2.md  (excerpt)</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Score 1 to 5 for faithfulness to the source text only. Ignore style, ignore</span>
+<span class="sd">length, ignore whether the answer is interesting.</span>
+
+<span class="sd">5 — every claim is supported by the source; nothing is added</span>
+<span class="sd">4 — every claim is supported; one detail is imprecise but not wrong</span>
+<span class="sd">3 — one unsupported claim that does not change the meaning</span>
+<span class="sd">2 — an unsupported claim that changes the meaning</span>
+<span class="sd">1 — contradicts the source</span>
+
+<span class="sd">Do not prefer longer answers. A concise correct answer outranks a wordy</span>
+<span class="sd">partly-correct one.</span>
+
+<span class="sd">Each level is written so two people applying it to the same answer would agree.</span>
+<span class="sd">If you cannot write the levels that way, the criterion is not ready to be judged</span>
+<span class="sd">and the rubric is the thing to fix, not the model.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># evals/swap.py</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">compare</span><span class="p">(</span><span class="n">case</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">a</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">rubric</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Pairwise comparison, run in both orders.</span>
+
+<span class="sd">    Roughly a quarter of verdicts flip when the order is reversed, and the flips</span>
+<span class="sd">    favour whichever answer came first. A pairwise judge without this pass is</span>
+<span class="sd">    partly measuring presentation order. Cost doubles; that is the price of the</span>
+<span class="sd">    result meaning anything.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">first</span> <span class="o">=</span> <span class="k">await</span> <span class="n">judge_pair</span><span class="p">(</span><span class="n">case</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">rubric</span><span class="p">)</span>
+    <span class="n">second</span> <span class="o">=</span> <span class="k">await</span> <span class="n">judge_pair</span><span class="p">(</span><span class="n">case</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">rubric</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">first</span><span class="o">.</span><span class="n">winner</span> <span class="o">!=</span> <span class="n">_mirror</span><span class="p">(</span><span class="n">second</span><span class="o">.</span><span class="n">winner</span><span class="p">):</span>
+        <span class="c1"># Disagreement becomes a tie, not a coin flip. Recording it separately is</span>
+        <span class="c1"># what makes swap consistency measurable at the aggregate level.</span>
+        <span class="k">return</span> <span class="s2">&quot;tie:inconsistent&quot;</span>
+    <span class="k">return</span> <span class="n">first</span><span class="o">.</span><span class="n">winner</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># evals/audit.py</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+
+
+<span class="k">def</span> <span class="nf">audit</span><span class="p">(</span><span class="n">labelled</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;The measurement of the measurement. Run monthly and after every rubric</span>
+<span class="sd">    change; providers update models without notice, so a judge validated once is</span>
+<span class="sd">    a judge validated at one point in time.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">agreement</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">([</span><span class="n">row</span><span class="p">[</span><span class="s2">&quot;judge&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">row</span><span class="p">[</span><span class="s2">&quot;human&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">labelled</span><span class="p">])</span>
+    <span class="n">swap_consistency</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">([</span><span class="n">row</span><span class="p">[</span><span class="s2">&quot;order_a&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">row</span><span class="p">[</span><span class="s2">&quot;order_b&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">labelled</span><span class="p">])</span>
+    <span class="c1"># The slope of score against answer length. A strong positive slope means the</span>
+    <span class="c1"># judge is partly measuring verbosity, and scores should be reported with the</span>
+    <span class="c1"># length effect fitted out rather than raw.</span>
+    <span class="n">length_slope</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">polyfit</span><span class="p">(</span>
+        <span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">r</span><span class="p">[</span><span class="s2">&quot;answer&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">())</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">labelled</span><span class="p">],</span>
+        <span class="p">[</span><span class="n">r</span><span class="p">[</span><span class="s2">&quot;judge&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">labelled</span><span class="p">],</span> <span class="mi">1</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s2">&quot;agreement&quot;</span><span class="p">:</span> <span class="n">agreement</span><span class="p">,</span>           <span class="c1"># below ~0.75, the judge is not usable</span>
+        <span class="s2">&quot;swap_consistency&quot;</span><span class="p">:</span> <span class="n">swap_consistency</span><span class="p">,</span>  <span class="c1"># below ~0.80, escalate to people</span>
+        <span class="s2">&quot;length_slope&quot;</span><span class="p">:</span> <span class="n">length_slope</span><span class="p">,</span>
+        <span class="s2">&quot;n&quot;</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">labelled</span><span class="p">),</span>
+    <span class="p">}</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># evals/runner.py  (excerpt)</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">evaluate</span><span class="p">(</span><span class="n">prompt_version</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Report</span><span class="p">:</span>
+    <span class="k">for</span> <span class="n">case</span> <span class="ow">in</span> <span class="n">cases</span><span class="p">:</span>
+        <span class="n">answer</span> <span class="o">=</span> <span class="k">await</span> <span class="n">generate</span><span class="p">(</span><span class="n">case</span><span class="p">,</span> <span class="n">prompt_version</span><span class="p">)</span>
+        <span class="n">failures</span> <span class="o">=</span> <span class="n">deterministic_checks</span><span class="p">(</span><span class="n">answer</span><span class="p">,</span> <span class="n">case</span><span class="p">)</span>   <span class="c1"># first, and free</span>
+        <span class="k">if</span> <span class="n">failures</span><span class="p">:</span>
+            <span class="n">record</span><span class="p">(</span><span class="n">case</span><span class="p">,</span> <span class="n">hard_fail</span><span class="o">=</span><span class="n">failures</span><span class="p">)</span>
+            <span class="k">continue</span>          <span class="c1"># no judge call: nothing to grade about broken output</span>
+        <span class="k">for</span> <span class="n">rubric</span> <span class="ow">in</span> <span class="n">RUBRICS</span><span class="p">:</span>                <span class="c1"># one call per criterion, never merged</span>
+            <span class="n">record</span><span class="p">(</span><span class="n">case</span><span class="p">,</span> <span class="n">rubric</span><span class="p">,</span> <span class="k">await</span> <span class="n">judge</span><span class="p">(</span><span class="n">case</span><span class="p">,</span> <span class="n">answer</span><span class="p">,</span> <span class="n">rubric</span><span class="p">))</span>
+    <span class="c1"># Every report carries the judge&#39;s current agreement. A score without it</span>
+    <span class="c1"># invites a decision the number does not support.</span>
+    <span class="k">return</span> <span class="n">Report</span><span class="p">(</span><span class="n">results</span><span class="o">=</span><span class="n">results</span><span class="p">,</span> <span class="n">judge_audit</span><span class="o">=</span><span class="n">load_latest_audit</span><span class="p">(),</span>
+                  <span class="n">prompt_version</span><span class="o">=</span><span class="n">prompt_version</span><span class="p">)</span>
+</code></pre></div>
+
+<h2>5. Golden-standard rules</h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Forbidden:</strong> judging anything a deterministic check can decide</td>
+<td>It costs money and adds variance to answer a question <code>==</code> answers exactly.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> a judge from the same model family as the model under test</td>
+<td>Self-preference inflates the score independently of quality; this is one configuration line.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> pairwise comparison without a reversed-position pass</td>
+<td>Roughly a quarter of verdicts flip on order, favouring the first answer shown.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> several criteria in one rubric or one call</td>
+<td>The result is one number averaging incommensurable things, and its movement is unattributable.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> a judge in production without a measured agreement figure</td>
+<td>The score is then an opinion presented with the authority of a metric.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> non-zero temperature in a judge call</td>
+<td>A measuring instrument with deliberate variance measures its own noise.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> comparing scores across rubric versions</td>
+<td>The instrument changed; the difference is not a change in quality.</td>
+</tr>
+<tr>
+<td>The score field comes after the reasoning field in the schema</td>
+<td>Field order is generation order; a score written first turns the reasoning into a rationalisation.</td>
+</tr>
+<tr>
+<td>Scales are coarse — five points, not a hundred</td>
+<td>Judges do not distinguish fine gradations; the extra resolution is noise shaped like signal.</td>
+</tr>
+<tr>
+<td>Every rubric level is written so two people would agree on it</td>
+<td>If you cannot write it that way, the criterion is not ready and the rubric is what to fix.</td>
+</tr>
+<tr>
+<td>The rubric states that length is not a merit</td>
+<td>It reduces verbosity bias; it does not remove it, which is why the slope is measured too.</td>
+</tr>
+<tr>
+<td>Scores are reported with the length effect fitted out</td>
+<td>Fitting it out is what raises correlation with human preference; raw scores carry the bias.</td>
+</tr>
+<tr>
+<td>A human-labelled calibration set exists, 100–300 cases, and is re-audited monthly</td>
+<td>Providers update models silently; a judge validated once is validated at one moment.</td>
+</tr>
+<tr>
+<td>Inconsistent swaps become ties, and are counted</td>
+<td>Counting them is what makes swap consistency an observable number rather than an assumption.</td>
+</tr>
+<tr>
+<td>The prompt version, the judge model and the rubric version are recorded with every score</td>
+<td>Otherwise no result can be reproduced or attributed.</td>
+</tr>
+</tbody>
+</table>
+<h2>6. Data contracts</h2>
+<div class="hl"><pre><span></span><code>case         input, plus any deterministically checkable expectation
+verdict      reasoning, then score on a coarse scale, schema-constrained
+result row   case id, prompt version, judge model, rubric version, score, length
+audit row    agreement, swap consistency, length slope, n, date
+</code></pre></div>
+
+<p>The calibration file is the asset. It is the only thing in this system that
+connects a number to a human judgement, it is slow to produce, and it decays as
+the product changes. Treat it accordingly: versioned in the repository, reviewed
+when the product's definition of a good answer moves, and grown from real
+disagreements rather than from cases someone invented.</p>
+<p>Two thresholds, both from published practice, both worth writing into the audit
+rather than holding informally: <strong>agreement below about 75%</strong> means the judge is
+not usable for the decision it is being asked to inform, and <strong>swap consistency
+below about 80%</strong> means pairwise results on that criterion should go to a person.</p>
+<h2>7. Build order</h2>
+<ol>
+<li><strong>The deterministic checks</strong>, and the evaluation runner around them. No judge
+   yet. This is where most of the value is and it is where the discipline of not
+   judging what can be asserted gets established.</li>
+<li><strong>The case file</strong>, versioned, built from real inputs including the ones that
+   have failed before.</li>
+<li><strong>The calibration set</strong> — a hundred cases, labelled by a person, before any
+   judge is written. Building it afterwards means tuning a judge against itself,
+   and the temptation to relabel the cases it got wrong is very strong once the
+   judge exists.</li>
+<li><strong>One rubric, one criterion, one schema-constrained call</strong> at temperature zero.</li>
+<li><strong>The audit</strong>, immediately, against the calibration set. If agreement is under
+   the floor, the rubric is what to fix, and this is the moment to find that out.</li>
+<li><strong>The swap pass</strong>, if the design is pairwise.</li>
+<li><strong>Length control in aggregation</strong>, once there is enough data to fit it.</li>
+<li><strong>Reporting with the agreement figure attached</strong>, and the monthly re-audit as a
+   scheduled job.</li>
+</ol>
+<p>Step 3 before step 4 is the one people skip, and it is the one that determines
+whether anything downstream means anything.</p>
+<h2>8. Blocks to pull in</h2>
+<p>Nothing here is a prerequisite. These are adjacent problems, by name only —
+resolve them separately if they apply.</p>
+<ul>
+<li>LLM eval harness — running suites in CI and gating deploys on them</li>
+<li>Prompt versioning — recording which prompt produced which answer</li>
+<li>LLM observability and tracing — where per-case traces are kept</li>
+<li>Output validation — the deterministic checks that run in production, not just in evaluation</li>
+<li>Retrieval evaluation — faithfulness scoring where the source is retrieved</li>
+</ul>
+<h2>9. Metrics</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Judge agreement with human labels</td>
+<td>&gt; 75%, measured monthly, reported with every score</td>
+</tr>
+<tr>
+<td>Swap consistency on pairwise criteria</td>
+<td>&gt; 80%; below that, escalate to a person</td>
+</tr>
+<tr>
+<td>Correlation of score with answer length, after length control</td>
+<td>|slope| near zero</td>
+</tr>
+<tr>
+<td>Criteria judged that a deterministic check could decide</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Judge and generator from the same model family</td>
+<td>0 criteria</td>
+</tr>
+<tr>
+<td>Calibration set size</td>
+<td>100–300 labelled cases, refreshed as the product changes</td>
+</tr>
+<tr>
+<td>Scores reported without an accompanying agreement figure</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Cost per evaluation run</td>
+<td>Known, and compared against the hand-grading it replaced</td>
+</tr>
+<tr>
+<td>Time from a prompt change to a score</td>
+<td>&lt; 15 minutes</td>
+</tr>
+</tbody>
+</table>
+<h2>10. Failure modes</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Scores are high and users are unhappy</td>
+<td>The judge was never calibrated against human labels</td>
+<td>Build the calibration set; measure agreement before trusting any score</td>
+</tr>
+<tr>
+<td>Reversing the two answers changes the winner</td>
+<td>Position bias</td>
+<td>Run both orders; treat disagreement as a tie and count it</td>
+</tr>
+<tr>
+<td>Longer answers consistently win</td>
+<td>Verbosity bias</td>
+<td>Say so in the rubric, then fit the length effect out of the reported score</td>
+</tr>
+<tr>
+<td>A model scores its own family's output highest</td>
+<td>Self-preference</td>
+<td>Use a judge from a different provider family</td>
+</tr>
+<tr>
+<td>Scores drift with no change on your side</td>
+<td>The provider updated the judge model silently</td>
+<td>Monthly re-audit; pin the judge version where the provider allows it</td>
+</tr>
+<tr>
+<td>The same input scores differently on reruns</td>
+<td>Non-zero temperature, or a scale too fine to be stable</td>
+<td>Temperature zero and a seed; coarsen the scale</td>
+</tr>
+<tr>
+<td>A score moved and nobody can say which aspect changed</td>
+<td>Several criteria merged into one rubric</td>
+<td>One criterion per rubric, one call each</td>
+</tr>
+<tr>
+<td>The judge grades broken output on style</td>
+<td>Deterministic checks were not run first, or did not gate</td>
+<td>Assert first; skip the judge when hard checks fail</td>
+</tr>
+<tr>
+<td>Reasoning reads as a justification for the score</td>
+<td>The score field precedes the reasoning field</td>
+<td>Reorder the schema</td>
+</tr>
+<tr>
+<td>Evaluation costs more than the hand-grading it replaced</td>
+<td>Judging things assertions could decide, or judging every case on every criterion</td>
+<td>Prune the rubric list to what is irreducibly a matter of degree</td>
+</tr>
+<tr>
+<td>Results cannot be reproduced</td>
+<td>Prompt version, judge model or rubric version not recorded</td>
+<td>Record all three on every row</td>
+</tr>
+<tr>
+<td>Two releases are compared and the comparison is meaningless</td>
+<td>The rubric changed between them</td>
+<td>Version rubrics; never compare across versions</td>
+</tr>
+</tbody>
+</table>
+<h2>11. Definition of done</h2>
+<ul>
+<li class="task">Deterministic checks run before any judge call and gate it, verified by reading the runner</li>
+<li class="task">No criterion is judged that an assertion could decide, verified by reviewing the rubric list one by one</li>
+<li class="task">The judge model is from a different family than the model under test, asserted in code</li>
+<li class="task">Judge calls run at temperature zero with a fixed seed where the provider supports one</li>
+<li class="task">Each rubric covers exactly one criterion and lives in a file with its version in the name</li>
+<li class="task">Every rubric level is written concretely enough that two people applying it would agree</li>
+<li class="task">The verdict schema places reasoning before the score, and the scale has five or fewer points</li>
+<li class="task">A human-labelled calibration set of at least 100 cases exists, versioned in the repository</li>
+<li class="task">An audit reports agreement, swap consistency and length slope, and it runs monthly as a scheduled job</li>
+<li class="task">Agreement is above 75%; if it is not, the rubric was revised rather than the threshold lowered</li>
+<li class="task">Pairwise comparisons run in both orders, and inconsistent pairs are recorded as ties and counted</li>
+<li class="task">Reported scores have the length effect fitted out, and the raw slope is tracked</li>
+<li class="task">Every score row records case id, prompt version, judge model and rubric version</li>
+<li class="task">Every report displays the judge's current agreement figure alongside the scores</li>
+<li class="task">Cost per run is measured and compared against the hand-grading it replaces</li>
+</ul>
+  </article>
+
+  <aside class="tailpiece">
+    <h2>Use this blueprint</h2>
+    <p>
+      Copy the file into your project and point your agent at it. It works with Claude Code,
+      Cursor, Copilot, ChatGPT and anything else that reads a file — there is nothing to install.
+    </p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/llm-as-judge" target="_blank" rel="noopener">Open on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Browse all blueprints</a>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p><a href="/">Awesome Blueprints</a> — same request, same architecture, every time.</p>
+    <p class="dim">MIT · awesomeblueprints.com</p>
+  </div>
+</footer>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'neutral' });
+</script>
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const now = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', now);
+    try { localStorage.setItem('ab-theme', now); } catch (e) {}
+    location.reload();   // the diagram is themed at render time
+  });
+</script>
+
+</body>
+</html>

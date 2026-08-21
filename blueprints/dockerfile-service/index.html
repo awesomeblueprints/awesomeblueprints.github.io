@@ -1,0 +1,556 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Dockerfile for a Production Service — Blueprint for AI Coding Agents | Awesome Blueprints</title>
+<meta name="description" content="A production Dockerfile: multi-stage builds, non-root users, small images, correct PID 1 signal handling and reproducible dependency layers." />
+<link rel="canonical" href="https://awesomeblueprints.com/blueprints/dockerfile-service/" />
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="Awesome Blueprints" />
+<meta property="og:url" content="https://awesomeblueprints.com/blueprints/dockerfile-service/" />
+<meta property="og:title" content="Dockerfile for a Production Service — Architecture Blueprint" />
+<meta property="og:description" content="A production Dockerfile: multi-stage builds, non-root users, small images, correct PID 1 signal handling and reproducible dependency layers." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Dockerfile for a Production Service — Architecture Blueprint" />
+<meta name="twitter:description" content="A production Dockerfile: multi-stage builds, non-root users, small images, correct PID 1 signal handling and reproducible dependency layers." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/page.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "Dockerfile for a Production Service", "description": "A production Dockerfile: multi-stage builds, non-root users, small images, correct PID 1 signal handling and reproducible dependency layers.", "url": "https://awesomeblueprints.com/blueprints/dockerfile-service/", "dateModified": "2026-08-19", "keywords": "Docker", "isAccessibleForFree": true, "license": "https://opensource.org/licenses/MIT", "publisher": {"@type": "Organization", "name": "Awesome Blueprints", "url": "https://awesomeblueprints.com"}}</script>
+<script>
+  (function () {
+    var t;
+    try { t = localStorage.getItem('ab-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">Awesome Blueprints</a>
+    <div class="nav-right">
+      <a class="nav-link" href="/#blueprints">Catalogue</a>
+      <a class="nav-link" href="/#faq">FAQ</a>
+      <a class="nav-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/dockerfile-service" target="_blank" rel="noopener">GitHub ↗</a>
+      <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Switch theme">◑</button>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/">Home</a> <span>/</span> <a href="/#blueprints">Blueprints</a> <span>/</span>
+    <span>Dockerfile for a Production Service</span>
+  </nav>
+
+  <header class="page-head">
+    <p class="eyebrow">dockerfile-service</p>
+    <h1>Dockerfile for a Production Service</h1>
+    <p class="lede">A production Dockerfile: multi-stage builds, non-root users, small images, correct PID 1 signal handling and reproducible dependency layers.</p>
+    <div class="facts"><span>low</span><span>1 day</span><span>Verified 2026-08-19</span></div>
+    <div class="tags"><span class="tag">Docker</span></div>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/dockerfile-service" target="_blank" rel="noopener">Read it on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Back to the catalogue</a>
+    </div>
+  </header>
+
+  <article class="doc">
+<blockquote>
+<p>A multi-stage build where the dependency layer is cached separately from the
+code, the runtime image carries no compiler, the process runs unprivileged, and
+the container stops when it is asked to instead of being killed ten seconds later.</p>
+</blockquote>
+<p><strong>Complexity:</strong> low · <strong>Typical build:</strong> 1 day · <strong>Verified:</strong> 2026-08-19 (re-check after ~90 days)</p>
+<p><strong>Examples in:</strong> Python, with <code>uv</code> and a Debian slim base. The architecture is language-agnostic: sections 5, 10 and 11 hold wherever you build this. Section 4 is illustrative — if your project is in another language, your agent translates the idioms rather than importing them, and nothing is lost. The equivalents are <code>npm ci --omit=dev</code> from a <code>package-lock.json</code> in Node, a static binary from <code>CGO_ENABLED=0 go build</code> in Go, and a release build copied out of a <code>mix release</code> stage in Elixir.</p>
+<p><strong>Use when:</strong> a service needs an image that ships to a registry and runs somewhere you do not control — a rolling deploy, a scheduler, a colleague's machine — and you want the same bytes to run in all three.</p>
+<p><strong>Not for:</strong> the local development container, which wants the opposite trade-offs: source mounted rather than copied, a reload watcher, dev dependencies present. Building one image that tries to be both produces an image with a compiler in it and a slow inner loop.</p>
+<hr />
+<h2>⚙️ INSTRUCTIONS FOR THE AI — READ BEFORE WRITING ANY CODE</h2>
+<p><strong>Do not start coding.</strong></p>
+<p><strong>Step 1 — Refresh.</strong> Verify the current stable tag of the base image and whether
+the project's language runtime version is pinned by a file in the repository
+(<code>.python-version</code>, <code>.nvmrc</code>, <code>go.mod</code>). Verify the dependency tool and its lock
+file format, and the flags that install from the lock without resolving. Confirm
+the current syntax for BuildKit cache mounts. Find out where this image will run —
+Kubernetes, ECS, Compose, a bare daemon — because the stop grace period and
+whether an init process is available differ, and §10 has failures that only appear
+under one of them. Report what you verified and what turned out wrong.</p>
+<p><strong>Step 2 — Read the project, then audit what already exists.</strong> Find any existing
+Dockerfile and record: base image and tag, whether it is multi-stage, which user
+the process runs as, whether <code>CMD</code> is exec form or shell form, and what the build
+context currently contains. Measure the current image size and the time of an
+incremental build after a one-line code change — those two numbers are the
+baseline this work is judged against. Find whether a <code>.dockerignore</code> exists.
+Determine whether the application handles <code>SIGTERM</code> at all. Then audit §11 item by
+item, each marked <em>already true</em>, <em>partly true</em> or <em>absent</em>, with the file that
+decides it, reported before anything is proposed.</p>
+<p>Assume the project is right until it demonstrably is not; code satisfying an item
+stays even where its shape differs from §4; replacing something that works needs a
+one-line reason; never delete a working path to make room for the blueprint's
+version. The same holds for language — §4 is illustrative, its idioms get
+translated into the project's language, and §11 is what has to become true rather
+than the syntax.</p>
+<p><strong>Step 3 — Write a plan for the gap only, and get it approved</strong>, including a
+<code>## Proposed stack</code> section naming the base image and tag with a one-line reason,
+and the before-and-after numbers for image size and incremental build time. Do not
+ask open framework questions — propose, and ask for confirmation once. Say what
+you are adding, what you are leaving alone, and what you propose to change, and
+touch nothing else.</p>
+<p><strong>Step 4 — Build in the order in §7.</strong> <strong>Step 5 — §11 is the definition of done.</strong></p>
+<hr />
+<h2>1. Why the obvious Dockerfile is expensive twice</h2>
+<p>The obvious version copies everything, installs, and runs. It produces a correct
+image, and it costs you on every build and every deploy.</p>
+<table>
+<thead>
+<tr>
+<th>Copy, install, run</th>
+<th>Multi-stage, ordered by change rate</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>One character of code invalidates the dependency layer and reinstalls everything</td>
+<td>Dependencies are their own layer, keyed by the lock file; code changes rebuild seconds, not minutes</td>
+</tr>
+<tr>
+<td>The compiler and headers used to build wheels ship to production</td>
+<td>The runtime stage never sees them; the attack surface and the image both shrink</td>
+</tr>
+<tr>
+<td>The process runs as root because nothing said otherwise</td>
+<td>An unprivileged user, so a container escape starts from a worse position</td>
+</tr>
+<tr>
+<td><code>CMD python app.py</code> starts a shell that never forwards signals</td>
+<td>The process is PID 1 and receives <code>SIGTERM</code> directly</td>
+</tr>
+</tbody>
+</table>
+<p>The last row is the one that produces user-visible damage and is never
+investigated, because it does not look like an error. Shell-form <code>CMD</code> runs your
+process as a child of <code>/bin/sh</code>. <code>SIGTERM</code> goes to the shell, the shell does not
+forward it, and the daemon waits out its grace period — <strong>ten seconds by default
+on Linux</strong> — before <code>SIGKILL</code>. Every deploy therefore severs whatever was in
+flight, and the only trace is a small, steady rate of client-side errors during
+rollouts that everyone assumes is normal.</p>
+<p>There is a second half to it: a process that <em>is</em> PID 1 gets no default signal
+handlers from the kernel. Exec form is necessary but not sufficient — the
+application must also install a handler, or run under an init that does.</p>
+<h2>2. Architecture</h2>
+<pre class="mermaid">%% GENERATED - do not edit by hand.
+%% Edit the source header in architecture.mmd, then rebuild.
+%% Build stages and what crosses between them
+
+flowchart TB
+    subgraph build[&quot;Build stage&quot;]
+        direction TB
+        toolchain[&quot;Compiler and headers&quot;]
+        resolve[&quot;Install from the lock file&quot;]
+        venv[&quot;Built dependency tree&quot;]
+    end
+    subgraph final[&quot;Runtime stage&quot;]
+        direction TB
+        base[&quot;Slim base, no toolchain&quot;]
+        deps[&quot;Copied dependency tree&quot;]
+        code[&quot;Application code&quot;]
+        user[&quot;Unprivileged user&quot;]
+    end
+
+    author([&quot;Developer or CI&quot;])
+    registry{{&quot;Image registry&quot;}}
+    runtime([&quot;Orchestrator&quot;])
+    image[&quot;Final image&quot;]
+    proc[&quot;Process as PID 1&quot;]
+
+    author ---|&quot;lock file only, code excluded&quot;| resolve
+    resolve ---|&quot;available here and only here&quot;| toolchain
+    resolve --&gt; venv
+    venv --&gt;|&quot;copied across the stage boundary&quot;| deps
+    base --- deps
+    deps ---|&quot;copied last, changes most often&quot;| code
+    code --- user
+    user --&gt; image
+    image -.-&gt;|&quot;pushed with an immutable tag&quot;| registry
+    registry -.-&gt;|&quot;pulled&quot;| runtime
+    runtime --&gt;|&quot;starts, and sends a stop signal later&quot;| proc
+
+    classDef service fill:#eff6ff,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b;
+    classDef datastore fill:#e9faf3,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b;
+    classDef external fill:#fff4ed,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b;
+    classDef actor fill:#f0eefc,stroke:#4a3aa7,stroke-width:1.5px,color:#0b0b0b;
+    class toolchain,resolve,venv,base,deps,code,user,image,proc service;
+    class registry external;
+    class author,runtime actor;</pre>
+<p>The rule the diagram encodes: <strong>only the built dependency tree crosses the stage
+boundary.</strong> Nothing that was needed to produce it — compiler, headers, caches,
+source archives — has an arrow into the runtime stage. If something does, the
+split has bought you nothing.</p>
+<h2>3. Project structure</h2>
+<div class="hl"><pre><span></span><code>Dockerfile              both stages, and both targets
+.dockerignore           what never enters the build context
+pyproject.toml          the dependency declaration
+uv.lock                 the resolved versions — committed, and the cache key
+</code></pre></div>
+
+<p><strong>One rule: <code>.dockerignore</code> is written before the first build, not after.</strong>
+Everything in the build context is sent to the daemon and can silently land in a
+layer — <code>.git</code>, <code>.env</code>, <code>node_modules</code>, test fixtures, a local database file. A
+secret that reaches a layer stays in the image even if a later layer deletes it,
+and the image is what you push to a registry.</p>
+<h2>4. Reference implementation</h2>
+<div class="hl"><pre><span></span><code><span class="c"># syntax=docker/dockerfile:1</span>
+
+<span class="c"># ---------- build stage ----------</span>
+<span class="c"># Pinned by digest as well as tag: a tag is a moving pointer, so &quot;the same</span>
+<span class="c"># Dockerfile&quot; can produce different images next month and you cannot reproduce the</span>
+<span class="c"># one that is currently in production.</span>
+<span class="k">FROM</span><span class="w"> </span><span class="s">python:3.13-slim-bookworm@sha256:REPLACE_WITH_REAL_DIGEST</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="s">build</span>
+
+<span class="k">COPY</span><span class="w"> </span>--from<span class="o">=</span>ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+<span class="k">ENV</span><span class="w"> </span><span class="nv">UV_COMPILE_BYTECODE</span><span class="o">=</span><span class="m">1</span> <span class="se">\</span>
+    <span class="nv">UV_LINK_MODE</span><span class="o">=</span>copy <span class="se">\</span>
+    <span class="nv">UV_PYTHON_DOWNLOADS</span><span class="o">=</span>never
+
+<span class="k">WORKDIR</span><span class="w"> </span><span class="s">/app</span>
+
+<span class="c"># Dependencies first, code second. This ordering is the entire caching strategy:</span>
+<span class="c"># the lock file changes weekly, the code changes hourly, and Docker invalidates</span>
+<span class="c"># every layer after the first one that changed.</span>
+<span class="k">COPY</span><span class="w"> </span>pyproject.toml uv.lock ./
+<span class="c"># --frozen fails if the lock is out of date with pyproject, so a build cannot</span>
+<span class="c"># quietly resolve to versions nobody reviewed.</span>
+<span class="c"># --no-install-project installs only dependencies; the project itself is not</span>
+<span class="c"># copied yet, so this layer survives every code change.</span>
+<span class="k">RUN</span><span class="w"> </span>--mount<span class="o">=</span><span class="nv">type</span><span class="o">=</span>cache,target<span class="o">=</span>/root/.cache/uv <span class="se">\</span>
+    uv sync --frozen --no-dev --no-install-project
+
+<span class="c"># Now the code, and the project itself into the same environment.</span>
+<span class="k">COPY</span><span class="w"> </span>. .
+<span class="k">RUN</span><span class="w"> </span>--mount<span class="o">=</span><span class="nv">type</span><span class="o">=</span>cache,target<span class="o">=</span>/root/.cache/uv <span class="se">\</span>
+    uv sync --frozen --no-dev
+
+<span class="c"># ---------- runtime stage ----------</span>
+<span class="k">FROM</span><span class="w"> </span><span class="s">python:3.13-slim-bookworm@sha256:REPLACE_WITH_REAL_DIGEST</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="s">runtime</span>
+
+<span class="c"># Created before anything is copied, so ownership is right without a recursive</span>
+<span class="c"># chown — which would otherwise duplicate the whole tree into another layer.</span>
+<span class="k">RUN</span><span class="w"> </span>groupadd --system --gid <span class="m">1001</span> app <span class="se">\</span>
+ <span class="o">&amp;&amp;</span> useradd --system --uid <span class="m">1001</span> --gid app --no-create-home app
+
+<span class="k">WORKDIR</span><span class="w"> </span><span class="s">/app</span>
+
+<span class="k">COPY</span><span class="w"> </span>--from<span class="o">=</span>build --chown<span class="o">=</span>app:app /app/.venv /app/.venv
+<span class="k">COPY</span><span class="w"> </span>--from<span class="o">=</span>build --chown<span class="o">=</span>app:app /app/app /app/app
+
+<span class="k">ENV</span><span class="w"> </span><span class="nv">PATH</span><span class="o">=</span><span class="s2">&quot;/app/.venv/bin:</span><span class="nv">$PATH</span><span class="s2">&quot;</span> <span class="se">\</span>
+    <span class="nv">PYTHONUNBUFFERED</span><span class="o">=</span><span class="m">1</span> <span class="se">\</span>
+    <span class="nv">PYTHONDONTWRITEBYTECODE</span><span class="o">=</span><span class="m">1</span>
+
+<span class="k">USER</span><span class="w"> </span><span class="s">app</span>
+
+<span class="k">EXPOSE</span><span class="w"> </span><span class="s">8000</span>
+
+<span class="c"># Exec form. Shell form would start /bin/sh as PID 1, and the shell does not</span>
+<span class="c"># forward SIGTERM — so the daemon waits out its grace period and SIGKILLs the</span>
+<span class="c"># container, severing in-flight requests on every deploy.</span>
+<span class="c"># --init gives a real init as PID 1: it forwards signals and reaps zombies, which</span>
+<span class="c"># a language runtime as PID 1 does not do. Compose sets it per service; Kubernetes</span>
+<span class="c"># has no equivalent flag, so there you either install tini or handle SIGTERM in</span>
+<span class="c"># the application. Do one of them; do not assume.</span>
+<span class="k">CMD</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;uvicorn&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;app.main:app&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;--host&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;0.0.0.0&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;--port&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;8000&quot;</span><span class="p">]</span>
+
+<span class="c"># Deliberately absent: HEALTHCHECK. Under an orchestrator the platform&#39;s own probes</span>
+<span class="c"># decide readiness, and a second definition here is one more thing to keep in sync</span>
+<span class="c"># that nothing reads. Add it only when the target is a bare daemon or Compose.</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code># .dockerignore
+.git
+.gitignore
+.venv
+__pycache__/
+*.pyc
+.env
+.env.*
+tests/
+docs/
+compose*.yaml
+Dockerfile
+.dockerignore
+*.md
+.pytest_cache/
+.ruff_cache/
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/main.py — the other half of stopping cleanly</span>
+<span class="kn">import</span> <span class="nn">signal</span>
+<span class="kn">from</span> <span class="nn">contextlib</span> <span class="kn">import</span> <span class="n">asynccontextmanager</span>
+<span class="kn">from</span> <span class="nn">fastapi</span> <span class="kn">import</span> <span class="n">FastAPI</span>
+
+
+<span class="nd">@asynccontextmanager</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">lifespan</span><span class="p">(</span><span class="n">app</span><span class="p">:</span> <span class="n">FastAPI</span><span class="p">):</span>
+    <span class="k">yield</span>
+    <span class="c1"># Runs on SIGTERM because the server installs a handler. Exec form gets the</span>
+    <span class="c1"># signal to the process; this is what makes the process do something with it.</span>
+    <span class="c1"># Without both halves the container is killed at the end of the grace period.</span>
+    <span class="k">await</span> <span class="n">drain_background_work</span><span class="p">()</span>
+</code></pre></div>
+
+<h2>5. Golden-standard rules</h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Forbidden:</strong> shell-form <code>CMD</code> or <code>ENTRYPOINT</code></td>
+<td>The shell becomes PID 1 and does not forward <code>SIGTERM</code>, so every stop is a kill after the grace period and every deploy severs in-flight work.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> running as root</td>
+<td>It is the default only because nothing said otherwise, and it turns a container escape from difficult into routine.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> a build that resolves dependencies instead of installing a lock</td>
+<td>Two builds of the same commit then produce different images, and the one in production is not the one you tested.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> copying the whole context before installing dependencies</td>
+<td>It invalidates the dependency layer on every code change, which is the difference between a five-second build and a five-minute one.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> secrets as build arguments or <code>ENV</code></td>
+<td>Both are recorded in the image metadata and survive any later deletion. Use a build secret mount, or inject at runtime.</td>
+</tr>
+<tr>
+<td>The base image is pinned by digest, not only by tag</td>
+<td>A tag moves. Pinned by tag alone, the same Dockerfile produces a different image next month and the one in production cannot be reproduced.</td>
+</tr>
+<tr>
+<td>The runtime stage contains no compiler or headers</td>
+<td>If it does, the multi-stage split bought nothing but complexity.</td>
+</tr>
+<tr>
+<td><code>.dockerignore</code> exists before the first build</td>
+<td>Anything in the context can land in a layer, and a secret in a layer stays in the image after it is deleted.</td>
+</tr>
+<tr>
+<td>The user is created before files are copied, and copies set ownership</td>
+<td>A recursive <code>chown</code> afterwards rewrites every file into a new layer, often doubling the image.</td>
+</tr>
+<tr>
+<td>Signals are handled by the application or by an init process, decided explicitly</td>
+<td>Exec form delivers the signal; something still has to act on it. PID 1 gets no default handlers.</td>
+</tr>
+<tr>
+<td><code>HEALTHCHECK</code> only when nothing else probes the container</td>
+<td>Under an orchestrator it duplicates the platform's probes and drifts from them.</td>
+</tr>
+<tr>
+<td>Dev and prod are separate targets in one file</td>
+<td>Shared base layers, different final stages. One image trying to be both ships a compiler and still has a slow inner loop.</td>
+</tr>
+</tbody>
+</table>
+<h2>6. Data contracts</h2>
+<p>The contract is the image, and it has four observable properties:</p>
+<div class="hl"><pre><span></span><code>starts as an unprivileged user      id -u inside the container is not 0
+stops on SIGTERM                    exits before the grace period, with code 0
+same input, same output             the same commit and lock produce the same digest
+carries no build toolchain          no compiler, no headers, no package caches
+</code></pre></div>
+
+<p>These are testable from outside the image without knowing what is in it, which is
+the point — they are the things a platform, a scanner and a colleague rely on, and
+none of them can read your Dockerfile.</p>
+<h2>7. Build order</h2>
+<ol>
+<li><strong>Single-stage build that runs</strong>, with exec-form <code>CMD</code>. Record the image size
+   and the incremental build time — these are the numbers to beat.</li>
+<li><strong><code>.dockerignore</code></strong>, then rebuild and confirm the context shrank.</li>
+<li><strong>Split into build and runtime stages</strong>, copying only the dependency tree.
+   Confirm no compiler in the final image.</li>
+<li><strong>Reorder so dependencies install before code is copied</strong>, and confirm a
+   one-line code change rebuilds without reinstalling.</li>
+<li><strong>Non-root user</strong>, with ownership set during the copies rather than after.</li>
+<li><strong>Prove the stop path</strong>: send <code>SIGTERM</code> to a container with an in-flight
+   request and confirm it exits cleanly, before the grace period, with the request
+   completed.</li>
+<li><strong>Pin the base by digest and add the dev target.</strong></li>
+</ol>
+<p>Step 6 late but never last: it is the item most likely to be skipped, and the only
+one whose absence is invisible until it is costing you requests on every deploy.</p>
+<h2>8. Blocks to pull in</h2>
+<p>Nothing here is a prerequisite. These are adjacent problems, by name only —
+resolve them separately if they apply.</p>
+<ul>
+<li>Docker Compose dev environment — the local stack this image's dev target joins</li>
+<li>GitHub Actions CD — where this image is built, tagged and pushed</li>
+<li>PostgreSQL connection pool and lifecycle — the drain this image's stop signal triggers</li>
+<li>Typed config and settings — what the container reads from its environment at start</li>
+</ul>
+<h2>9. Metrics</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Final image size</td>
+<td>&lt; 250 MB for a Python service; measure and record yours</td>
+</tr>
+<tr>
+<td>Incremental build after a one-line code change</td>
+<td>&lt; 15 s</td>
+</tr>
+<tr>
+<td>Rebuild after a dependency change</td>
+<td>&lt; 90 s with a warm cache mount</td>
+</tr>
+<tr>
+<td>Time from <code>SIGTERM</code> to exit</td>
+<td>&lt; 5 s, and always under the platform's grace period</td>
+</tr>
+<tr>
+<td>Requests failed during a rolling restart</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Processes running as UID 0 in the container</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Critical vulnerabilities in the runtime image</td>
+<td>0 at build time, scanned in CI</td>
+</tr>
+</tbody>
+</table>
+<h2>10. Failure modes</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A small, steady rate of client errors during every deploy, and nobody can reproduce it</td>
+<td>Shell-form <code>CMD</code>: the shell is PID 1 and swallows <code>SIGTERM</code>, so the container is <code>SIGKILL</code>ed at the end of the grace period with requests in flight</td>
+<td>Exec form, and handle the signal in the application</td>
+</tr>
+<tr>
+<td>The container exits immediately on <code>SIGTERM</code> with work unfinished</td>
+<td>Exec form is right, but nothing installed a handler — PID 1 gets no defaults</td>
+<td>Handle the signal in the application, or run under an init process</td>
+</tr>
+<tr>
+<td>Every build takes minutes even for a one-word change</td>
+<td>The code is copied before dependencies are installed, invalidating that layer every time</td>
+<td>Copy the lock file and install first; copy code last</td>
+</tr>
+<tr>
+<td>The image is far larger than the application</td>
+<td>The runtime stage inherits the build toolchain, or a recursive <code>chown</code> duplicated the file tree</td>
+<td>Copy only the dependency tree across; set ownership in the <code>COPY</code></td>
+</tr>
+<tr>
+<td>Two builds of the same commit produce different behaviour</td>
+<td>Dependencies were resolved at build time rather than installed from a lock, or the base tag moved</td>
+<td><code>--frozen</code> from a committed lock; pin the base by digest</td>
+</tr>
+<tr>
+<td>A scanner reports a secret in the image, and it is not in the current filesystem</td>
+<td>It was added in an earlier layer and deleted in a later one; layers are additive</td>
+<td>Rebuild without it; rotate the secret — it is in the registry history</td>
+</tr>
+<tr>
+<td>The build sends gigabytes to the daemon before starting</td>
+<td>No <code>.dockerignore</code>, so <code>.git</code> and local artefacts are part of the context</td>
+<td>Add one, then confirm the context size dropped</td>
+</tr>
+<tr>
+<td>The application cannot write its temp files or bind its port</td>
+<td>It runs unprivileged now; the paths it writes are root-owned, or the port is below 1024</td>
+<td>Set ownership on those paths; bind above 1024 and map at the platform</td>
+</tr>
+<tr>
+<td>The container is reported unhealthy under an orchestrator while the platform probe passes</td>
+<td>A <code>HEALTHCHECK</code> in the image disagrees with the platform's probe</td>
+<td>Remove the image-level check where a platform probes it</td>
+</tr>
+<tr>
+<td>Zombie processes accumulate in a long-running container</td>
+<td>The runtime as PID 1 does not reap children, and something in the process spawns subprocesses</td>
+<td>Run under an init that reaps</td>
+</tr>
+</tbody>
+</table>
+<h2>11. Definition of done</h2>
+<ul>
+<li class="task"><code>docker run --rm &lt;image&gt; id -u</code> returns a non-zero UID</li>
+<li class="task"><code>CMD</code> and <code>ENTRYPOINT</code> are exec form, verified by inspecting the image config rather than by reading the Dockerfile</li>
+<li class="task">Sending <code>SIGTERM</code> to a container with an in-flight request results in exit code 0 before the platform's grace period, with the request completed — covered by a test in CI</li>
+<li class="task">Changing one line of application code and rebuilding does not reinstall dependencies, verified by the build log</li>
+<li class="task">The runtime image contains no compiler and no package-manager cache, verified by running the build tool inside it and expecting failure</li>
+<li class="task">Building the same commit twice produces the same image digest</li>
+<li class="task">The base image is pinned by digest, and a scheduled job checks whether a newer digest exists for that tag</li>
+<li class="task"><code>.dockerignore</code> excludes <code>.git</code>, <code>.env*</code> and test directories, verified by listing the image's filesystem</li>
+<li class="task">No secret appears in <code>docker history</code> or in the image config</li>
+<li class="task">Image size and incremental build time are recorded, and CI fails if either exceeds an agreed ceiling</li>
+<li class="task">A dev target exists in the same file and shares the dependency layers with the production target</li>
+</ul>
+  </article>
+
+  <aside class="tailpiece">
+    <h2>Use this blueprint</h2>
+    <p>
+      Copy the file into your project and point your agent at it. It works with Claude Code,
+      Cursor, Copilot, ChatGPT and anything else that reads a file — there is nothing to install.
+    </p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/dockerfile-service" target="_blank" rel="noopener">Open on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Browse all blueprints</a>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p><a href="/">Awesome Blueprints</a> — same request, same architecture, every time.</p>
+    <p class="dim">MIT · awesomeblueprints.com</p>
+  </div>
+</footer>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'neutral' });
+</script>
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const now = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', now);
+    try { localStorage.setItem('ab-theme', now); } catch (e) {}
+    location.reload();   // the diagram is themed at render time
+  });
+</script>
+
+</body>
+</html>

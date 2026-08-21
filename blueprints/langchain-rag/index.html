@@ -1,0 +1,564 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LangChain RAG Retrieval Chain — Blueprint for AI Coding Agents | Awesome Blueprints</title>
+<meta name="description" content="A LangChain RAG retrieval chain: retriever, prompt and parser wired for grounded answers, including the follow-up question most chains fail." />
+<link rel="canonical" href="https://awesomeblueprints.com/blueprints/langchain-rag/" />
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="Awesome Blueprints" />
+<meta property="og:url" content="https://awesomeblueprints.com/blueprints/langchain-rag/" />
+<meta property="og:title" content="LangChain RAG Retrieval Chain — Architecture Blueprint" />
+<meta property="og:description" content="A LangChain RAG retrieval chain: retriever, prompt and parser wired for grounded answers, including the follow-up question most chains fail." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="LangChain RAG Retrieval Chain — Architecture Blueprint" />
+<meta name="twitter:description" content="A LangChain RAG retrieval chain: retriever, prompt and parser wired for grounded answers, including the follow-up question most chains fail." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/page.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "LangChain RAG Retrieval Chain", "description": "A LangChain RAG retrieval chain: retriever, prompt and parser wired for grounded answers, including the follow-up question most chains fail.", "url": "https://awesomeblueprints.com/blueprints/langchain-rag/", "dateModified": "2026-08-19", "keywords": "LangChain, Retrieval, Evals", "isAccessibleForFree": true, "license": "https://opensource.org/licenses/MIT", "publisher": {"@type": "Organization", "name": "Awesome Blueprints", "url": "https://awesomeblueprints.com"}}</script>
+<script>
+  (function () {
+    var t;
+    try { t = localStorage.getItem('ab-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">Awesome Blueprints</a>
+    <div class="nav-right">
+      <a class="nav-link" href="/#blueprints">Catalogue</a>
+      <a class="nav-link" href="/#faq">FAQ</a>
+      <a class="nav-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/langchain-rag" target="_blank" rel="noopener">GitHub ↗</a>
+      <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Switch theme">◑</button>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/">Home</a> <span>/</span> <a href="/#blueprints">Blueprints</a> <span>/</span>
+    <span>LangChain RAG Retrieval Chain</span>
+  </nav>
+
+  <header class="page-head">
+    <p class="eyebrow">langchain-rag</p>
+    <h1>LangChain RAG Retrieval Chain</h1>
+    <p class="lede">A LangChain RAG retrieval chain: retriever, prompt and parser wired for grounded answers, including the follow-up question most chains fail.</p>
+    <div class="facts"><span>medium</span><span>2–4 days</span><span>Verified 2026-08-19</span></div>
+    <div class="tags"><span class="tag">LangChain</span><span class="tag">Retrieval</span><span class="tag">Evals</span></div>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/langchain-rag" target="_blank" rel="noopener">Read it on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Back to the catalogue</a>
+    </div>
+  </header>
+
+  <article class="doc">
+<blockquote>
+<p>A retrieval chain over a vector store you already have: the follow-up question
+rewritten before it is embedded, retrieved passages assembled with citations the
+answer can be checked against, and an explicit answer for "nothing relevant was
+found" instead of an invented one.</p>
+</blockquote>
+<p><strong>Complexity:</strong> medium · <strong>Typical build:</strong> 2–4 days · <strong>Verified:</strong> 2026-08-19 (re-check after ~90 days)</p>
+<p><strong>Examples in:</strong> Python, with LangChain. The architecture is language-agnostic: sections 5, 10 and 11 hold wherever you build this. Section 4 is illustrative — if your project is in another language, your agent translates the idioms rather than importing them, and nothing is lost. The rewrite, assembly, grounding and empty-result concerns are properties of retrieval, not of any framework — they apply equally to a chain you write by hand.</p>
+<p><strong>Use when:</strong> documents are already indexed and searchable, and what is missing is the path from a user's question to a grounded answer — including the second question, which is where most retrieval chains fall over.</p>
+<p><strong>Not for:</strong> building the index. Chunking, embedding and ingestion decide most of the answer quality and are a separate problem; a retrieval chain over a badly chunked corpus retrieves fragments correctly and answers wrongly. Also not for a corpus small enough to fit in the context window — retrieval there adds a failure mode and removes nothing.</p>
+<hr />
+<h2>⚙️ INSTRUCTIONS FOR THE AI — READ BEFORE WRITING ANY CODE</h2>
+<p><strong>Do not start coding.</strong></p>
+<p><strong>Step 1 — Refresh.</strong> Verify the installed LangChain major and what moved out of
+the core package in its last major release, because most retrieval examples in
+circulation predate that split. Verify the retriever interface for the store this
+project uses, and specifically how metadata filters are expressed — that syntax is
+store-specific and is where copied examples fail. Confirm the current names for
+structured output and for attaching a runtime configuration to a chain. Report
+what you verified and what turned out wrong.</p>
+<p><strong>Step 2 — Read the project, then audit what already exists.</strong> Find the vector
+store, and record: what a stored chunk's metadata actually contains, whether it
+carries a stable document identifier, and whether it carries anything a citation
+could point at — a title, a page, a URL. <strong>If it does not, citations are an
+ingestion change, not a chain change</strong>, and saying so now is worth more than
+building around it. Establish whether the store is multi-tenant and how a tenant
+is identified. Find whether any evaluation set exists. Then audit §11 item by
+item, each marked <em>already true</em>, <em>partly true</em> or <em>absent</em>, with the file that
+decides it, reported before anything is proposed.</p>
+<p>Assume the project is right until it demonstrably is not; code satisfying an item
+stays even where its shape differs from §4; replacing something that works needs a
+one-line reason; never delete a working path to make room for the blueprint's
+version. The same holds for language — §4 is illustrative, its idioms get
+translated into the project's language, and §11 is what has to become true rather
+than the syntax.</p>
+<p><strong>Step 3 — Write a plan for the gap only, and get it approved</strong>, including a
+<code>## Proposed stack</code> section and what the chain does when retrieval returns
+nothing. Do not ask open framework questions — propose, and ask for confirmation
+once. Say what you are adding, what you are leaving alone, and what you propose to
+change, and touch nothing else.</p>
+<p><strong>Step 4 — Build in the order in §7.</strong> <strong>Step 5 — §11 is the definition of done.</strong></p>
+<hr />
+<h2>1. Where retrieval chains actually fail</h2>
+<p>Composition is not the hard part here — the pieces fit together in an afternoon.
+The failures are all in the retriever and the prompt.</p>
+<table>
+<thead>
+<tr>
+<th>The tutorial retrieval chain</th>
+<th>This one</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Embeds the user's message as typed</td>
+<td>Rewrites it into a standalone question first, because "and the second one?" retrieves nothing</td>
+</tr>
+<tr>
+<td>Fetches a fixed number of chunks and pastes them in</td>
+<td>Assembles a bounded context with identifiers the answer can cite</td>
+</tr>
+<tr>
+<td>Answers from whatever came back</td>
+<td>Says it does not know when nothing relevant came back</td>
+</tr>
+<tr>
+<td>Returns prose</td>
+<td>Returns prose plus the sources it used, checkable</td>
+</tr>
+</tbody>
+</table>
+<p>The first row is the one that separates a demo from a product. The demo is tested
+with one question at a time. In use, the second message is "and for the previous
+quarter?" — five words with no nouns. Embedded as typed it retrieves nothing
+useful, so the model answers from the first question's context and is confidently
+wrong about the second. <strong>The rewrite step is not an optimisation; it is what makes
+a conversation possible at all.</strong></p>
+<p>The third row is the one that produces the incident. A vector search always
+returns its top-k — similarity has no threshold and no concept of "nothing here".
+Ask about a topic the corpus does not cover and you get the <em>k least dissimilar</em>
+passages, which are irrelevant, and a model handed irrelevant context will
+generally use it. The absence of an answer must be a decision the chain makes, not
+one you hope the model reaches.</p>
+<h2>2. Architecture</h2>
+<pre class="mermaid">%% GENERATED - do not edit by hand.
+%% Edit the source header in architecture.mmd, then rebuild.
+%% Question to grounded answer
+
+flowchart TB
+    user([&quot;User&quot;])
+    rewrite[&quot;Rewrite into a standalone question&quot;]
+    retriever[&quot;Retriever with filters&quot;]
+    relevance[&quot;Relevance gate&quot;]
+    assemble[&quot;Context assembly with identifiers&quot;]
+    answer[&quot;Answer prompt&quot;]
+    verify[&quot;Citation check&quot;]
+    history[&quot;Conversation history&quot;]
+    store[(&quot;Vector store&quot;)]
+    model{{&quot;Model&quot;}}
+    nothing([&quot;Says it does not know&quot;])
+
+    user --&gt;|&quot;follow up question&quot;| rewrite
+    history --- rewrite
+    rewrite ---|&quot;one small cheap call&quot;| model
+    rewrite --&gt;|&quot;a question that stands alone&quot;| retriever
+    retriever --&gt;|&quot;top k with tenant and metadata filters&quot;| store
+    store --&gt;|&quot;candidates&quot;| relevance
+    relevance -.-&gt;|&quot;nothing above the threshold&quot;| nothing
+    relevance --&gt;|&quot;kept passages&quot;| assemble
+    assemble --&gt;|&quot;bounded context, each passage labelled&quot;| answer
+    answer --- model
+    answer --&gt;|&quot;cited identifiers must exist in the context&quot;| verify
+    verify -.-&gt;|&quot;answer with sources&quot;| user
+    verify -.-&gt;|&quot;cited something that was not retrieved&quot;| nothing
+
+    classDef service fill:#eff6ff,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b;
+    classDef datastore fill:#e9faf3,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b;
+    classDef external fill:#fff4ed,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b;
+    classDef actor fill:#f0eefc,stroke:#4a3aa7,stroke-width:1.5px,color:#0b0b0b;
+    class rewrite,retriever,relevance,assemble,answer,verify,history service;
+    class store datastore;
+    class model external;
+    class user,nothing actor;</pre>
+<p>The rule the diagram encodes: <strong>there are two arrows into "does not know", and
+neither is the model's choice.</strong> One fires when nothing clears the relevance
+threshold; the other when the answer cites a passage that was never retrieved.
+Both are decisions the chain makes about the model's output rather than
+instructions given to it.</p>
+<h2>3. Project structure</h2>
+<div class="hl"><pre><span></span><code>app/rag/
+├── rewrite.py      history plus question to a standalone question
+├── retrieve.py     the retriever, its filters and the relevance gate
+├── assemble.py     passages to a bounded, labelled context
+├── chain.py        the composition
+└── prompts/
+    ├── rewrite.v2.md
+    └── answer.v4.md
+</code></pre></div>
+
+<p><strong>One rule: the retrieved passages are returned alongside the answer, always.</strong>
+Not only when a citation feature is switched on. It costs nothing, it is what
+makes an evaluation possible, and it is the only way to tell a grounded answer
+from a fluent one after the fact.</p>
+<h2>4. Reference implementation</h2>
+<div class="hl"><pre><span></span><code><span class="c1"># app/rag/rewrite.py</span>
+<span class="n">REWRITE</span> <span class="o">=</span> <span class="n">ChatPromptTemplate</span><span class="o">.</span><span class="n">from_messages</span><span class="p">([</span>
+    <span class="p">(</span><span class="s2">&quot;system&quot;</span><span class="p">,</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;app/rag/prompts/rewrite.v2.md&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">read_text</span><span class="p">()),</span>
+    <span class="p">(</span><span class="s2">&quot;human&quot;</span><span class="p">,</span> <span class="s2">&quot;Conversation:</span><span class="se">\n</span><span class="si">{history}</span><span class="se">\n\n</span><span class="s2">Latest message: </span><span class="si">{question}</span><span class="s2">&quot;</span><span class="p">),</span>
+<span class="p">])</span>
+
+<span class="c1"># A small, fast model. This call happens on every turn and its output is one</span>
+<span class="c1"># sentence; paying frontier prices for it doubles cost and latency for no gain.</span>
+<span class="n">rewrite_chain</span> <span class="o">=</span> <span class="n">REWRITE</span> <span class="o">|</span> <span class="n">fast_model</span> <span class="o">|</span> <span class="n">StrOutputParser</span><span class="p">()</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">standalone_question</span><span class="p">(</span><span class="n">question</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">history</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Message</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">history</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">question</span>           <span class="c1"># nothing to resolve against; skip the call entirely</span>
+    <span class="c1"># &quot;And the second one?&quot; embeds to nothing useful. This is the step that turns a</span>
+    <span class="c1"># demo that answers single questions into something that holds a conversation.</span>
+    <span class="k">return</span> <span class="k">await</span> <span class="n">rewrite_chain</span><span class="o">.</span><span class="n">ainvoke</span><span class="p">({</span><span class="s2">&quot;history&quot;</span><span class="p">:</span> <span class="n">render</span><span class="p">(</span><span class="n">history</span><span class="p">[</span><span class="o">-</span><span class="mi">6</span><span class="p">:]),</span>
+                                        <span class="s2">&quot;question&quot;</span><span class="p">:</span> <span class="n">question</span><span class="p">})</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/rag/retrieve.py</span>
+<span class="n">RELEVANCE_FLOOR</span> <span class="o">=</span> <span class="mf">0.35</span>        <span class="c1"># calibrate against your own corpus; see §7 step 3</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">retrieve</span><span class="p">(</span><span class="n">question</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">tenant_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">8</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Passage</span><span class="p">]:</span>
+    <span class="c1"># The tenant filter is not optional and does not belong in the prompt. A</span>
+    <span class="c1"># retriever without it will happily return another customer&#39;s documents, and</span>
+    <span class="c1"># the model will summarise them fluently.</span>
+    <span class="n">hits</span> <span class="o">=</span> <span class="k">await</span> <span class="n">store</span><span class="o">.</span><span class="n">asimilarity_search_with_relevance_scores</span><span class="p">(</span>
+        <span class="n">question</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span> <span class="nb">filter</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;tenant_id&quot;</span><span class="p">:</span> <span class="n">tenant_id</span><span class="p">})</span>
+
+    <span class="c1"># The relevance gate. Vector search has no concept of &quot;nothing here&quot; — it</span>
+    <span class="c1"># returns the k least dissimilar passages whether or not any is relevant. Ask</span>
+    <span class="c1"># about something the corpus does not cover and you get k irrelevant chunks,</span>
+    <span class="c1"># and a model given irrelevant context will use it.</span>
+    <span class="n">kept</span> <span class="o">=</span> <span class="p">[</span><span class="n">Passage</span><span class="o">.</span><span class="n">from_hit</span><span class="p">(</span><span class="n">h</span><span class="p">,</span> <span class="n">score</span><span class="p">)</span> <span class="k">for</span> <span class="n">h</span><span class="p">,</span> <span class="n">score</span> <span class="ow">in</span> <span class="n">hits</span> <span class="k">if</span> <span class="n">score</span> <span class="o">&gt;=</span> <span class="n">RELEVANCE_FLOOR</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">kept</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/rag/assemble.py</span>
+<span class="n">CONTEXT_BUDGET_CHARS</span> <span class="o">=</span> <span class="mi">12_000</span>
+
+
+<span class="k">def</span> <span class="nf">assemble</span><span class="p">(</span><span class="n">passages</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Passage</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Passage</span><span class="p">]]:</span>
+    <span class="sd">&quot;&quot;&quot;Bounded, labelled context plus the map used to check the citations.</span>
+
+<span class="sd">    Labels are short and stable so the model can cite them cheaply, and the map is</span>
+<span class="sd">    what makes a citation verifiable rather than decorative.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">blocks</span><span class="p">,</span> <span class="n">by_label</span><span class="p">,</span> <span class="n">used</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">{},</span> <span class="mi">0</span>
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">passages</span><span class="p">,</span> <span class="n">start</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+        <span class="n">label</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;S</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="n">block</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;[</span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2">] </span><span class="si">{</span><span class="n">p</span><span class="o">.</span><span class="n">title</span><span class="si">}</span><span class="s2"> — </span><span class="si">{</span><span class="n">p</span><span class="o">.</span><span class="n">text</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="c1"># A budget, not a count. Ten chunks of very different sizes is not a</span>
+        <span class="c1"># predictable amount of context, and the overflow is silently truncated by</span>
+        <span class="c1"># the provider — from the end, where the instructions usually are.</span>
+        <span class="k">if</span> <span class="n">used</span> <span class="o">+</span> <span class="nb">len</span><span class="p">(</span><span class="n">block</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">CONTEXT_BUDGET_CHARS</span><span class="p">:</span>
+            <span class="k">break</span>
+        <span class="n">blocks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">block</span><span class="p">);</span> <span class="n">by_label</span><span class="p">[</span><span class="n">label</span><span class="p">]</span> <span class="o">=</span> <span class="n">p</span><span class="p">;</span> <span class="n">used</span> <span class="o">+=</span> <span class="nb">len</span><span class="p">(</span><span class="n">block</span><span class="p">)</span>
+    <span class="k">return</span> <span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">blocks</span><span class="p">),</span> <span class="n">by_label</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/rag/chain.py</span>
+<span class="k">class</span> <span class="nc">Answer</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">text</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">cited</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">list</span><span class="p">)</span>   <span class="c1"># the labels the model used</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">answer_question</span><span class="p">(</span><span class="n">question</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">history</span><span class="p">,</span> <span class="n">tenant_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RagResult</span><span class="p">:</span>
+    <span class="n">standalone</span> <span class="o">=</span> <span class="k">await</span> <span class="n">standalone_question</span><span class="p">(</span><span class="n">question</span><span class="p">,</span> <span class="n">history</span><span class="p">)</span>
+    <span class="n">passages</span> <span class="o">=</span> <span class="k">await</span> <span class="n">retrieve</span><span class="p">(</span><span class="n">standalone</span><span class="p">,</span> <span class="n">tenant_id</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">passages</span><span class="p">:</span>
+        <span class="c1"># Decided here, not asked of the model. An instruction to &quot;say you do not</span>
+        <span class="c1"># know if the context is insufficient&quot; is followed unevenly; a branch is</span>
+        <span class="c1"># followed every time.</span>
+        <span class="k">return</span> <span class="n">RagResult</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="n">NO_ANSWER_TEXT</span><span class="p">,</span> <span class="n">sources</span><span class="o">=</span><span class="p">[],</span> <span class="n">grounded</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="n">context</span><span class="p">,</span> <span class="n">by_label</span> <span class="o">=</span> <span class="n">assemble</span><span class="p">(</span><span class="n">passages</span><span class="p">)</span>
+    <span class="n">answer</span><span class="p">:</span> <span class="n">Answer</span> <span class="o">=</span> <span class="k">await</span> <span class="p">(</span><span class="n">ANSWER_PROMPT</span> <span class="o">|</span> <span class="n">model</span> <span class="o">|</span> <span class="n">parser</span><span class="p">)</span><span class="o">.</span><span class="n">ainvoke</span><span class="p">(</span>
+        <span class="p">{</span><span class="s2">&quot;context&quot;</span><span class="p">:</span> <span class="n">context</span><span class="p">,</span> <span class="s2">&quot;question&quot;</span><span class="p">:</span> <span class="n">standalone</span><span class="p">})</span>
+
+    <span class="c1"># Citation check. A label the model invented means it answered from something</span>
+    <span class="c1"># that was not retrieved — which is the definition of the failure this whole</span>
+    <span class="c1"># pipeline exists to prevent, and it is cheap to detect.</span>
+    <span class="n">invented</span> <span class="o">=</span> <span class="p">[</span><span class="n">label</span> <span class="k">for</span> <span class="n">label</span> <span class="ow">in</span> <span class="n">answer</span><span class="o">.</span><span class="n">cited</span> <span class="k">if</span> <span class="n">label</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">by_label</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">invented</span><span class="p">:</span>
+        <span class="n">log</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;ungrounded citation&quot;</span><span class="p">,</span> <span class="n">extra</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;labels&quot;</span><span class="p">:</span> <span class="n">invented</span><span class="p">})</span>
+        <span class="k">return</span> <span class="n">RagResult</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="n">NO_ANSWER_TEXT</span><span class="p">,</span> <span class="n">sources</span><span class="o">=</span><span class="p">[],</span> <span class="n">grounded</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">RagResult</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="n">answer</span><span class="o">.</span><span class="n">text</span><span class="p">,</span>
+                     <span class="n">sources</span><span class="o">=</span><span class="p">[</span><span class="n">by_label</span><span class="p">[</span><span class="n">label</span><span class="p">]</span> <span class="k">for</span> <span class="n">label</span> <span class="ow">in</span> <span class="n">answer</span><span class="o">.</span><span class="n">cited</span><span class="p">],</span>
+                     <span class="n">grounded</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</code></pre></div>
+
+<h2>5. Golden-standard rules</h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Forbidden:</strong> embedding a follow-up message as typed</td>
+<td>"And the second one?" retrieves nothing useful, so the model answers the previous question's context and is confidently wrong.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> answering from whatever the search returned</td>
+<td>Vector search always returns its top-k. With no threshold, an uncovered topic yields k irrelevant passages and a fluent wrong answer.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> a tenant or permission filter expressed in the prompt</td>
+<td>A filter is a query parameter. Asked of the model, it is a suggestion, and the failure is another customer's data summarised convincingly.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> relying on an instruction to say "I do not know"</td>
+<td>It is followed unevenly. A branch on an empty result is followed every time.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> an unbounded assembled context</td>
+<td>Overflow is truncated silently by the provider, usually from the end, where the instructions are.</td>
+</tr>
+<tr>
+<td>Citations are verified against what was retrieved</td>
+<td>An invented label is direct evidence the answer was not grounded, and checking costs one set membership.</td>
+</tr>
+<tr>
+<td>The rewrite uses a small model</td>
+<td>It runs every turn and produces one sentence; frontier pricing there doubles cost and latency for nothing.</td>
+</tr>
+<tr>
+<td>Retrieved passages are returned with every answer</td>
+<td>It is the only way to tell a grounded answer from a fluent one afterwards, and the only way to evaluate.</td>
+</tr>
+<tr>
+<td>The context budget is characters, not chunks</td>
+<td>Chunks vary in size, so a chunk count is not a predictable amount of context.</td>
+</tr>
+<tr>
+<td>The relevance floor is calibrated against this corpus</td>
+<td>Scores are not comparable across embedding models or corpora, and a borrowed threshold is arbitrary.</td>
+</tr>
+<tr>
+<td>Both prompts are versioned files</td>
+<td>Retrieval quality is judged by evaluation, and an evaluation must be able to name which prompt it scored.</td>
+</tr>
+<tr>
+<td>An empty result is a normal outcome, not an error</td>
+<td>Treating it as a failure teaches everyone to suppress it, which is how the wrong-answer path gets built.</td>
+</tr>
+</tbody>
+</table>
+<h2>6. Data contracts</h2>
+<div class="hl"><pre><span></span><code><span class="n">Passage</span><span class="p">(</span><span class="nb">id</span><span class="o">=...</span><span class="p">,</span> <span class="n">text</span><span class="o">=...</span><span class="p">,</span> <span class="n">title</span><span class="o">=...</span><span class="p">,</span> <span class="n">score</span><span class="o">=</span><span class="mf">0.71</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="o">...</span><span class="p">})</span>
+<span class="n">RagResult</span><span class="p">(</span><span class="n">text</span><span class="o">=...</span><span class="p">,</span> <span class="n">sources</span><span class="o">=</span><span class="p">[</span><span class="n">Passage</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="n">grounded</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</code></pre></div>
+
+<p><code>grounded</code> is the field worth arguing for. It is false when the model cited
+something that was not retrieved, and it separates two failures that look
+identical to a user: an answer the system could not support, and an answer it
+never had the material for. Without it, both arrive as prose and both get believed.</p>
+<p>The relevance score is part of the contract too, and its meaning is local. A score
+is comparable only within one embedding model and one corpus, so the threshold is
+a measured property of this system — not a number to copy from anywhere,
+including from here.</p>
+<h2>7. Build order</h2>
+<ol>
+<li><strong>Retrieve and print, no model.</strong> Run twenty real questions and read what comes
+   back. If the passages are wrong, nothing downstream can fix it, and the problem
+   is ingestion rather than this chain.</li>
+<li><strong>The answer prompt with labelled context and citations</strong>, and a test that the
+   answer's labels exist in what was retrieved.</li>
+<li><strong>Calibrate the relevance floor</strong>: score questions the corpus does answer and
+   questions it does not, and choose the threshold that separates them. Copying a
+   number here means guessing.</li>
+<li><strong>The empty branch</strong>, with a test asking about something the corpus does not
+   contain, asserting the refusal.</li>
+<li><strong>The rewrite step</strong>, with a test on a two-turn conversation whose second
+   question is meaningless alone.</li>
+<li><strong>The tenant filter</strong>, with a test asserting one tenant cannot retrieve
+   another's documents.</li>
+<li><strong>The context budget and the citation check</strong>, then a small evaluation set to
+   measure before tuning further.</li>
+</ol>
+<p>Step 1 before anything else because retrieval quality bounds everything. Time
+spent on the prompt while the retriever returns the wrong passages is time spent
+making a wrong answer read better.</p>
+<h2>8. Blocks to pull in</h2>
+<p>Nothing here is a prerequisite. These are adjacent problems, by name only —
+resolve them separately if they apply.</p>
+<ul>
+<li>Chunking and embeddings for retrieval — what goes into the store, which decides most of the quality</li>
+<li>LangChain LCEL composable chains — the composition and the framework boundary</li>
+<li>Hybrid search: keyword and vector with RRF — for questions containing identifiers and exact phrases</li>
+<li>LLM eval harness — how to measure whether a change helped</li>
+<li>pgvector or Qdrant integration — the store this retrieves from</li>
+</ul>
+<h2>9. Metrics</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Answers citing a passage that was not retrieved</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Questions the corpus cannot answer that receive an answer anyway</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Follow-up questions that retrieve the wrong passages</td>
+<td>Measured before and after the rewrite; the drop is the rewrite's value</td>
+</tr>
+<tr>
+<td>Assembled context size</td>
+<td>Always under budget, verified rather than assumed</td>
+</tr>
+<tr>
+<td>Cross-tenant retrievals</td>
+<td>0, asserted by a test</td>
+</tr>
+<tr>
+<td>Added latency from the rewrite call</td>
+<td>&lt; 400 ms</td>
+</tr>
+<tr>
+<td>Answers returned without their sources</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<h2>10. Failure modes</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The first question is answered well and the second is confidently wrong</td>
+<td>The follow-up was embedded as typed and retrieved nothing relevant</td>
+<td>Rewrite into a standalone question before retrieving</td>
+</tr>
+<tr>
+<td>A question the corpus does not cover gets a detailed answer</td>
+<td>Top-k always returns something, and irrelevant context was used</td>
+<td>A relevance floor, and a branch on the empty result</td>
+</tr>
+<tr>
+<td>One customer's data appears in another's answer</td>
+<td>The tenant filter was in the prompt, or absent</td>
+<td>Filter in the query</td>
+</tr>
+<tr>
+<td>The answer cites a source that does not support it</td>
+<td>Citations were never checked against what was retrieved</td>
+<td>Verify the labels; treat an invented one as ungrounded</td>
+</tr>
+<tr>
+<td>The model ignores its instructions on long documents</td>
+<td>The assembled context overflowed and was truncated from the end</td>
+<td>Budget in characters and stop at the limit</td>
+</tr>
+<tr>
+<td>Retrieval quality is fine and answers are still poor</td>
+<td>The chunks are fragments — a chunking problem, not a chain problem</td>
+<td>Fix ingestion; nothing here can compensate</td>
+</tr>
+<tr>
+<td>A threshold copied from an article rejects everything, or nothing</td>
+<td>Scores are not comparable across embedding models or corpora</td>
+<td>Calibrate against this corpus</td>
+</tr>
+<tr>
+<td>Latency doubled after adding the rewrite</td>
+<td>A frontier model is producing one sentence</td>
+<td>Use a small model, and skip the call when there is no history</td>
+</tr>
+<tr>
+<td>Nobody can tell whether a past answer was grounded</td>
+<td>Sources are not returned or not stored</td>
+<td>Return passages with every answer and keep them</td>
+</tr>
+<tr>
+<td>Answers got worse after a prompt change and there is no way back</td>
+<td>Prompts are inline and unversioned</td>
+<td>Versioned prompt files, recorded per run</td>
+</tr>
+<tr>
+<td>An evaluation shows improvement and users disagree</td>
+<td>The evaluation questions are all answerable; none tests the refusal path</td>
+<td>Include unanswerable questions in the set</td>
+</tr>
+</tbody>
+</table>
+<h2>11. Definition of done</h2>
+<ul>
+<li class="task">A follow-up question that is meaningless in isolation retrieves the correct passages, covered by a two-turn test</li>
+<li class="task">A question about a topic absent from the corpus produces an explicit refusal and no sources, covered by a test</li>
+<li class="task">The relevance threshold was calibrated against this corpus, and the questions used are committed</li>
+<li class="task">Every answer returns the passages it used, and a test asserts sources are present whenever text is</li>
+<li class="task">An answer citing a label that was not retrieved is marked ungrounded and not returned as an answer, covered by a test</li>
+<li class="task">Tenant filtering happens in the query; a test asserts one tenant cannot retrieve another's documents</li>
+<li class="task">The assembled context never exceeds its budget, covered by a test with deliberately oversized passages</li>
+<li class="task">The rewrite step is skipped when there is no history, covered by a test asserting no model call</li>
+<li class="task">Both prompts live in versioned files and the versions appear in traces</li>
+<li class="task">An evaluation set exists containing both answerable and unanswerable questions, and it runs on demand</li>
+<li class="task">Retrieval can be run and inspected independently of the answer step, so a quality problem can be attributed to one or the other</li>
+</ul>
+  </article>
+
+  <aside class="tailpiece">
+    <h2>Use this blueprint</h2>
+    <p>
+      Copy the file into your project and point your agent at it. It works with Claude Code,
+      Cursor, Copilot, ChatGPT and anything else that reads a file — there is nothing to install.
+    </p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/langchain-rag" target="_blank" rel="noopener">Open on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Browse all blueprints</a>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p><a href="/">Awesome Blueprints</a> — same request, same architecture, every time.</p>
+    <p class="dim">MIT · awesomeblueprints.com</p>
+  </div>
+</footer>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'neutral' });
+</script>
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const now = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', now);
+    try { localStorage.setItem('ab-theme', now); } catch (e) {}
+    location.reload();   // the diagram is themed at render time
+  });
+</script>
+
+</body>
+</html>

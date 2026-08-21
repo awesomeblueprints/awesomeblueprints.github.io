@@ -1,0 +1,627 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Redis Rate Limiting and Job Queues — Blueprint for AI Coding Agents | Awesome Blueprints</title>
+<meta name="description" content="Redis rate limiting and job queues: sliding windows, atomic Lua counters, reliable queues, retries, dead letters and clean worker shutdown." />
+<link rel="canonical" href="https://awesomeblueprints.com/blueprints/redis-ratelimit-queue/" />
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="Awesome Blueprints" />
+<meta property="og:url" content="https://awesomeblueprints.com/blueprints/redis-ratelimit-queue/" />
+<meta property="og:title" content="Redis Rate Limiting and Job Queues — Architecture Blueprint" />
+<meta property="og:description" content="Redis rate limiting and job queues: sliding windows, atomic Lua counters, reliable queues, retries, dead letters and clean worker shutdown." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Redis Rate Limiting and Job Queues — Architecture Blueprint" />
+<meta name="twitter:description" content="Redis rate limiting and job queues: sliding windows, atomic Lua counters, reliable queues, retries, dead letters and clean worker shutdown." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/page.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "Redis Rate Limiting and Job Queues", "description": "Redis rate limiting and job queues: sliding windows, atomic Lua counters, reliable queues, retries, dead letters and clean worker shutdown.", "url": "https://awesomeblueprints.com/blueprints/redis-ratelimit-queue/", "dateModified": "2026-08-19", "keywords": "Redis", "isAccessibleForFree": true, "license": "https://opensource.org/licenses/MIT", "publisher": {"@type": "Organization", "name": "Awesome Blueprints", "url": "https://awesomeblueprints.com"}}</script>
+<script>
+  (function () {
+    var t;
+    try { t = localStorage.getItem('ab-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">Awesome Blueprints</a>
+    <div class="nav-right">
+      <a class="nav-link" href="/#blueprints">Catalogue</a>
+      <a class="nav-link" href="/#faq">FAQ</a>
+      <a class="nav-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/redis-ratelimit-queue" target="_blank" rel="noopener">GitHub ↗</a>
+      <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Switch theme">◑</button>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/">Home</a> <span>/</span> <a href="/#blueprints">Blueprints</a> <span>/</span>
+    <span>Redis Rate Limiting and Job Queues</span>
+  </nav>
+
+  <header class="page-head">
+    <p class="eyebrow">redis-ratelimit-queue</p>
+    <h1>Redis Rate Limiting and Job Queues</h1>
+    <p class="lede">Redis rate limiting and job queues: sliding windows, atomic Lua counters, reliable queues, retries, dead letters and clean worker shutdown.</p>
+    <div class="facts"><span>medium</span><span>3–5 days</span><span>Verified 2026-08-19</span></div>
+    <div class="tags"><span class="tag">Redis</span></div>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/redis-ratelimit-queue" target="_blank" rel="noopener">Read it on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Back to the catalogue</a>
+    </div>
+  </header>
+
+  <article class="doc">
+<blockquote>
+<p>Two subsystems on the same Redis with opposite guarantees: a limiter whose
+decisions must be atomic, and a queue whose jobs must survive the worker that
+was holding one when it died.</p>
+</blockquote>
+<p><strong>Complexity:</strong> medium-high · <strong>Typical build:</strong> 3–5 days · <strong>Verified:</strong> 2026-08-19 (re-check after ~90 days)</p>
+<p><strong>Examples in:</strong> Python, with Redis and FastAPI. The architecture is language-agnostic: sections 5, 10 and 11 hold wherever you build this. Section 4 is illustrative — if your project is in another language, your agent translates the idioms rather than importing them, and nothing is lost. The scripted-atomicity and visibility-timeout patterns transfer directly to any Redis client, and to SQS or a database-backed queue with only the primitives changing.</p>
+<p><strong>Use when:</strong> requests must be bounded per caller, or work must happen outside the request — sending mail, generating a document, calling a slow third party — and losing that work is not acceptable.</p>
+<p><strong>Not for:</strong> caching. It shares the server and nothing else: a cache may be lost entirely with no consequence, a queued job may not, and a design that treats them alike will lose jobs to an eviction policy. Also not for scheduled orchestration with dependencies between steps — that is a workflow engine, and building one on a queue is a project rather than a feature.</p>
+<hr />
+<h2>⚙️ INSTRUCTIONS FOR THE AI — READ BEFORE WRITING ANY CODE</h2>
+<p><strong>Do not start coding.</strong></p>
+<p><strong>Step 1 — Refresh.</strong> Verify how to run a script atomically with your client, and
+that it is loaded once and invoked by digest rather than sent per call. <strong>Verify
+the server's <code>maxmemory-policy</code>, and whether the queue shares an instance with a
+cache</strong> — an evicting policy will delete queued jobs to make room for cache
+entries, silently, and this is the failure that makes people distrust queues.
+Verify the current job library's API for retries, dead-lettering and visibility
+timeouts, or confirm you are building those yourself. Report what you verified and
+what turned out wrong.</p>
+<p><strong>Step 2 — Read the project, then audit what already exists.</strong> Find every place
+work happens after a response is returned — a background task, a fire-and-forget
+coroutine, a thread — because each is work with no owner that a deploy discards.
+Find any existing rate limiting, including in-process counters, which do not
+survive a second replica. For each candidate job, determine whether running it
+twice is harmful, since that decides how much idempotency work this needs. Find
+whether Redis is shared with a cache. Then audit §11 item by item, each marked
+<em>already true</em>, <em>partly true</em> or <em>absent</em>, with the file that decides it, reported
+before anything is proposed.</p>
+<p>Assume the project is right until it demonstrably is not; code satisfying an item
+stays even where its shape differs from §4; replacing something that works needs a
+one-line reason; never delete a working path to make room for the blueprint's
+version. The same holds for language — §4 is illustrative, its idioms get
+translated into the project's language, and §11 is what has to become true rather
+than the syntax.</p>
+<p><strong>Step 3 — Write a plan for the gap only, and get it approved</strong>, including a
+<code>## Proposed stack</code> section, the limits with their windows, and for each job type:
+its retry policy, its timeout, and whether it is safe to run twice. Do not ask
+open framework questions — propose, and ask for confirmation once. Say what you
+are adding, what you are leaving alone, and what you propose to change, and touch
+nothing else.</p>
+<p><strong>Step 4 — Build in the order in §7.</strong> <strong>Step 5 — §11 is the definition of done.</strong></p>
+<hr />
+<h2>1. Two subsystems, one server, opposite guarantees</h2>
+<p>These share a dependency and nothing else, and the confusion between them is the
+most expensive mistake available here.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Cache</th>
+<th>Queue</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Losing everything</td>
+<td>Costs a slow hour</td>
+<td>Costs work a user was told had happened</td>
+</tr>
+<tr>
+<td>Eviction under memory pressure</td>
+<td>Correct behaviour</td>
+<td>Silent data loss</td>
+</tr>
+<tr>
+<td>Duplicate processing</td>
+<td>Meaningless</td>
+<td>Sends the email twice, charges the card twice</td>
+</tr>
+<tr>
+<td>The right <code>maxmemory-policy</code></td>
+<td>An evicting one</td>
+<td><code>noeviction</code>, or a separate instance</td>
+</tr>
+</tbody>
+</table>
+<p><strong>If a queue shares an instance with a cache under an evicting policy, jobs are
+deleted to make room for cache entries.</strong> Nothing errors. The job simply never
+runs, and the report is "sometimes the email does not arrive" — which is
+investigated as an email problem for a long time.</p>
+<p>The limiter has its own trap, and it is a two-line one:</p>
+<div class="hl"><pre><span></span><code><span class="n">count</span> <span class="o">=</span> <span class="k">await</span> <span class="n">redis</span><span class="o">.</span><span class="n">incr</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>      <span class="c1"># request A: 1</span>
+<span class="k">if</span> <span class="n">count</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+    <span class="k">await</span> <span class="n">redis</span><span class="o">.</span><span class="n">expire</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="mi">60</span><span class="p">)</span>    <span class="c1"># request B ran INCR between these two lines</span>
+</code></pre></div>
+
+<p>Two requests arriving together both increment before either sets the expiry. If
+the process dies in that window — or if the second request's branch never runs —
+the key has no TTL, the count never resets, and that caller is limited forever.
+Under low traffic the window is invisible; at the traffic that makes a limiter
+worth having, it is not. <strong>Redis executes a script atomically, so read-then-write
+becomes one operation.</strong></p>
+<p>The queue's version of the same problem is the worker that dies holding a job. If
+taking a job removes it from the list, the job is gone. If taking it moves it to a
+per-worker in-flight list, another worker can return it.</p>
+<h2>2. Architecture</h2>
+<pre class="mermaid">%% GENERATED - do not edit by hand.
+%% Edit the source header in architecture.mmd, then rebuild.
+%% Limiter and queue on one server
+
+flowchart TB
+    subgraph limiter[&quot;Rate limiting&quot;]
+        direction TB
+        check[&quot;Limit check&quot;]
+        script[&quot;Atomic script&quot;]
+    end
+    subgraph queue[&quot;Background work&quot;]
+        direction TB
+        enqueue[&quot;Enqueue&quot;]
+        claim[&quot;Claim into an in flight list&quot;]
+        run[&quot;Handler&quot;]
+        reaper[&quot;Reclaim expired claims&quot;]
+        dlq[&quot;Dead letter&quot;]
+    end
+
+    client([&quot;Client&quot;])
+    worker([&quot;Worker process&quot;])
+    api[&quot;API handler&quot;]
+    counters[(&quot;Counter keys with expiry&quot;)]
+    pending[(&quot;Pending list&quot;)]
+    inflight[(&quot;In flight per worker&quot;)]
+    failed[(&quot;Dead letter list&quot;)]
+
+    client --&gt; check
+    check --&gt;|&quot;one round trip, one decision&quot;| script
+    script --&gt; counters
+    check -.-&gt;|&quot;rejected with a retry hint&quot;| client
+    check --&gt;|&quot;allowed&quot;| api
+    api --&gt;|&quot;work that outlives the response&quot;| enqueue
+    enqueue --&gt; pending
+    worker --&gt; claim
+    claim --&gt; pending
+    claim --&gt;|&quot;atomic move, so a crash loses nothing&quot;| inflight
+    claim --&gt; run
+    run --&gt;|&quot;acknowledged and removed&quot;| inflight
+    run -.-&gt;|&quot;failed, requeued with backoff&quot;| pending
+    run -.-&gt;|&quot;out of attempts&quot;| dlq
+    dlq --&gt; failed
+    reaper --&gt;|&quot;claims older than the visibility timeout&quot;| inflight
+    reaper --&gt;|&quot;returned&quot;| pending
+
+    classDef service fill:#eff6ff,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b;
+    classDef datastore fill:#e9faf3,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b;
+    classDef external fill:#fff4ed,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b;
+    classDef actor fill:#f0eefc,stroke:#4a3aa7,stroke-width:1.5px,color:#0b0b0b;
+    class check,script,enqueue,claim,run,reaper,dlq,api service;
+    class counters,pending,inflight,failed datastore;
+    class client,worker actor;</pre>
+<p>The rule the diagram encodes: <strong>a job is in exactly one of pending, in-flight or
+dead-letter at every instant, and every transition is atomic.</strong> A design where a
+job is briefly in neither is a design that loses jobs at exactly the rate its
+workers crash.</p>
+<h2>3. Project structure</h2>
+<div class="hl"><pre><span></span><code>app/
+├── limits/
+│   ├── scripts.py     the limiter script, loaded once
+│   └── deps.py        the dependency that applies a limit to a route
+└── jobs/
+    ├── queue.py       enqueue, claim, acknowledge, requeue
+    ├── worker.py      the loop, the reaper, signal handling
+    └── handlers/      one module per job type
+</code></pre></div>
+
+<p><strong>One rule: a job's payload is an identifier, never an object.</strong> Enqueue an order
+id, not the order. The payload is serialised at enqueue time and read minutes
+later; an embedded object is a snapshot that is already wrong, and it is why a job
+"sends the old email address" long after the user changed it.</p>
+<h2>4. Reference implementation</h2>
+<div class="hl"><pre><span></span><code><span class="c1"># app/limits/scripts.py</span>
+<span class="c1"># One round trip, executed atomically. The two-command version — INCR then EXPIRE —</span>
+<span class="c1"># has a window between them: two concurrent requests both increment before either</span>
+<span class="c1"># sets the TTL, and if the process dies in that gap the key has no expiry and the</span>
+<span class="c1"># caller is limited forever.</span>
+<span class="c1">#</span>
+<span class="c1"># A sliding window rather than a fixed one: with a fixed window, a caller gets the</span>
+<span class="c1"># full allowance at 59.9s and again at 60.1s, so the real burst is twice the limit.</span>
+<span class="n">SLIDING_WINDOW</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">local key, now, window, limit = KEYS[1], tonumber(ARGV[1]), tonumber(ARGV[2]), tonumber(ARGV[3])</span>
+<span class="s2">redis.call(&#39;ZREMRANGEBYSCORE&#39;, key, 0, now - window)</span>
+<span class="s2">local used = redis.call(&#39;ZCARD&#39;, key)</span>
+<span class="s2">if used &gt;= limit then</span>
+<span class="s2">  local oldest = redis.call(&#39;ZRANGE&#39;, key, 0, 0, &#39;WITHSCORES&#39;)</span>
+<span class="s2">  return {0, math.ceil(oldest[2] + window - now)}    -- denied, and when to retry</span>
+<span class="s2">end</span>
+<span class="s2">redis.call(&#39;ZADD&#39;, key, now, ARGV[4])                -- unique member per request</span>
+<span class="s2">redis.call(&#39;EXPIRE&#39;, key, math.ceil(window))         -- always, on every allow</span>
+<span class="s2">return {1, 0}</span>
+<span class="s2">&quot;&quot;&quot;</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">check</span><span class="p">(</span><span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">limit</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">window</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">allowed</span><span class="p">,</span> <span class="n">retry_after</span> <span class="o">=</span> <span class="k">await</span> <span class="n">_script</span><span class="p">(</span>
+            <span class="n">keys</span><span class="o">=</span><span class="p">[</span><span class="n">key</span><span class="p">],</span> <span class="n">args</span><span class="o">=</span><span class="p">[</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">(),</span> <span class="n">window</span><span class="p">,</span> <span class="n">limit</span><span class="p">,</span> <span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">()</span><span class="o">.</span><span class="n">hex</span><span class="p">])</span>
+    <span class="k">except</span> <span class="p">(</span><span class="n">redis</span><span class="o">.</span><span class="n">RedisError</span><span class="p">,</span> <span class="ne">TimeoutError</span><span class="p">):</span>
+        <span class="c1"># Fail open, deliberately, and log it. A limiter that rejects everything</span>
+        <span class="c1"># when Redis blinks has converted a dependency outage into a full outage —</span>
+        <span class="c1"># and a limiter exists to protect against abuse, not to be the abuse.</span>
+        <span class="c1"># Fail closed instead only where the limit protects money or a hard quota.</span>
+        <span class="n">log</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;rate limiter unavailable, allowing&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">True</span><span class="p">,</span> <span class="mi">0</span>
+    <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span><span class="n">allowed</span><span class="p">),</span> <span class="n">retry_after</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/limits/deps.py</span>
+<span class="k">def</span> <span class="nf">rate_limit</span><span class="p">(</span><span class="n">limit</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">window</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">scope</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">dep</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">,</span> <span class="n">user</span><span class="o">=</span><span class="n">Depends</span><span class="p">(</span><span class="n">current_user_optional</span><span class="p">)):</span>
+        <span class="c1"># Per identified caller when there is one; per address otherwise. Limiting</span>
+        <span class="c1"># only by address puts an entire office behind one NAT into one bucket,</span>
+        <span class="c1"># and limiting only by account leaves unauthenticated routes unprotected.</span>
+        <span class="n">who</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;user:</span><span class="si">{</span><span class="n">user</span><span class="o">.</span><span class="n">id</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">if</span> <span class="n">user</span> <span class="k">else</span> <span class="sa">f</span><span class="s2">&quot;ip:</span><span class="si">{</span><span class="n">client_ip</span><span class="p">(</span><span class="n">request</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="n">allowed</span><span class="p">,</span> <span class="n">retry_after</span> <span class="o">=</span> <span class="k">await</span> <span class="n">check</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;rl:</span><span class="si">{</span><span class="n">scope</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">who</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">limit</span><span class="p">,</span> <span class="n">window</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">allowed</span><span class="p">:</span>
+            <span class="c1"># 429 with Retry-After. Without it a client retries immediately and</span>
+            <span class="c1"># its retries are themselves the load the limiter is trying to shed.</span>
+            <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span><span class="mi">429</span><span class="p">,</span> <span class="s2">&quot;Too many requests&quot;</span><span class="p">,</span>
+                                <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Retry-After&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">retry_after</span><span class="p">)})</span>
+    <span class="k">return</span> <span class="n">dep</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/jobs/queue.py</span>
+<span class="n">CLAIM</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">local job = redis.call(&#39;RPOPLPUSH&#39;, KEYS[1], KEYS[2])   -- pending -&gt; in-flight, atomic</span>
+<span class="s2">if job then redis.call(&#39;HSET&#39;, KEYS[3], job, ARGV[1]) end  -- claim deadline</span>
+<span class="s2">return job</span>
+<span class="s2">&quot;&quot;&quot;</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">claim</span><span class="p">(</span><span class="n">worker_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Job</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Move a job from pending to this worker&#39;s in-flight list, atomically.</span>
+
+<span class="sd">    Popping without moving loses the job if the worker dies before it finishes —</span>
+<span class="sd">    and a worker dies on every deploy, every OOM kill and every node replacement.</span>
+<span class="sd">    The in-flight list is what lets the reaper return it.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">raw</span> <span class="o">=</span> <span class="k">await</span> <span class="n">_claim_script</span><span class="p">(</span>
+        <span class="n">keys</span><span class="o">=</span><span class="p">[</span><span class="n">PENDING</span><span class="p">,</span> <span class="n">inflight_key</span><span class="p">(</span><span class="n">worker_id</span><span class="p">),</span> <span class="n">CLAIMS</span><span class="p">],</span>
+        <span class="n">args</span><span class="o">=</span><span class="p">[</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">+</span> <span class="n">VISIBILITY_TIMEOUT</span><span class="p">])</span>
+    <span class="k">return</span> <span class="n">Job</span><span class="o">.</span><span class="n">parse</span><span class="p">(</span><span class="n">raw</span><span class="p">)</span> <span class="k">if</span> <span class="n">raw</span> <span class="k">else</span> <span class="kc">None</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">acknowledge</span><span class="p">(</span><span class="n">worker_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">job</span><span class="p">:</span> <span class="n">Job</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="c1"># Only after the handler returned. Acknowledging on receipt is at-most-once</span>
+    <span class="c1"># delivery wearing the clothes of at-least-once.</span>
+    <span class="k">await</span> <span class="n">redis</span><span class="o">.</span><span class="n">lrem</span><span class="p">(</span><span class="n">inflight_key</span><span class="p">(</span><span class="n">worker_id</span><span class="p">),</span> <span class="mi">1</span><span class="p">,</span> <span class="n">job</span><span class="o">.</span><span class="n">raw</span><span class="p">)</span>
+    <span class="k">await</span> <span class="n">redis</span><span class="o">.</span><span class="n">hdel</span><span class="p">(</span><span class="n">CLAIMS</span><span class="p">,</span> <span class="n">job</span><span class="o">.</span><span class="n">raw</span><span class="p">)</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">reap</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Return jobs whose claim deadline passed. Runs on a schedule, in one worker.</span>
+
+<span class="sd">    This is the only thing that recovers work from a process that died between</span>
+<span class="sd">    claiming and finishing. Without it the in-flight list grows quietly and the</span>
+<span class="sd">    jobs in it never run again.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">now</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+    <span class="n">expired</span> <span class="o">=</span> <span class="p">[</span><span class="n">j</span> <span class="k">for</span> <span class="n">j</span><span class="p">,</span> <span class="n">deadline</span> <span class="ow">in</span> <span class="p">(</span><span class="k">await</span> <span class="n">redis</span><span class="o">.</span><span class="n">hgetall</span><span class="p">(</span><span class="n">CLAIMS</span><span class="p">))</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+               <span class="k">if</span> <span class="nb">float</span><span class="p">(</span><span class="n">deadline</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">now</span><span class="p">]</span>
+    <span class="k">for</span> <span class="n">job</span> <span class="ow">in</span> <span class="n">expired</span><span class="p">:</span>
+        <span class="k">await</span> <span class="n">redis</span><span class="o">.</span><span class="n">lpush</span><span class="p">(</span><span class="n">PENDING</span><span class="p">,</span> <span class="n">job</span><span class="p">)</span>
+        <span class="k">await</span> <span class="n">redis</span><span class="o">.</span><span class="n">hdel</span><span class="p">(</span><span class="n">CLAIMS</span><span class="p">,</span> <span class="n">job</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="n">expired</span><span class="p">)</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/jobs/worker.py</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">run_worker</span><span class="p">(</span><span class="n">worker_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="n">stopping</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
+    <span class="c1"># SIGTERM must finish the current job, not abandon it. A worker killed</span>
+    <span class="c1"># mid-handler is recoverable through the reaper, but only after the visibility</span>
+    <span class="c1"># timeout — so a clean stop is the difference between instant and delayed.</span>
+    <span class="n">loop</span><span class="o">.</span><span class="n">add_signal_handler</span><span class="p">(</span><span class="n">signal</span><span class="o">.</span><span class="n">SIGTERM</span><span class="p">,</span> <span class="n">stopping</span><span class="o">.</span><span class="n">set</span><span class="p">)</span>
+
+    <span class="k">while</span> <span class="ow">not</span> <span class="n">stopping</span><span class="o">.</span><span class="n">is_set</span><span class="p">():</span>
+        <span class="n">job</span> <span class="o">=</span> <span class="k">await</span> <span class="n">claim</span><span class="p">(</span><span class="n">worker_id</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">job</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">POLL_INTERVAL</span><span class="p">)</span>
+            <span class="k">continue</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c1"># Bounded. An unbounded handler holds a claim past its deadline, the</span>
+            <span class="c1"># reaper requeues the job, and it then runs twice concurrently.</span>
+            <span class="k">async</span> <span class="k">with</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">timeout</span><span class="p">(</span><span class="n">JOB_TIMEOUT</span><span class="p">):</span>
+                <span class="k">await</span> <span class="n">HANDLERS</span><span class="p">[</span><span class="n">job</span><span class="o">.</span><span class="n">type</span><span class="p">](</span><span class="n">job</span><span class="o">.</span><span class="n">payload</span><span class="p">)</span>
+            <span class="k">await</span> <span class="n">acknowledge</span><span class="p">(</span><span class="n">worker_id</span><span class="p">,</span> <span class="n">job</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">job</span><span class="o">.</span><span class="n">attempts</span> <span class="o">+</span> <span class="mi">1</span> <span class="o">&gt;=</span> <span class="n">MAX_ATTEMPTS</span><span class="p">:</span>
+                <span class="c1"># A dead letter, not a silent drop and not an infinite retry. A job</span>
+                <span class="c1"># retried forever is a permanent load and hides the bug behind it.</span>
+                <span class="k">await</span> <span class="n">dead_letter</span><span class="p">(</span><span class="n">worker_id</span><span class="p">,</span> <span class="n">job</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">await</span> <span class="n">requeue</span><span class="p">(</span><span class="n">worker_id</span><span class="p">,</span> <span class="n">job</span><span class="p">,</span> <span class="n">delay</span><span class="o">=</span><span class="n">backoff</span><span class="p">(</span><span class="n">job</span><span class="o">.</span><span class="n">attempts</span><span class="p">))</span>
+</code></pre></div>
+
+<h2>5. Golden-standard rules</h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Forbidden:</strong> a queue on an instance with an evicting memory policy</td>
+<td>Jobs are deleted to make room for cache entries, silently. This is why "sometimes the email does not arrive".</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> read-then-write across two round trips in a limiter</td>
+<td>Concurrent callers race the gap; a key can end up with no expiry and limit someone forever. Use one atomic script.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> popping a job without moving it to an in-flight list</td>
+<td>The job is lost if the worker dies, and workers die on every deploy.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> acknowledging a job before the handler finished</td>
+<td>That is at-most-once delivery pretending to be at-least-once.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> an unbounded job handler</td>
+<td>It holds its claim past the deadline, the reaper requeues, and the job runs twice at once.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> a job payload containing an object rather than an identifier</td>
+<td>It is a snapshot that was already stale when the worker read it.</td>
+</tr>
+<tr>
+<td>Every job is written to be safe to run twice</td>
+<td>The queue is at-least-once by design. Duplicates are normal operation, not an incident.</td>
+</tr>
+<tr>
+<td>Failed jobs go to a dead letter after a bounded number of attempts</td>
+<td>Infinite retry is a permanent load that hides the bug causing it.</td>
+</tr>
+<tr>
+<td>The reaper runs, and its output is monitored</td>
+<td>It is the only recovery path for a crashed worker, and its absence is invisible until work quietly stops.</td>
+</tr>
+<tr>
+<td>The limiter fails open unless it guards money or a hard quota</td>
+<td>Otherwise a dependency blink becomes a full outage, caused by the thing meant to prevent one.</td>
+</tr>
+<tr>
+<td>A 429 carries <code>Retry-After</code></td>
+<td>Without it clients retry immediately, and the retries are the load being shed.</td>
+</tr>
+<tr>
+<td>Limits key on the identified caller when there is one</td>
+<td>Address-only puts a whole office behind one NAT into a single bucket.</td>
+</tr>
+<tr>
+<td>Workers finish the current job on SIGTERM</td>
+<td>Otherwise every deploy delays work by a visibility timeout.</td>
+</tr>
+</tbody>
+</table>
+<h2>6. Data contracts</h2>
+<div class="hl"><pre><span></span><code>job     {&quot;id&quot;: &quot;01J...&quot;, &quot;type&quot;: &quot;order.confirm&quot;, &quot;payload&quot;: {&quot;order_id&quot;: 42},
+         &quot;attempts&quot;: 0, &quot;enqueued_at&quot;: 1755600000}
+states  pending -&gt; in-flight -&gt; done, or -&gt; pending (retry), or -&gt; dead-letter
+        exactly one at any instant; every transition atomic
+</code></pre></div>
+
+<p>The delivery guarantee is <strong>at least once</strong>, and saying so plainly is the point.
+Every handler must therefore be safe to run twice — not because something is
+broken, but because a worker dying between finishing the work and acknowledging it
+is normal, and no arrangement of these primitives removes that window.</p>
+<p>The limiter's contract is the response: <code>429</code> with <code>Retry-After</code>, and a limit that
+is per caller and per scope so one endpoint's traffic cannot exhaust another's
+allowance.</p>
+<h2>7. Build order</h2>
+<ol>
+<li><strong>Confirm the memory policy</strong>, and separate the queue from the cache if they
+   share an instance. This is one configuration check that prevents the worst
+   failure in the document.</li>
+<li><strong>The limiter as one atomic script</strong>, with a concurrency test: fire more
+   parallel requests than the limit and assert exactly <code>limit</code> were allowed.</li>
+<li><strong>429 with <code>Retry-After</code></strong>, and the failure-open path with a test that Redis
+   being down allows traffic rather than blocking it.</li>
+<li><strong>Enqueue, claim into in-flight, acknowledge</strong> — then kill a worker mid-job and
+   assert the job is still in-flight rather than gone.</li>
+<li><strong>The reaper</strong>, and a test that the killed worker's job runs again.</li>
+<li><strong>Retries with backoff and the dead letter</strong>, with a test for a permanently
+   failing job.</li>
+<li><strong>Job timeouts and SIGTERM handling</strong>, then run the whole thing under a rolling
+   restart and assert nothing was lost or duplicated beyond what is expected.</li>
+</ol>
+<p>Steps 4 and 5 are the pair that matters. Testing them separately proves nothing:
+the guarantee is that a crash loses no work, and only killing a worker
+demonstrates it.</p>
+<h2>8. Blocks to pull in</h2>
+<p>Nothing here is a prerequisite. These are adjacent problems, by name only —
+resolve them separately if they apply.</p>
+<ul>
+<li>Redis cache layer — the same server, the opposite guarantees</li>
+<li>Idempotency keys and safe retries — how to make a handler safe to run twice</li>
+<li>Background jobs and workers — the durable-queue treatment in its general form</li>
+<li>Observability and tracing — where queue depth, age and dead letters are watched</li>
+<li>Dockerfile for a production service — the signal handling a clean worker stop depends on</li>
+</ul>
+<h2>9. Metrics</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Limiter decision latency, p99</td>
+<td>&lt; 3 ms</td>
+</tr>
+<tr>
+<td>Requests allowed above the limit under concurrency</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Jobs lost across a worker restart</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Age of the oldest pending job</td>
+<td>&lt; 60 s under normal load</td>
+</tr>
+<tr>
+<td>In-flight jobs older than the visibility timeout</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Dead-letter arrivals per day</td>
+<td>Low and reviewed — a growing count is a bug, not a backlog</td>
+</tr>
+<tr>
+<td>Duplicate executions per thousand jobs</td>
+<td>Small, expected, and harmless by construction</td>
+</tr>
+</tbody>
+</table>
+<h2>10. Failure modes</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Jobs vanish occasionally, with no error anywhere</td>
+<td>The queue shares an instance with a cache under an evicting policy</td>
+<td>Separate instances, or <code>noeviction</code> for the queue</td>
+</tr>
+<tr>
+<td>One caller is rate-limited permanently and no window resets them</td>
+<td>The counter key was created without a TTL because the process died between INCR and EXPIRE</td>
+<td>One atomic script that always sets the expiry</td>
+</tr>
+<tr>
+<td>A caller gets roughly twice the intended burst</td>
+<td>A fixed window: the full allowance at the end of one and again at the start of the next</td>
+<td>Sliding window</td>
+</tr>
+<tr>
+<td>Work is lost on every deploy</td>
+<td>Jobs were popped rather than moved to an in-flight list, or workers are killed mid-handler</td>
+<td>Atomic claim into in-flight; finish the current job on SIGTERM</td>
+</tr>
+<tr>
+<td>The in-flight list grows and those jobs never run</td>
+<td>No reaper, or the reaper stopped and nobody noticed</td>
+<td>Run it on a schedule; alert on in-flight age</td>
+</tr>
+<tr>
+<td>A job runs twice concurrently</td>
+<td>The handler exceeded the visibility timeout and the reaper requeued it while it was still running</td>
+<td>Bound the handler below the visibility timeout</td>
+</tr>
+<tr>
+<td>A broken job retries forever and saturates the workers</td>
+<td>No attempt limit</td>
+<td>Dead-letter after a bounded number of attempts</td>
+</tr>
+<tr>
+<td>The whole API returns 429 during a Redis blip</td>
+<td>The limiter fails closed</td>
+<td>Fail open and log, except where the limit guards money</td>
+</tr>
+<tr>
+<td>Clients hammer the endpoint harder after being limited</td>
+<td>The 429 carries no <code>Retry-After</code></td>
+<td>Include it, computed from the window</td>
+</tr>
+<tr>
+<td>An entire office is limited because of one user</td>
+<td>The key is the source address only</td>
+<td>Key on the identified caller where one exists</td>
+</tr>
+<tr>
+<td>A job acts on stale data — an old email address, an old price</td>
+<td>The payload embedded an object instead of an identifier</td>
+<td>Enqueue an id; load the current state in the handler</td>
+</tr>
+<tr>
+<td>Queue depth is fine and users still wait</td>
+<td>Depth is not the metric; the age of the oldest pending job is</td>
+<td>Monitor age, not only depth</td>
+</tr>
+</tbody>
+</table>
+<h2>11. Definition of done</h2>
+<ul>
+<li class="task">The queue's Redis instance does not evict, verified by querying the running server's policy</li>
+<li class="task">Firing more concurrent requests than the limit allows exactly the limit, covered by a concurrency test</li>
+<li class="task">Every counter key has a TTL, verified by inspecting keys after a burst</li>
+<li class="task">A rejected request returns 429 with a <code>Retry-After</code> computed from the window, covered by a test</li>
+<li class="task">With Redis unavailable, requests are allowed and the event is logged, covered by a test</li>
+<li class="task">Killing a worker mid-job leaves the job recoverable, and the reaper runs it again — one test covering both</li>
+<li class="task">A job handler exceeding its timeout is cancelled before its claim expires, covered by a test</li>
+<li class="task">A permanently failing job reaches the dead letter after the configured attempts and stops retrying, covered by a test</li>
+<li class="task">SIGTERM lets the current job finish before the worker exits, covered by a test</li>
+<li class="task">Every job payload contains identifiers only, checked by review of the handler signatures and asserted for at least one job type</li>
+<li class="task">Every handler is safe to run twice, demonstrated by a test that runs one twice and asserts the effect happened once</li>
+<li class="task">Queue depth, oldest-pending age, in-flight age and dead-letter count are all exported as metrics</li>
+</ul>
+  </article>
+
+  <aside class="tailpiece">
+    <h2>Use this blueprint</h2>
+    <p>
+      Copy the file into your project and point your agent at it. It works with Claude Code,
+      Cursor, Copilot, ChatGPT and anything else that reads a file — there is nothing to install.
+    </p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/redis-ratelimit-queue" target="_blank" rel="noopener">Open on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Browse all blueprints</a>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p><a href="/">Awesome Blueprints</a> — same request, same architecture, every time.</p>
+    <p class="dim">MIT · awesomeblueprints.com</p>
+  </div>
+</footer>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'neutral' });
+</script>
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const now = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', now);
+    try { localStorage.setItem('ab-theme', now); } catch (e) {}
+    location.reload();   // the diagram is themed at render time
+  });
+</script>
+
+</body>
+</html>

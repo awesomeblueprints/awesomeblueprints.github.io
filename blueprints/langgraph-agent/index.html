@@ -1,0 +1,638 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LangGraph: Agent as a State Graph — Blueprint for AI Coding Agents | Awesome Blueprints</title>
+<meta name="description" content="LangGraph agents as state graphs: typed state, reducers, conditional edges, step ceilings and nodes you can test without running the graph." />
+<link rel="canonical" href="https://awesomeblueprints.com/blueprints/langgraph-agent/" />
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="Awesome Blueprints" />
+<meta property="og:url" content="https://awesomeblueprints.com/blueprints/langgraph-agent/" />
+<meta property="og:title" content="LangGraph: Agent as a State Graph — Architecture Blueprint" />
+<meta property="og:description" content="LangGraph agents as state graphs: typed state, reducers, conditional edges, step ceilings and nodes you can test without running the graph." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="LangGraph: Agent as a State Graph — Architecture Blueprint" />
+<meta name="twitter:description" content="LangGraph agents as state graphs: typed state, reducers, conditional edges, step ceilings and nodes you can test without running the graph." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/page.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "LangGraph: Agent as a State Graph", "description": "LangGraph agents as state graphs: typed state, reducers, conditional edges, step ceilings and nodes you can test without running the graph.", "url": "https://awesomeblueprints.com/blueprints/langgraph-agent/", "dateModified": "2026-08-20", "keywords": "LangGraph, Agents", "isAccessibleForFree": true, "license": "https://opensource.org/licenses/MIT", "publisher": {"@type": "Organization", "name": "Awesome Blueprints", "url": "https://awesomeblueprints.com"}}</script>
+<script>
+  (function () {
+    var t;
+    try { t = localStorage.getItem('ab-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">Awesome Blueprints</a>
+    <div class="nav-right">
+      <a class="nav-link" href="/#blueprints">Catalogue</a>
+      <a class="nav-link" href="/#faq">FAQ</a>
+      <a class="nav-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/langgraph-agent" target="_blank" rel="noopener">GitHub ↗</a>
+      <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Switch theme">◑</button>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/">Home</a> <span>/</span> <a href="/#blueprints">Blueprints</a> <span>/</span>
+    <span>LangGraph: Agent as a State Graph</span>
+  </nav>
+
+  <header class="page-head">
+    <p class="eyebrow">langgraph-agent</p>
+    <h1>LangGraph: Agent as a State Graph</h1>
+    <p class="lede">LangGraph agents as state graphs: typed state, reducers, conditional edges, step ceilings and nodes you can test without running the graph.</p>
+    <div class="facts"><span>medium</span><span>3–4 days</span><span>Verified 2026-08-20</span></div>
+    <div class="tags"><span class="tag">LangGraph</span><span class="tag">Agents</span></div>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/langgraph-agent" target="_blank" rel="noopener">Read it on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Back to the catalogue</a>
+    </div>
+  </header>
+
+  <article class="doc">
+<blockquote>
+<p>A run whose next step is decided at runtime, expressed as explicit nodes and
+edges over one typed state — so that the path a request took can be read after
+the fact instead of reconstructed from logs.</p>
+</blockquote>
+<p><strong>Complexity:</strong> medium · <strong>Typical build:</strong> 3–4 days · <strong>Verified:</strong> 2026-08-20 (re-check after ~90 days)</p>
+<p><strong>Examples in:</strong> Python, with LangGraph. The architecture is language-agnostic: sections 5, 10 and 11 hold wherever you build this. Section 4 is illustrative — if your project is in another language, your agent translates the idioms rather than importing them, and nothing is lost. The same shape exists as LangGraph.js in TypeScript and as a hand-written dispatch loop over a state object in any language; what matters is the state contract in §6 and the edge rules in §5, which do not depend on the library.</p>
+<p><strong>Use when:</strong> the next step depends on what the previous step produced — a tool result, a classification, a validation failure — and a fixed sequence of calls cannot express it.</p>
+<p><strong>Not for:</strong> a pipeline whose steps are known before the run starts. That is a composed chain, and a graph adds a state object, a compile step and a checkpoint story for no branching you actually have. Also not for a single model call with one tool, where the provider's own tool loop is smaller than a graph and fails in more obvious ways.</p>
+<hr />
+<h2>⚙️ INSTRUCTIONS FOR THE AI — READ BEFORE WRITING ANY CODE</h2>
+<p><strong>Do not start coding.</strong></p>
+<p><strong>Step 1 — Refresh.</strong> Verify the installed graph library's major version and what
+moved in it. The 1.0 line made durable state persistence and interrupt-based human
+review first-class, and the companion LLM framework relocated its older agent
+executor and sequential chain helpers into a separate compatibility package.
+Most public examples predate both changes. Confirm the current names for the state
+annotation, the reducer mechanism, the compile call and the conditional-edge
+signature before importing anything. Report what you verified and what turned out
+wrong.</p>
+<p><strong>Step 2 — Read the project, then audit what already exists.</strong> Find every place
+that already loops over model calls — a <code>while</code> with a tool dispatch, a provider
+tool loop, a task queue re-invoking a prompt — and record how each one terminates
+and what it does when it does not. Find where run state lives today: a dict passed
+between functions, request-scoped globals, a database row. Find what already
+persists across a run, because that decides whether this graph is adding
+durability or duplicating it. Then audit §11 item by item, each marked <em>already
+true</em>, <em>partly true</em> or <em>absent</em>, with the file that decides it, reported before
+anything is proposed.</p>
+<p>Assume the project is right until it demonstrably is not; code satisfying an item
+stays even where its shape differs from §4; replacing something that works needs a
+one-line reason; never delete a working path to make room for the blueprint's
+version. The same holds for language — §4 is illustrative, its idioms get
+translated into the project's language, and §11 is what has to become true rather
+than the syntax.</p>
+<p><strong>Step 3 — Write a plan for the gap only, and get it approved</strong>, including a
+<code>## Proposed stack</code> section and the state schema you intend to use, field by
+field, with the reducer for each. Do not ask open questions about the library —
+propose, and ask for confirmation once. Say what you are adding, what you are
+leaving alone, and what you propose to change, and touch nothing else.</p>
+<p><strong>Step 4 — Build in the order in §7.</strong> <strong>Step 5 — §11 is the definition of done.</strong></p>
+<hr />
+<h2>1. Why a graph rather than a loop</h2>
+<p>The hand-written agent is a <code>while</code> loop: call the model, look at what came back,
+call a tool, append the result, call again. It is twenty lines and it works. What
+it does not give you is any of the following, and each one is the reason teams
+rewrite it:</p>
+<table>
+<thead>
+<tr>
+<th>The loop</th>
+<th>The graph</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The path a request took is reconstructed from log lines</td>
+<td>The path is a sequence of node names, recorded</td>
+</tr>
+<tr>
+<td>Stopping mid-run means losing everything before it</td>
+<td>State is checkpointed at every node boundary</td>
+</tr>
+<tr>
+<td>Two independent steps run one after the other because the loop is a loop</td>
+<td>Two edges from one node run concurrently</td>
+</tr>
+<tr>
+<td>A runaway run is caught by whatever timeout wraps it</td>
+<td>The graph has a step ceiling of its own</td>
+</tr>
+<tr>
+<td>Adding a branch means another <code>if</code> in a function that already has six</td>
+<td>A branch is an edge with a named condition</td>
+</tr>
+<tr>
+<td>Testing a step means running the loop</td>
+<td>A node is a function from state to state, tested alone</td>
+</tr>
+</tbody>
+</table>
+<p>The cost is real and worth naming: you now have a state schema to maintain, a
+compile step, and a class of bug that does not exist in a loop — two branches
+writing the same field. §6 and §5 exist to make that class of bug impossible
+rather than rare.</p>
+<p><strong>The single idea underneath all of it:</strong> a node is a pure function from state to
+a <em>partial</em> state update. It does not mutate what it was given and it does not
+return the whole object. Everything else in this document follows from holding
+that line — the concurrency rules, the testability, the checkpointing. Nodes that
+reach outside the state to a global, a request object or a mutable default are the
+one thing that reliably destroys a graph, because they make the recorded path a
+lie.</p>
+<h2>2. Architecture</h2>
+<pre class="mermaid">%% GENERATED - do not edit by hand.
+%% Edit the source header in architecture.mmd, then rebuild.
+%% One typed state, explicit edges
+
+flowchart TB
+    subgraph state[&quot;One typed state object&quot;]
+        direction TB
+        checkpoint[(&quot;Checkpoint store, one row per node boundary&quot;)]
+    end
+
+    caller([&quot;Caller with a thread id&quot;])
+    entry[&quot;Entry node, normalises input&quot;]
+    plan[&quot;Plan node, decides the next step&quot;]
+    tools[&quot;Tool node, executes one call&quot;]
+    gather_a[&quot;Branch A, independent work&quot;]
+    gather_b[&quot;Branch B, independent work&quot;]
+    merge[&quot;Merge node, reducers apply here&quot;]
+    finish[&quot;Terminal node, shapes the result&quot;]
+    model{{&quot;Model provider&quot;}}
+    tool_api{{&quot;External tool APIs&quot;}}
+
+    caller --&gt; entry
+    entry --&gt; plan
+    plan --&gt;|&quot;needs a tool&quot;| tools
+    plan --&gt;|&quot;independent work&quot;| gather_a
+    plan --&gt;|&quot;independent work&quot;| gather_b
+    plan --&gt;|&quot;done&quot;| finish
+    tools --&gt;|&quot;result appended&quot;| plan
+    gather_a --&gt; merge
+    gather_b --&gt; merge
+    merge --&gt; plan
+    finish --&gt; caller
+    plan --&gt; model
+    tools --&gt; tool_api
+    entry --- checkpoint
+    plan --- checkpoint
+    tools --- checkpoint
+    merge --- checkpoint
+
+    classDef service fill:#eff6ff,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b;
+    classDef datastore fill:#e9faf3,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b;
+    classDef external fill:#fff4ed,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b;
+    classDef actor fill:#f0eefc,stroke:#4a3aa7,stroke-width:1.5px,color:#0b0b0b;
+    class entry,plan,tools,gather_a,gather_b,merge,finish service;
+    class checkpoint datastore;
+    class model,tool_api external;
+    class caller actor;</pre>
+<p>Two things the diagram encodes. <strong>Every node writes to the checkpoint store</strong>, not
+just the interesting ones — a partially checkpointed graph resumes into a state
+that never existed. And <strong>branch A and branch B both reach <code>merge</code></strong>, which is the
+exact place where two updates to the same field collide; that edge pair is why §6
+requires a reducer on every field a branch can touch.</p>
+<h2>3. Project structure</h2>
+<div class="hl"><pre><span></span><code>app/agent/
+├── state.py          the state schema and its reducers — read this first
+├── nodes/
+│   ├── plan.py       one file per node, each a plain function
+│   ├── tools.py
+│   └── finish.py
+├── edges.py          the conditional-edge functions, returning node names
+├── graph.py          assembly and compile — the only file that knows the shape
+└── runner.py         the boundary: plain arguments in, plain result out
+</code></pre></div>
+
+<p><strong>One rule: the compiled graph is built once, at import, and never inside a
+request handler.</strong> Compiling per request costs milliseconds you will not notice
+and hides a much worse bug — a graph rebuilt with different node objects has
+different closures, so a checkpoint written by one run resumes into another
+shape.</p>
+<h2>4. Reference implementation</h2>
+<div class="hl"><pre><span></span><code><span class="c1"># app/agent/state.py</span>
+<span class="kn">import</span> <span class="nn">operator</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Annotated</span><span class="p">,</span> <span class="n">TypedDict</span>
+<span class="kn">from</span> <span class="nn">langchain_core.messages</span> <span class="kn">import</span> <span class="n">BaseMessage</span>
+
+
+<span class="k">def</span> <span class="nf">last_wins</span><span class="p">(</span><span class="n">current</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">incoming</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;An explicit reducer for a field only one branch should write.</span>
+
+<span class="sd">    Writing this out rather than leaving the field bare is the point: a bare</span>
+<span class="sd">    field raises at runtime the first time two concurrent branches both set it,</span>
+<span class="sd">    and that first time is usually in production, because tests rarely exercise</span>
+<span class="sd">    both branches of a fan-out at once.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">incoming</span> <span class="k">if</span> <span class="n">incoming</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">current</span>
+
+
+<span class="k">class</span> <span class="nc">AgentState</span><span class="p">(</span><span class="n">TypedDict</span><span class="p">):</span>
+    <span class="c1"># `operator.add` is the reducer: concurrent branches appending messages</span>
+    <span class="c1"># concatenate instead of overwriting. Without an annotation here, two</span>
+    <span class="c1"># parallel nodes both returning `messages` is an error, not a merge.</span>
+    <span class="n">messages</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="n">BaseMessage</span><span class="p">],</span> <span class="n">operator</span><span class="o">.</span><span class="n">add</span><span class="p">]</span>
+    <span class="n">findings</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">],</span> <span class="n">operator</span><span class="o">.</span><span class="n">add</span><span class="p">]</span>
+    <span class="n">decision</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">last_wins</span><span class="p">]</span>
+    <span class="n">steps_taken</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">operator</span><span class="o">.</span><span class="n">add</span><span class="p">]</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/agent/nodes/plan.py</span>
+<span class="kn">from</span> <span class="nn">app.agent.state</span> <span class="kn">import</span> <span class="n">AgentState</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">plan</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">AgentState</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;A node returns a PARTIAL update, never the whole state.</span>
+
+<span class="sd">    Returning the whole object works right up until a reducer is added, at which</span>
+<span class="sd">    point every field silently double-applies. Return only what this node</span>
+<span class="sd">    decided.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">reply</span> <span class="o">=</span> <span class="k">await</span> <span class="n">model</span><span class="o">.</span><span class="n">ainvoke</span><span class="p">(</span><span class="n">state</span><span class="p">[</span><span class="s2">&quot;messages&quot;</span><span class="p">])</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;messages&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">reply</span><span class="p">],</span> <span class="s2">&quot;steps_taken&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">}</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/agent/edges.py</span>
+<span class="kn">from</span> <span class="nn">app.agent.state</span> <span class="kn">import</span> <span class="n">AgentState</span>
+
+<span class="n">MAX_TOOL_STEPS</span> <span class="o">=</span> <span class="mi">12</span>
+
+
+<span class="k">def</span> <span class="nf">route_after_plan</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">AgentState</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Conditional edges return a node NAME, and they must be total.</span>
+
+<span class="sd">    The step ceiling lives here, in the routing decision, not in the graph&#39;s</span>
+<span class="sd">    recursion limit. The recursion limit is a crash guard: it raises, it does not</span>
+<span class="sd">    let you write a message to the user, and it cannot tell a legitimate long run</span>
+<span class="sd">    from a loop. A ceiling in the edge produces a controlled ending.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;steps_taken&quot;</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="n">MAX_TOOL_STEPS</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">&quot;finish&quot;</span>
+    <span class="n">last</span> <span class="o">=</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;messages&quot;</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+    <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">last</span><span class="p">,</span> <span class="s2">&quot;tool_calls&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">):</span>
+        <span class="k">return</span> <span class="s2">&quot;tools&quot;</span>
+    <span class="k">return</span> <span class="s2">&quot;finish&quot;</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/agent/graph.py</span>
+<span class="kn">from</span> <span class="nn">langgraph.graph</span> <span class="kn">import</span> <span class="n">END</span><span class="p">,</span> <span class="n">START</span><span class="p">,</span> <span class="n">StateGraph</span>
+<span class="kn">from</span> <span class="nn">app.agent.state</span> <span class="kn">import</span> <span class="n">AgentState</span>
+<span class="kn">from</span> <span class="nn">app.agent.nodes</span> <span class="kn">import</span> <span class="n">plan</span><span class="p">,</span> <span class="n">tools</span><span class="p">,</span> <span class="n">finish</span>
+<span class="kn">from</span> <span class="nn">app.agent.edges</span> <span class="kn">import</span> <span class="n">route_after_plan</span>
+
+<span class="n">builder</span> <span class="o">=</span> <span class="n">StateGraph</span><span class="p">(</span><span class="n">AgentState</span><span class="p">)</span>
+<span class="n">builder</span><span class="o">.</span><span class="n">add_node</span><span class="p">(</span><span class="s2">&quot;plan&quot;</span><span class="p">,</span> <span class="n">plan</span><span class="o">.</span><span class="n">plan</span><span class="p">)</span>
+<span class="n">builder</span><span class="o">.</span><span class="n">add_node</span><span class="p">(</span><span class="s2">&quot;tools&quot;</span><span class="p">,</span> <span class="n">tools</span><span class="o">.</span><span class="n">run_tools</span><span class="p">)</span>
+<span class="n">builder</span><span class="o">.</span><span class="n">add_node</span><span class="p">(</span><span class="s2">&quot;finish&quot;</span><span class="p">,</span> <span class="n">finish</span><span class="o">.</span><span class="n">finish</span><span class="p">)</span>
+
+<span class="n">builder</span><span class="o">.</span><span class="n">add_edge</span><span class="p">(</span><span class="n">START</span><span class="p">,</span> <span class="s2">&quot;plan&quot;</span><span class="p">)</span>
+<span class="n">builder</span><span class="o">.</span><span class="n">add_conditional_edges</span><span class="p">(</span><span class="s2">&quot;plan&quot;</span><span class="p">,</span> <span class="n">route_after_plan</span><span class="p">,</span> <span class="p">[</span><span class="s2">&quot;tools&quot;</span><span class="p">,</span> <span class="s2">&quot;finish&quot;</span><span class="p">])</span>
+<span class="n">builder</span><span class="o">.</span><span class="n">add_edge</span><span class="p">(</span><span class="s2">&quot;tools&quot;</span><span class="p">,</span> <span class="s2">&quot;plan&quot;</span><span class="p">)</span>
+<span class="n">builder</span><span class="o">.</span><span class="n">add_edge</span><span class="p">(</span><span class="s2">&quot;finish&quot;</span><span class="p">,</span> <span class="n">END</span><span class="p">)</span>
+
+<span class="c1"># Compiled once, at import. `recursion_limit` is passed per invocation as a</span>
+<span class="c1"># safety net well above the ceiling in `route_after_plan`, so that hitting it</span>
+<span class="c1"># means a routing bug rather than a long-but-valid run.</span>
+<span class="n">graph</span> <span class="o">=</span> <span class="n">builder</span><span class="o">.</span><span class="n">compile</span><span class="p">()</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/agent/runner.py</span>
+<span class="kn">from</span> <span class="nn">app.agent.graph</span> <span class="kn">import</span> <span class="n">graph</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">run</span><span class="p">(</span><span class="n">question</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">thread_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;The boundary. Library types stay inside; callers pass and receive plain</span>
+<span class="sd">    types, so replacing the graph library is a change in one directory.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">graph</span><span class="o">.</span><span class="n">ainvoke</span><span class="p">(</span>
+        <span class="p">{</span><span class="s2">&quot;messages&quot;</span><span class="p">:</span> <span class="p">[(</span><span class="s2">&quot;human&quot;</span><span class="p">,</span> <span class="n">question</span><span class="p">)],</span> <span class="s2">&quot;steps_taken&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">},</span>
+        <span class="n">config</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;configurable&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;thread_id&quot;</span><span class="p">:</span> <span class="n">thread_id</span><span class="p">},</span> <span class="s2">&quot;recursion_limit&quot;</span><span class="p">:</span> <span class="mi">40</span><span class="p">},</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;messages&quot;</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">content</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># tests/test_nodes.py</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">test_plan_returns_a_partial_update</span><span class="p">():</span>
+    <span class="c1"># A node is a function from state to a dict. Testing it needs no graph, no</span>
+    <span class="c1"># compile and no checkpointer — which is the main practical payoff of the</span>
+    <span class="c1"># shape and the reason nodes stay small.</span>
+    <span class="n">out</span> <span class="o">=</span> <span class="k">await</span> <span class="n">plan</span><span class="p">({</span><span class="s2">&quot;messages&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">HUMAN</span><span class="p">],</span> <span class="s2">&quot;findings&quot;</span><span class="p">:</span> <span class="p">[],</span> <span class="s2">&quot;decision&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+                      <span class="s2">&quot;steps_taken&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">})</span>
+    <span class="k">assert</span> <span class="nb">set</span><span class="p">(</span><span class="n">out</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="p">{</span><span class="s2">&quot;messages&quot;</span><span class="p">,</span> <span class="s2">&quot;steps_taken&quot;</span><span class="p">}</span>
+
+
+<span class="k">def</span> <span class="nf">test_routing_is_total</span><span class="p">():</span>
+    <span class="c1"># Every conditional edge is enumerated in `add_conditional_edges`. A router</span>
+    <span class="c1"># returning a name outside that list fails at runtime, not at compile, so</span>
+    <span class="c1"># cover the branches.</span>
+    <span class="k">assert</span> <span class="n">route_after_plan</span><span class="p">({</span><span class="o">**</span><span class="n">BASE</span><span class="p">,</span> <span class="s2">&quot;steps_taken&quot;</span><span class="p">:</span> <span class="mi">99</span><span class="p">})</span> <span class="o">==</span> <span class="s2">&quot;finish&quot;</span>
+</code></pre></div>
+
+<h2>5. Golden-standard rules</h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Forbidden:</strong> a node returning the whole state instead of a partial update</td>
+<td>Every field then double-applies through its reducer the moment one is added, and the corruption is silent.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> a state field that two concurrent branches can write, without a reducer</td>
+<td>It raises at runtime on the first real fan-out, which is typically in production because tests rarely run both branches.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> a node mutating the state object it was handed</td>
+<td>Checkpoints then record a state that the recorded path does not produce, and replay diverges from the original run.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> compiling the graph inside a request handler</td>
+<td>Different node objects mean different closures; a checkpoint from one build resumes into another shape.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> relying on the recursion limit to stop a loop</td>
+<td>It raises rather than returning; it cannot distinguish a long valid run from a cycle, and the user gets an exception instead of an answer.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> reading configuration or request context from outside the state inside a node</td>
+<td>It makes the node untestable alone and makes the recorded path an incomplete account of the run.</td>
+</tr>
+<tr>
+<td>Every run passes a thread id</td>
+<td>Without one there is no checkpoint identity, so nothing can be resumed or inspected afterwards.</td>
+</tr>
+<tr>
+<td>Conditional edges enumerate their possible destinations</td>
+<td>An unenumerated name fails at runtime; enumerating turns it into a visible list you can test against.</td>
+</tr>
+<tr>
+<td>A step ceiling lives in a routing function</td>
+<td>It produces a controlled ending with a message, which a limit exception cannot.</td>
+</tr>
+<tr>
+<td>One node, one responsibility, one file</td>
+<td>Nodes are the unit of retry and of checkpointing; a node doing three things retries all three.</td>
+</tr>
+<tr>
+<td>The library's types stop at the runner</td>
+<td>The graph library is young and moving; the boundary makes a major version a day in one directory.</td>
+</tr>
+<tr>
+<td>Node names are stable strings, treated as an interface</td>
+<td>They appear in checkpoints and traces; renaming one invalidates stored runs.</td>
+</tr>
+</tbody>
+</table>
+<h2>6. Data contracts</h2>
+<div class="hl"><pre><span></span><code>state      one typed object, every field annotated with how it merges
+node in    the full state, read-only
+node out   a partial update — only the fields this node decided
+edge out   a node name, from the enumerated set
+</code></pre></div>
+
+<p>The contract that matters is the reducer. A field with no reducer has an implicit
+one — <em>last write wins</em> — and that implicit rule is fine for a linear path and an
+error the first time two branches run at once. Decide it per field, in writing:</p>
+<table>
+<thead>
+<tr>
+<th>Field shape</th>
+<th>Reducer</th>
+<th>Because</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>An append-only log (messages, findings, tool results)</td>
+<td>concatenate</td>
+<td>Branches contribute; none owns the list</td>
+</tr>
+<tr>
+<td>A single decision one branch makes</td>
+<td>an explicit last-wins function</td>
+<td>Writing it out documents that concurrency here is intentional</td>
+</tr>
+<tr>
+<td>A counter</td>
+<td>add</td>
+<td>Two branches each taking a step took two steps</td>
+</tr>
+<tr>
+<td>Something two branches genuinely disagree about</td>
+<td>a merge function that names the winner</td>
+<td>If you cannot write it, the field belongs to one node and the fan-out is wrong</td>
+</tr>
+</tbody>
+</table>
+<p>The last row is the useful test: <strong>if you cannot write the reducer, the graph
+shape is wrong, not the state.</strong></p>
+<h2>7. Build order</h2>
+<ol>
+<li><strong>The state schema, with a reducer on every field.</strong> Before any node. It is
+   the contract the rest is written against, and retrofitting reducers means
+   re-reading every node.</li>
+<li><strong>One node and one test</strong>, run as a plain function with no graph at all.</li>
+<li><strong>A two-node linear graph, compiled</strong>, so that the assembly and the runner
+   boundary exist while there is almost nothing in them.</li>
+<li><strong>The routing function and its step ceiling</strong>, with tests for the branches
+   including the ceiling.</li>
+<li><strong>The tool node</strong>, with a failing tool covered by a test — a tool error must
+   become state, not an exception that escapes the graph.</li>
+<li><strong>The fan-out</strong>, only now, and only if you have two genuinely independent
+   steps. This is where the reducers earn their existence.</li>
+<li><strong>Tracing with node names</strong>, so a slow run is attributable to a node.</li>
+</ol>
+<p>Step 1 first is not a style preference. The reducers are the part that cannot be
+added later without re-reading everything already written.</p>
+<h2>8. Blocks to pull in</h2>
+<p>Nothing here is a prerequisite. These are adjacent problems, by name only —
+resolve them separately if they apply.</p>
+<ul>
+<li>LangGraph checkpoints and human approval — durability and review of a running graph</li>
+<li>LLM tool registry and dispatcher — how the callable set is declared and validated</li>
+<li>Composable chains — the shape to use when the sequence is known in advance</li>
+<li>LLM observability and tracing — where node timings land</li>
+<li>Background jobs and workers — running a long graph outside a request</li>
+</ul>
+<h2>9. Metrics</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>State fields without an explicit reducer</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Nodes testable without compiling the graph</td>
+<td>100%</td>
+</tr>
+<tr>
+<td>Runs ending at the recursion limit</td>
+<td>0 — a non-zero rate is a routing bug</td>
+</tr>
+<tr>
+<td>Runs ending at the routing step ceiling</td>
+<td>&lt; 2%, and each one reviewed</td>
+</tr>
+<tr>
+<td>Tool errors escaping the graph as exceptions</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Median steps per run</td>
+<td>Known and tracked; a rise is the first sign of prompt drift</td>
+</tr>
+<tr>
+<td>Modules importing the graph library</td>
+<td>1 directory</td>
+</tr>
+<tr>
+<td>Time from a failed run to naming the node that failed</td>
+<td>&lt; 1 minute, from traces</td>
+</tr>
+</tbody>
+</table>
+<h2>10. Failure modes</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>An error about conflicting updates to a state key</td>
+<td>Two concurrent branches write a field with no reducer</td>
+<td>Annotate the field with how it merges</td>
+</tr>
+<tr>
+<td>State fields quietly double after adding a reducer</td>
+<td>A node returns the whole state rather than a partial update</td>
+<td>Return only the fields the node decided</td>
+</tr>
+<tr>
+<td>A resumed run behaves differently from the original</td>
+<td>A node mutated the state it was given, so the checkpoint does not match the path</td>
+<td>Treat node input as read-only; build a new dict</td>
+</tr>
+<tr>
+<td>The run stops with a recursion-limit exception</td>
+<td>A cycle with no exit condition, or a ceiling that lives only in the limit</td>
+<td>Put the ceiling in the routing function; keep the limit above it as a crash guard</td>
+</tr>
+<tr>
+<td>A checkpoint cannot be resumed after a deploy</td>
+<td>Node names changed, or the graph is compiled per request with different closures</td>
+<td>Treat node names as an interface; compile once at import</td>
+</tr>
+<tr>
+<td>A tool failure kills the whole run</td>
+<td>The tool node raises instead of recording</td>
+<td>Catch inside the node and return the failure as state the router can see</td>
+</tr>
+<tr>
+<td>Two branches run sequentially although they are independent</td>
+<td>They are chained by an edge rather than both edged from the same node</td>
+<td>Fan out from one node and merge at another</td>
+</tr>
+<tr>
+<td>Nothing can be resumed and no run can be inspected</td>
+<td>No thread id passed</td>
+<td>Pass one per run; it is the checkpoint identity</td>
+</tr>
+<tr>
+<td>A node cannot be tested without standing up the app</td>
+<td>It reads configuration or request context from outside the state</td>
+<td>Pass everything through state or through the node's constructor</td>
+</tr>
+<tr>
+<td>The graph works and nobody can say what it did</td>
+<td>Tracing is absent or does not record node names</td>
+<td>Attach tracing at compile; node names are the trace</td>
+</tr>
+<tr>
+<td>Latency doubled after adding a subgraph</td>
+<td>Subgraph state is isolated, so shared data is being recomputed</td>
+<td>Pass what the subgraph needs explicitly; keep subgraphs for genuinely separable work</td>
+</tr>
+</tbody>
+</table>
+<h2>11. Definition of done</h2>
+<ul>
+<li class="task">Every field in the state schema carries an explicit reducer, verified by reading the schema</li>
+<li class="task">No node returns the full state; each returns a partial update, verified by inspecting every node's return</li>
+<li class="task">A test asserts that a node's returned keys are a subset of the fields it owns</li>
+<li class="task">Every node is tested as a plain function, with no graph compiled and no checkpointer</li>
+<li class="task">Conditional edges enumerate their destinations, and every destination is covered by a test</li>
+<li class="task">A step ceiling exists in a routing function and produces a normal answer, covered by a test</li>
+<li class="task">The recursion limit is set above that ceiling and hitting it is treated as a bug, not as flow control</li>
+<li class="task">A failing tool produces a state update the router can act on, not an exception leaving the graph — covered by a test</li>
+<li class="task">Every run passes a thread id, verified at the runner boundary</li>
+<li class="task">The graph is compiled once at import; no compile call appears inside a request handler, checked by grep</li>
+<li class="task">The graph library is imported only under the agent directory, checked by grep in CI</li>
+<li class="task">Traces record node names and per-node duration, verified on a real run</li>
+<li class="task">If a fan-out exists, a test runs both branches concurrently and asserts the merged state</li>
+</ul>
+  </article>
+
+  <aside class="tailpiece">
+    <h2>Use this blueprint</h2>
+    <p>
+      Copy the file into your project and point your agent at it. It works with Claude Code,
+      Cursor, Copilot, ChatGPT and anything else that reads a file — there is nothing to install.
+    </p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/langgraph-agent" target="_blank" rel="noopener">Open on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Browse all blueprints</a>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p><a href="/">Awesome Blueprints</a> — same request, same architecture, every time.</p>
+    <p class="dim">MIT · awesomeblueprints.com</p>
+  </div>
+</footer>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'neutral' });
+</script>
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const now = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', now);
+    try { localStorage.setItem('ab-theme', now); } catch (e) {}
+    location.reload();   // the diagram is themed at render time
+  });
+</script>
+
+</body>
+</html>

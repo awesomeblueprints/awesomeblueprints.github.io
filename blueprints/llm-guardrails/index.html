@@ -1,0 +1,598 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LLM Input Guardrails and Prompt-Injection Detection — Blueprint for AI Coding Agents | Awesome Blueprints</title>
+<meta name="description" content="LLM input guardrails and prompt-injection detection: trust boundaries, provenance marking, classifiers and measured false-positive rates." />
+<link rel="canonical" href="https://awesomeblueprints.com/blueprints/llm-guardrails/" />
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="Awesome Blueprints" />
+<meta property="og:url" content="https://awesomeblueprints.com/blueprints/llm-guardrails/" />
+<meta property="og:title" content="LLM Input Guardrails and Prompt-Injection Detection — Architecture Blueprint" />
+<meta property="og:description" content="LLM input guardrails and prompt-injection detection: trust boundaries, provenance marking, classifiers and measured false-positive rates." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="LLM Input Guardrails and Prompt-Injection Detection — Architecture Blueprint" />
+<meta name="twitter:description" content="LLM input guardrails and prompt-injection detection: trust boundaries, provenance marking, classifiers and measured false-positive rates." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/page.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "LLM Input Guardrails and Prompt-Injection Detection", "description": "LLM input guardrails and prompt-injection detection: trust boundaries, provenance marking, classifiers and measured false-positive rates.", "url": "https://awesomeblueprints.com/blueprints/llm-guardrails/", "dateModified": "2026-08-20", "keywords": "Safety", "isAccessibleForFree": true, "license": "https://opensource.org/licenses/MIT", "publisher": {"@type": "Organization", "name": "Awesome Blueprints", "url": "https://awesomeblueprints.com"}}</script>
+<script>
+  (function () {
+    var t;
+    try { t = localStorage.getItem('ab-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">Awesome Blueprints</a>
+    <div class="nav-right">
+      <a class="nav-link" href="/#blueprints">Catalogue</a>
+      <a class="nav-link" href="/#faq">FAQ</a>
+      <a class="nav-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/llm-guardrails" target="_blank" rel="noopener">GitHub ↗</a>
+      <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Switch theme">◑</button>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/">Home</a> <span>/</span> <a href="/#blueprints">Blueprints</a> <span>/</span>
+    <span>LLM Input Guardrails and Prompt-Injection Detection</span>
+  </nav>
+
+  <header class="page-head">
+    <p class="eyebrow">llm-guardrails</p>
+    <h1>LLM Input Guardrails and Prompt-Injection Detection</h1>
+    <p class="lede">LLM input guardrails and prompt-injection detection: trust boundaries, provenance marking, classifiers and measured false-positive rates.</p>
+    <div class="facts"><span>medium</span><span>2–3 days</span><span>Verified 2026-08-20</span></div>
+    <div class="tags"><span class="tag">Safety</span></div>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/llm-guardrails" target="_blank" rel="noopener">Read it on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Back to the catalogue</a>
+    </div>
+  </header>
+
+  <article class="doc">
+<blockquote>
+<p>Everything that happens to text between arriving at your system and reaching the
+model: what is rejected outright, what is marked as untrusted, and what is
+allowed through with its provenance still attached.</p>
+</blockquote>
+<p><strong>Complexity:</strong> medium · <strong>Typical build:</strong> 2–3 days · <strong>Verified:</strong> 2026-08-20 (re-check after ~90 days)</p>
+<p><strong>Examples in:</strong> Python, with FastAPI. The architecture is language-agnostic: sections 5, 10 and 11 hold wherever you build this. Section 4 is illustrative — if your project is in another language, your agent translates the idioms rather than importing them, and nothing is lost. Every element here is plain text handling and one classifier call; no library is required, and the ones that exist are conveniences over the same three checks.</p>
+<p><strong>Use when:</strong> model input can contain anything a user typed, or any text fetched from a page, a document, an email or a tool result.</p>
+<p><strong>Not for:</strong> input the system generated itself from data it already trusts — a templated prompt over your own database rows adds latency and a false-positive rate for an attack surface that is not there. Also not for output-side safety: what the model <em>produces</em> is a different check at a different point, and doing both in one function means neither can be tuned.</p>
+<hr />
+<h2>⚙️ INSTRUCTIONS FOR THE AI — READ BEFORE WRITING ANY CODE</h2>
+<p><strong>Do not start coding.</strong></p>
+<p><strong>Step 1 — Refresh.</strong> Injection remains the top-ranked risk in the current OWASP
+list for LLM applications, and the published defence evaluations move faster than
+the libraries. Verify: whether your model provider now exposes a first-party
+injection classifier or a content-safety endpoint, what its documented latency and
+pricing are, and whether the provider documents any structural separation between
+system and untrusted content beyond message roles. Do not adopt a library without
+reading what it actually checks — several present themselves as injection defences
+and are keyword lists. Report what you verified and what turned out wrong.</p>
+<p><strong>Step 2 — Read the project, then audit what already exists.</strong> Enumerate every
+path by which text reaches a model, and this is the step people do badly: it is
+not only the chat box. It is uploaded documents, fetched web pages, tool results,
+retrieved chunks, email bodies, filenames, webhook payloads and error strings that
+get summarised. For each one record where the text originates and whether anything
+currently inspects it. Find any existing validation — a moderation call, a length
+cap, a regex — and where it sits. Find what the model can <em>do</em>, because that is
+what an injection is worth. Then audit §11 item by item, each marked <em>already
+true</em>, <em>partly true</em> or <em>absent</em>, with the file that decides it, reported before
+anything is proposed.</p>
+<p>Assume the project is right until it demonstrably is not; code satisfying an item
+stays even where its shape differs from §4; replacing something that works needs a
+one-line reason; never delete a working path to make room for the blueprint's
+version. The same holds for language — §4 is illustrative, its idioms get
+translated into the project's language, and §11 is what has to become true rather
+than the syntax.</p>
+<p><strong>Step 3 — Write a plan for the gap only, and get it approved</strong>, including a
+<code>## Proposed stack</code> section and the inventory from step 2 as a table of <em>source →
+trust level → checks applied</em>. Do not ask open questions — propose, and ask for
+confirmation once. Say what you are adding, what you are leaving alone, and what
+you propose to change, and touch nothing else.</p>
+<p><strong>Step 4 — Build in the order in §7.</strong> <strong>Step 5 — §11 is the definition of done.</strong></p>
+<hr />
+<h2>1. The premise, stated honestly</h2>
+<p>There is no input check that stops prompt injection. Published evaluations of the
+strongest available technique — marking untrusted content so the model can tell
+where it came from — report attack success falling from above 50% to below 2%
+with little loss of task quality. That is an excellent result and it is not zero,
+and the gap is not closing: the same evaluations show every prompting-based
+defence degrading against attacks written after it.</p>
+<p>So the design premise is not prevention. It is this:</p>
+<blockquote>
+<p><strong>Assume an injection will eventually succeed, and make the cost of that
+success small.</strong> Input guardrails reduce how often it happens; what the model is
+allowed to do decides what it costs when it does.</p>
+</blockquote>
+<p>That framing changes what belongs in this document. The three checks below are
+worth building because they are cheap and they remove the large volume of
+unsophisticated attempts. They are not worth trusting.</p>
+<h3>The trust rule, and the test that applies it</h3>
+<p>Every piece of text reaching a model is either <strong>trusted</strong> — authored by your
+system from data your system controls — or <strong>untrusted</strong>. The test:</p>
+<blockquote>
+<p><strong>Could a person outside your team have influenced these bytes?</strong></p>
+</blockquote>
+<p>If yes, untrusted. Apply it literally, because the interesting cases are the ones
+that feel internal: a retrieved document chunk (someone wrote the document), a
+tool result from a third-party API (someone controls that API's fields), a
+filename (the uploader chose it), an error message quoting user input, a
+previous assistant turn that summarised untrusted text. All untrusted. The
+classic failure is a system that carefully checks the chat box and then feeds it
+an unchecked web page.</p>
+<p>The consequence of the rule is the one architectural decision here: <strong>untrusted
+text never enters the system prompt, and never arrives concatenated to trusted
+text without a marker saying where the boundary is.</strong></p>
+<h2>2. Architecture</h2>
+<pre class="mermaid">%% GENERATED - do not edit by hand.
+%% Edit the source header in architecture.mmd, then rebuild.
+%% Three checks and a provenance marker
+
+flowchart TB
+    subgraph gate[&quot;The gate, one entry point&quot;]
+        direction TB
+        normalise[&quot;Normalise, decode and cap length&quot;]
+        cheap[&quot;Structural checks, no model call&quot;]
+        classify[&quot;Injection classifier&quot;]
+        mark[&quot;Wrap and mark as untrusted&quot;]
+    end
+
+    user([&quot;User&quot;])
+    web{{&quot;Fetched pages, documents, tool results&quot;}}
+    assemble[&quot;Prompt assembly, trusted parts only&quot;]
+    model[&quot;Model call&quot;]
+    log[(&quot;Decision log, one row per input&quot;)]
+    config[(&quot;Thresholds and limits&quot;)]
+
+    user --&gt; normalise
+    web --&gt; normalise
+    normalise --&gt; cheap
+    cheap --&gt;|&quot;passed&quot;| classify
+    cheap --&gt;|&quot;rejected, with the reason&quot;| log
+    classify --&gt;|&quot;below threshold&quot;| mark
+    classify --&gt;|&quot;above threshold, rejected&quot;| log
+    classify -.-&gt;|&quot;near threshold, allowed and flagged&quot;| log
+    mark --&gt; assemble
+    assemble --&gt; model
+    config --- cheap
+    config --- classify
+
+    classDef service fill:#eff6ff,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b;
+    classDef datastore fill:#e9faf3,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b;
+    classDef external fill:#fff4ed,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b;
+    classDef actor fill:#f0eefc,stroke:#4a3aa7,stroke-width:1.5px,color:#0b0b0b;
+    class normalise,cheap,classify,mark,assemble,model service;
+    class log,config datastore;
+    class web external;
+    class user actor;</pre>
+<p>Two properties the diagram encodes. <strong>There is exactly one entry point</strong>: both the
+user arrow and the fetched-content arrow reach the same <code>normalise</code> node. A second
+path that skips the gate is the failure this whole structure exists to prevent,
+and it is normally added six months later by someone adding a feature. And <strong>every
+decision reaches the log</strong>, including the ones that passed — a guardrail with no
+record of what it allowed cannot be tuned, only guessed at.</p>
+<h2>3. Project structure</h2>
+<div class="hl"><pre><span></span><code>app/guardrails/
+├── gate.py         the single entry point: check(text, source) -&gt; Checked
+├── normalise.py    decoding, whitespace and invisible characters, length cap
+├── structural.py   the checks that cost nothing: no model call
+├── classifier.py   the model-based check, with its threshold and its timeout
+├── marking.py      wrapping untrusted text with a provenance marker
+└── decisions.py    the log record: source, checks, scores, outcome
+</code></pre></div>
+
+<p><strong>One rule: nothing outside this package builds a prompt from untrusted text.</strong>
+The gate returns a wrapped object rather than a string, so a caller that skips
+marking has a type error rather than a silent vulnerability. That is the single
+design choice that makes the rule enforceable instead of aspirational.</p>
+<h2>4. Reference implementation</h2>
+<div class="hl"><pre><span></span><code><span class="c1"># app/guardrails/marking.py</span>
+<span class="kn">import</span> <span class="nn">re</span>
+<span class="kn">import</span> <span class="nn">unicodedata</span>
+<span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span>
+
+
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span> <span class="nc">Untrusted</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Untrusted text, wrapped so it cannot be used by accident.</span>
+
+<span class="sd">    There is deliberately no `__str__` shortcut to the raw text. A caller that</span>
+<span class="sd">    wants the content must call `render()` and therefore gets the marking. This</span>
+<span class="sd">    is why the gate returns an object instead of a string: it converts &quot;remember</span>
+<span class="sd">    to mark untrusted content&quot; from a rule people follow into one the type</span>
+<span class="sd">    checker follows.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">text</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">source</span><span class="p">:</span> <span class="nb">str</span>
+
+    <span class="k">def</span> <span class="nf">render</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="c1"># Datamarking: interleave a token the model is told marks untrusted</span>
+        <span class="c1"># content. Published evaluation of this family of techniques reports</span>
+        <span class="c1"># attack success dropping from above 50% to below 2%, with little loss of</span>
+        <span class="c1"># task quality. It is the strongest cheap defence available and it is not</span>
+        <span class="c1"># a guarantee.</span>
+        <span class="n">marked</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">text</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot; &quot;</span><span class="p">,</span> <span class="s2">&quot;░&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;&lt;untrusted source=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">source</span><span class="si">!r}</span><span class="s2">&gt;</span><span class="se">\n</span><span class="si">{</span><span class="n">marked</span><span class="si">}</span><span class="se">\n</span><span class="s2">&lt;/untrusted&gt;&quot;</span>
+        <span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">strip_invisibles</span><span class="p">(</span><span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Remove characters that are invisible to a reviewer and visible to a model.</span>
+
+<span class="sd">    Zero-width joiners, bidirectional overrides and tag characters let an</span>
+<span class="sd">    instruction be present in the bytes and absent from anything a human reads,</span>
+<span class="sd">    including your own logs. Normalising to NFKC first collapses the lookalike</span>
+<span class="sd">    encodings that otherwise reintroduce them.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">text</span> <span class="o">=</span> <span class="n">unicodedata</span><span class="o">.</span><span class="n">normalize</span><span class="p">(</span><span class="s2">&quot;NFKC&quot;</span><span class="p">,</span> <span class="n">text</span><span class="p">)</span>
+    <span class="k">return</span> <span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">c</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">text</span> <span class="k">if</span> <span class="n">unicodedata</span><span class="o">.</span><span class="n">category</span><span class="p">(</span><span class="n">c</span><span class="p">)</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&quot;Cf&quot;</span><span class="p">,</span> <span class="s2">&quot;Co&quot;</span><span class="p">})</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/guardrails/structural.py</span>
+<span class="n">DELIMITER_PATTERN</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;&lt;/?(system|instructions?|untrusted)\b&quot;</span><span class="p">,</span> <span class="n">re</span><span class="o">.</span><span class="n">I</span><span class="p">)</span>
+
+<span class="c1"># These are not an injection detector. They catch a specific, common, mechanical</span>
+<span class="c1"># class: text that tries to close your framing and open its own. Treating a</span>
+<span class="c1"># keyword list as the defence is the mistake this file is written to avoid —</span>
+<span class="c1"># hence the name of the module and the comment you are reading.</span>
+<span class="k">def</span> <span class="nf">structural_findings</span><span class="p">(</span><span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+    <span class="n">findings</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">if</span> <span class="n">DELIMITER_PATTERN</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">text</span><span class="p">):</span>
+        <span class="n">findings</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;delimiter_forgery&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">text</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">LIMITS</span><span class="o">.</span><span class="n">max_chars</span><span class="p">:</span>
+        <span class="n">findings</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;over_length&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">_ratio_of_non_language_bytes</span><span class="p">(</span><span class="n">text</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mf">0.3</span><span class="p">:</span>
+        <span class="c1"># High-entropy blobs are the usual carrier for encoded instructions and</span>
+        <span class="c1"># are almost never legitimate prose. Flag, do not reject: base64 in a</span>
+        <span class="c1"># support ticket is real.</span>
+        <span class="n">findings</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;high_entropy&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">findings</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/guardrails/gate.py</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">check</span><span class="p">(</span><span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">source</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Untrusted</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;The single entry point. Every untrusted string in the system passes here.</span>
+
+<span class="sd">    Order is deliberate: free checks before paid ones, so an obvious rejection</span>
+<span class="sd">    never costs a classifier call.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">text</span> <span class="o">=</span> <span class="n">strip_invisibles</span><span class="p">(</span><span class="n">text</span><span class="p">)[:</span> <span class="n">LIMITS</span><span class="o">.</span><span class="n">max_chars</span><span class="p">]</span>
+    <span class="n">findings</span> <span class="o">=</span> <span class="n">structural_findings</span><span class="p">(</span><span class="n">text</span><span class="p">)</span>
+    <span class="k">if</span> <span class="s2">&quot;delimiter_forgery&quot;</span> <span class="ow">in</span> <span class="n">findings</span><span class="p">:</span>
+        <span class="k">await</span> <span class="n">decisions</span><span class="o">.</span><span class="n">record</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="n">findings</span><span class="p">,</span> <span class="n">outcome</span><span class="o">=</span><span class="s2">&quot;rejected&quot;</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="n">InputRejected</span><span class="p">(</span><span class="s2">&quot;delimiter_forgery&quot;</span><span class="p">)</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">score</span> <span class="o">=</span> <span class="k">await</span> <span class="n">classifier</span><span class="o">.</span><span class="n">score</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">LIMITS</span><span class="o">.</span><span class="n">classifier_timeout_s</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">TimeoutError</span><span class="p">:</span>
+        <span class="c1"># Fail closed or fail open is a decision, not a default. Written here,</span>
+        <span class="c1"># once, with its reason: this path serves user-facing chat, where</span>
+        <span class="c1"># rejecting on a classifier outage would take the product down for</span>
+        <span class="c1"># everyone, so it fails open and flags. A path that can move money makes</span>
+        <span class="c1"># the opposite choice, and says so in its own configuration.</span>
+        <span class="n">score</span><span class="p">,</span> <span class="n">findings</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span> <span class="n">findings</span> <span class="o">+</span> <span class="p">[</span><span class="s2">&quot;classifier_unavailable&quot;</span><span class="p">]</span>
+
+    <span class="n">outcome</span> <span class="o">=</span> <span class="s2">&quot;rejected&quot;</span> <span class="k">if</span> <span class="n">score</span> <span class="o">&gt;=</span> <span class="n">LIMITS</span><span class="o">.</span><span class="n">reject_at</span> <span class="k">else</span> <span class="s2">&quot;allowed&quot;</span>
+    <span class="k">await</span> <span class="n">decisions</span><span class="o">.</span><span class="n">record</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="n">findings</span><span class="p">,</span> <span class="n">score</span><span class="o">=</span><span class="n">score</span><span class="p">,</span> <span class="n">outcome</span><span class="o">=</span><span class="n">outcome</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">outcome</span> <span class="o">==</span> <span class="s2">&quot;rejected&quot;</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">InputRejected</span><span class="p">(</span><span class="s2">&quot;classifier&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">Untrusted</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="n">text</span><span class="p">,</span> <span class="n">source</span><span class="o">=</span><span class="n">source</span><span class="p">)</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># tests/test_gate.py</span>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">parametrize</span><span class="p">(</span><span class="s2">&quot;payload&quot;</span><span class="p">,</span> <span class="n">KNOWN_ATTEMPTS</span><span class="p">)</span>   <span class="c1"># a file, versioned, in-repo</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">test_known_attempts_are_caught_or_marked</span><span class="p">(</span><span class="n">payload</span><span class="p">):</span>
+    <span class="c1"># The suite is a regression net, not a proof. Its value is that a change to a</span>
+    <span class="c1"># threshold shows up as a diff instead of as an incident.</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">wrapped</span> <span class="o">=</span> <span class="k">await</span> <span class="n">check</span><span class="p">(</span><span class="n">payload</span><span class="p">,</span> <span class="n">source</span><span class="o">=</span><span class="s2">&quot;test&quot;</span><span class="p">)</span>
+    <span class="k">except</span> <span class="n">InputRejected</span><span class="p">:</span>
+        <span class="k">return</span>
+    <span class="k">assert</span> <span class="s2">&quot;&lt;untrusted&quot;</span> <span class="ow">in</span> <span class="n">wrapped</span><span class="o">.</span><span class="n">render</span><span class="p">()</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">test_benign_input_is_not_rejected</span><span class="p">(</span><span class="n">benign_corpus</span><span class="p">):</span>
+    <span class="c1"># The check that stops the guardrail from being tightened into uselessness.</span>
+    <span class="c1"># Without a false-positive test, every incident ends with a lower threshold</span>
+    <span class="c1"># and nobody measures what that costs.</span>
+    <span class="n">rejected</span> <span class="o">=</span> <span class="p">[</span><span class="n">t</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">benign_corpus</span> <span class="k">if</span> <span class="k">await</span> <span class="n">_is_rejected</span><span class="p">(</span><span class="n">t</span><span class="p">)]</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">rejected</span><span class="p">)</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="n">benign_corpus</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mf">0.01</span>
+</code></pre></div>
+
+<h2>5. Golden-standard rules</h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Forbidden:</strong> untrusted text in the system prompt, in any form</td>
+<td>It inherits the authority of everything around it, and no downstream check recovers from that.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> concatenating untrusted text to trusted text without a provenance marker</td>
+<td>The model cannot distinguish what it was not told to distinguish; marking is what makes the distinction available.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> a second path to the model that bypasses the gate</td>
+<td>One entry point is the entire control; a bypass added for a feature is the vulnerability.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> returning untrusted text as a plain string from the gate</td>
+<td>A string can be interpolated by accident. An object with no implicit rendering cannot.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> a keyword or regex list presented as injection defence</td>
+<td>It catches the attempts that were not trying; it produces false confidence in exchange.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> treating input checks as sufficient, with unrestricted model capability behind them</td>
+<td>The best published defences leave a residual success rate; what the model may do decides what that residual costs.</td>
+</tr>
+<tr>
+<td>Trust is decided by whether anyone outside the team could influence the bytes</td>
+<td>It is the only test that catches document chunks, tool results and filenames, which are where real incidents come from.</td>
+</tr>
+<tr>
+<td>Input is normalised and stripped of invisible characters before any check</td>
+<td>Otherwise the check reads different bytes from the model, and from your logs.</td>
+</tr>
+<tr>
+<td>A length cap is applied before the classifier</td>
+<td>It bounds both cost and the amount of material an attack can hide in.</td>
+</tr>
+<tr>
+<td>Cheap structural checks run before any model call</td>
+<td>An obvious rejection should not cost a classifier invocation.</td>
+</tr>
+<tr>
+<td>The classifier has a timeout and a written fail-open-or-closed decision per path</td>
+<td>The default is whichever the library chose, applied uniformly to paths with opposite risk profiles.</td>
+</tr>
+<tr>
+<td>Every decision is logged, including allows, with the score</td>
+<td>A guardrail with no record of what it allowed can be tuned only by guessing.</td>
+</tr>
+<tr>
+<td>A false-positive rate is measured against a benign corpus</td>
+<td>Every incident otherwise ends in a lower threshold that nobody prices.</td>
+</tr>
+<tr>
+<td>Known attempts live in a versioned file with a test over them</td>
+<td>Threshold changes then appear as diffs rather than as incidents.</td>
+</tr>
+</tbody>
+</table>
+<h2>6. Data contracts</h2>
+<div class="hl"><pre><span></span><code>in     text plus its source identifier
+out    a wrapped untrusted value, or a rejection carrying the reason code
+log    source, findings, score, outcome, prompt version, timestamp
+</code></pre></div>
+
+<p>The source identifier is not decoration. It is what lets the log answer <em>which
+channel is under attack</em>, and it is what appears in the provenance marker so the
+model can weigh a support ticket differently from a fetched web page. Make it an
+enumeration, not a free string.</p>
+<p>The rejection reason is an internal code. What the <em>user</em> sees is a fixed generic
+message: a reason that names the check tells an attacker which one fired and lets
+them tune against it in a handful of attempts.</p>
+<h2>7. Build order</h2>
+<ol>
+<li><strong>The inventory of paths from step 2</strong>, written down. Everything else is scoped
+   by it, and the paths people forget — tool results, retrieved chunks — are found
+   here or not at all.</li>
+<li><strong>The gate as a single function returning a wrapped type</strong>, with normalisation
+   and the length cap and nothing else. The type is what makes the rest
+   enforceable, so it comes before any check.</li>
+<li><strong>Marking</strong>, and the change at every prompt assembly site to use it. Do this
+   before the classifier: it is the defence with the strongest published effect,
+   and it costs nothing per request.</li>
+<li><strong>The structural checks</strong>, with the benign corpus test alongside them from the
+   first one.</li>
+<li><strong>The decision log</strong>, before the classifier, so the classifier's threshold is
+   set from data rather than from intuition.</li>
+<li><strong>The classifier</strong>, with its timeout, and its fail-mode decision written per
+   path.</li>
+<li><strong>The known-attempts suite</strong>, run in CI.</li>
+</ol>
+<p>Marking before classification is the sequencing that matters. Teams do it in the
+opposite order, spend a week on thresholds, and ship the cheaper and more
+effective control last.</p>
+<h2>8. Blocks to pull in</h2>
+<p>Nothing here is a prerequisite. These are adjacent problems, by name only —
+resolve them separately if they apply.</p>
+<ul>
+<li>Guardrails and prompt-injection defence in depth — capability restriction, dual-model isolation, taint tracking and blast-radius design</li>
+<li>Output validation — checking what the model produced before it is used</li>
+<li>LLM tool registry and dispatcher — declaring what the model may call, which is what an injection is worth</li>
+<li>Human-in-the-loop approval — the pause before an irreversible step</li>
+<li>Rate limiting — bounding how many attempts one caller gets</li>
+<li>Audit logging — where decision records are kept and for how long</li>
+</ul>
+<h2>9. Metrics</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Paths reaching a model that bypass the gate</td>
+<td>0, verified against the inventory</td>
+</tr>
+<tr>
+<td>Untrusted text reaching the model unmarked</td>
+<td>0</td>
+</tr>
+<tr>
+<td>False-positive rate on the benign corpus</td>
+<td>&lt; 1%, measured, not assumed</td>
+</tr>
+<tr>
+<td>Known-attempts suite passing</td>
+<td>100% in CI</td>
+</tr>
+<tr>
+<td>Added p95 latency from the gate</td>
+<td>&lt; 150 ms, classifier included</td>
+</tr>
+<tr>
+<td>Structural rejections as a share of all rejections</td>
+<td>Tracked; a fall means attempts are getting better</td>
+</tr>
+<tr>
+<td>Classifier timeouts</td>
+<td>&lt; 0.1%, and each fail-mode consequence understood</td>
+</tr>
+<tr>
+<td>Inputs allowed with no logged decision</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Time to answer "which source is being attacked"</td>
+<td>&lt; 1 minute, from the log</td>
+</tr>
+</tbody>
+</table>
+<h2>10. Failure modes</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>An injection arrives through a document or a tool result</td>
+<td>Only the chat box was treated as untrusted</td>
+<td>Apply the influence test to every source; route all of them through the gate</td>
+</tr>
+<tr>
+<td>The model follows instructions found inside a fetched page</td>
+<td>Untrusted text was concatenated without a marker</td>
+<td>Mark it, and tell the model in the system prompt what the marker means</td>
+</tr>
+<tr>
+<td>A check passes text the model then reads differently</td>
+<td>Invisible or lookalike characters were not normalised before checking</td>
+<td>Normalise and strip before every check</td>
+</tr>
+<tr>
+<td>An attacker learns exactly which check fired</td>
+<td>The rejection reason was returned to the user</td>
+<td>Generic message out; the reason code stays in the log</td>
+</tr>
+<tr>
+<td>A guardrail change causes a wave of complaints</td>
+<td>No benign corpus, so the false-positive cost was never measured</td>
+<td>Measure it before shipping any threshold change</td>
+</tr>
+<tr>
+<td>A classifier outage takes the product down</td>
+<td>Fail-closed applied to a path where availability matters</td>
+<td>Decide the fail mode per path and write down the reason</td>
+</tr>
+<tr>
+<td>A classifier outage silently disables the defence</td>
+<td>Fail-open applied to a path where safety matters</td>
+<td>Same, in the other direction; flag and alert either way</td>
+</tr>
+<tr>
+<td>Nobody can tune the threshold</td>
+<td>Only rejections were logged</td>
+<td>Log allows with their scores too</td>
+</tr>
+<tr>
+<td>A new feature reintroduces a vulnerability that was fixed</td>
+<td>It built a prompt from a raw string</td>
+<td>Have the gate return a type, so bypassing it fails to compile or type-check</td>
+</tr>
+<tr>
+<td>The defence works in tests and not in the wild</td>
+<td>The known-attempts file is stale</td>
+<td>Add every real attempt seen in the log to the file</td>
+</tr>
+<tr>
+<td>Guardrails were added and the incident still cost a lot</td>
+<td>Input checks were treated as the whole defence</td>
+<td>Restrict capability behind them; assume residual success</td>
+</tr>
+</tbody>
+</table>
+<h2>11. Definition of done</h2>
+<ul>
+<li class="task">An inventory exists of every path by which text reaches a model, with a trust level for each, and it is checked against the code</li>
+<li class="task">Every one of those paths calls the gate, verified by grep against the inventory</li>
+<li class="task">The gate returns a wrapped type; no path constructs a prompt from a raw untrusted string, checked by type checker or CI grep</li>
+<li class="task">Untrusted text never appears in the system prompt, verified by reading every prompt assembly site</li>
+<li class="task">All untrusted text is rendered with a provenance marker, and the system prompt states what the marker means</li>
+<li class="task">Input is NFKC-normalised and stripped of format and private-use characters before any check, covered by a test with an invisible-character payload</li>
+<li class="task">A length cap is applied before the classifier call</li>
+<li class="task">Structural checks run before any model call, verified by reading the gate</li>
+<li class="task">The classifier has an explicit timeout, and the fail-open-or-closed choice is written per path with its reason</li>
+<li class="task">Every decision is logged with source, findings, score and outcome — allows included</li>
+<li class="task">Users receive a generic rejection message; no reason code is exposed, covered by a test</li>
+<li class="task">A versioned file of known attempts exists and a CI test runs the gate over all of them</li>
+<li class="task">A benign corpus test asserts a false-positive rate under 1%</li>
+<li class="task">Added p95 latency from the gate is measured and recorded</li>
+<li class="task">The set of actions available to the model behind the gate is written down, on the assumption that a check will eventually be passed</li>
+</ul>
+  </article>
+
+  <aside class="tailpiece">
+    <h2>Use this blueprint</h2>
+    <p>
+      Copy the file into your project and point your agent at it. It works with Claude Code,
+      Cursor, Copilot, ChatGPT and anything else that reads a file — there is nothing to install.
+    </p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/llm-guardrails" target="_blank" rel="noopener">Open on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Browse all blueprints</a>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p><a href="/">Awesome Blueprints</a> — same request, same architecture, every time.</p>
+    <p class="dim">MIT · awesomeblueprints.com</p>
+  </div>
+</footer>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'neutral' });
+</script>
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const now = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', now);
+    try { localStorage.setItem('ab-theme', now); } catch (e) {}
+    location.reload();   // the diagram is themed at render time
+  });
+</script>
+
+</body>
+</html>

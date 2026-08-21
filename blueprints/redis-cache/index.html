@@ -1,0 +1,565 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Redis Cache Layer — Blueprint for AI Coding Agents | Awesome Blueprints</title>
+<meta name="description" content="A Redis cache layer: key design, TTLs, stampede protection, invalidation on write, and knowing what should happen when Redis is down." />
+<link rel="canonical" href="https://awesomeblueprints.com/blueprints/redis-cache/" />
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="Awesome Blueprints" />
+<meta property="og:url" content="https://awesomeblueprints.com/blueprints/redis-cache/" />
+<meta property="og:title" content="Redis Cache Layer — Architecture Blueprint" />
+<meta property="og:description" content="A Redis cache layer: key design, TTLs, stampede protection, invalidation on write, and knowing what should happen when Redis is down." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Redis Cache Layer — Architecture Blueprint" />
+<meta name="twitter:description" content="A Redis cache layer: key design, TTLs, stampede protection, invalidation on write, and knowing what should happen when Redis is down." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/page.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "Redis Cache Layer", "description": "A Redis cache layer: key design, TTLs, stampede protection, invalidation on write, and knowing what should happen when Redis is down.", "url": "https://awesomeblueprints.com/blueprints/redis-cache/", "dateModified": "2026-08-19", "keywords": "Redis", "isAccessibleForFree": true, "license": "https://opensource.org/licenses/MIT", "publisher": {"@type": "Organization", "name": "Awesome Blueprints", "url": "https://awesomeblueprints.com"}}</script>
+<script>
+  (function () {
+    var t;
+    try { t = localStorage.getItem('ab-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">Awesome Blueprints</a>
+    <div class="nav-right">
+      <a class="nav-link" href="/#blueprints">Catalogue</a>
+      <a class="nav-link" href="/#faq">FAQ</a>
+      <a class="nav-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/redis-cache" target="_blank" rel="noopener">GitHub ↗</a>
+      <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Switch theme">◑</button>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/">Home</a> <span>/</span> <a href="/#blueprints">Blueprints</a> <span>/</span>
+    <span>Redis Cache Layer</span>
+  </nav>
+
+  <header class="page-head">
+    <p class="eyebrow">redis-cache</p>
+    <h1>Redis Cache Layer</h1>
+    <p class="lede">A Redis cache layer: key design, TTLs, stampede protection, invalidation on write, and knowing what should happen when Redis is down.</p>
+    <div class="facts"><span>medium</span><span>2–3 days</span><span>Verified 2026-08-19</span></div>
+    <div class="tags"><span class="tag">Redis</span></div>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/redis-cache" target="_blank" rel="noopener">Read it on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Back to the catalogue</a>
+    </div>
+  </header>
+
+  <article class="doc">
+<blockquote>
+<p>Caching that names its keys, expires everything, invalidates on write, survives
+the moment a thousand requests miss the same key at once — and degrades to a
+slower application rather than a broken one when Redis is gone.</p>
+</blockquote>
+<p><strong>Complexity:</strong> medium · <strong>Typical build:</strong> 2–3 days · <strong>Verified:</strong> 2026-08-19 (re-check after ~90 days)</p>
+<p><strong>Examples in:</strong> Python, with Redis and FastAPI. The architecture is language-agnostic: sections 5, 10 and 11 hold wherever you build this. Section 4 is illustrative — if your project is in another language, your agent translates the idioms rather than importing them, and nothing is lost. The key schema, invalidation and stampede concerns are identical with Memcached, and the degradation rule matters more, not less, with an in-process cache.</p>
+<p><strong>Use when:</strong> a read is expensive and repeated — an aggregate over many rows, a third-party response, a permission set computed per request — and the answer is allowed to be slightly old.</p>
+<p><strong>Not for:</strong> hiding a query that is slow because it is wrong. Caching an unindexed scan makes the first request slow and every later one fast, right up to the invalidation, and then the same scan runs under whatever load arrived meanwhile. Fix the query first; cache what is still expensive. Also not for data that must be exact on read — a balance, a stock level at checkout, a permission that has just been revoked.</p>
+<hr />
+<h2>⚙️ INSTRUCTIONS FOR THE AI — READ BEFORE WRITING ANY CODE</h2>
+<p><strong>Do not start coding.</strong></p>
+<p><strong>Step 1 — Refresh.</strong> Verify the Redis client and whether its operations accept a
+timeout — a cache that blocks on a slow Redis is slower than no cache, and this is
+the single most important setting here. Verify the server's <code>maxmemory-policy</code>,
+because a cache configured with <code>noeviction</code> returns write errors when it fills
+rather than evicting, which turns a full cache into an outage. Confirm the API for
+scripted atomic operations, since invalidation and stampede control both need one.
+Report what you verified and what turned out wrong.</p>
+<p><strong>Step 2 — Read the project, then audit what already exists.</strong> Find every existing
+cache — Redis, an in-process dictionary, a memoisation decorator — and for each
+record its key shape, its TTL and what invalidates it. A cache with no TTL and no
+invalidation is serving data from whenever the process started, and finding those
+is most of what this audit is for. Measure the two or three reads this work is
+meant to speed up, so there is a number to improve. Find whether Redis is already
+a hard dependency of any request path. Then audit §11 item by item, each marked
+<em>already true</em>, <em>partly true</em> or <em>absent</em>, with the file that decides it, reported
+before anything is proposed.</p>
+<p>Assume the project is right until it demonstrably is not; code satisfying an item
+stays even where its shape differs from §4; replacing something that works needs a
+one-line reason; never delete a working path to make room for the blueprint's
+version. The same holds for language — §4 is illustrative, its idioms get
+translated into the project's language, and §11 is what has to become true rather
+than the syntax.</p>
+<p><strong>Step 3 — Write a plan for the gap only, and get it approved</strong>, including a
+<code>## Proposed stack</code> section, the key namespace, and for each cached read: its TTL,
+what invalidates it, and how stale it is allowed to be. Do not ask open framework
+questions — propose, and ask for confirmation once. Say what you are adding, what
+you are leaving alone, and what you propose to change, and touch nothing else.</p>
+<p><strong>Step 4 — Build in the order in §7.</strong> <strong>Step 5 — §11 is the definition of done.</strong></p>
+<hr />
+<h2>1. Why a cache is a correctness decision</h2>
+<p>Adding a cache looks like a performance change. It is a decision about how wrong
+an answer may be, and four defaults get it wrong.</p>
+<table>
+<thead>
+<tr>
+<th>The cache that was added quickly</th>
+<th>This one</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Keys are formatted strings scattered across the codebase, so nothing can find them again to invalidate them</td>
+<td>Keys come from one builder, so invalidation can enumerate what it must remove</td>
+</tr>
+<tr>
+<td>Some entries have no TTL, and nobody can say what is in there</td>
+<td>Everything expires; the TTL is the maximum staleness, stated per entry</td>
+</tr>
+<tr>
+<td>An entry is invalidated where someone remembered to</td>
+<td>Invalidation is attached to the write, so a new write path cannot forget</td>
+</tr>
+<tr>
+<td>When Redis is down, requests fail</td>
+<td>When Redis is down, requests are slower</td>
+</tr>
+</tbody>
+</table>
+<p>The fourth row is the one that turns an optimisation into an outage. A cache is
+supposed to make a working system faster; if its absence makes the system stop, it
+was never a cache — it was an undeclared dependency, and it took the application
+down for something it was only ever meant to accelerate.</p>
+<p>There is a fifth failure that has no naive counterpart, because it only appears
+under load. A popular key expires; every request that arrives in the next few
+hundred milliseconds misses; all of them run the expensive query at once. The
+database, which was fine, is now serving a thousand copies of the same work — and
+because the load is caused by the expiry rather than by traffic, it repeats on a
+timer. <strong>The cache did not fail here; it worked exactly as designed.</strong></p>
+<h2>2. Architecture</h2>
+<pre class="mermaid">%% GENERATED - do not edit by hand.
+%% Edit the source header in architecture.mmd, then rebuild.
+%% Read through cache with contained failure
+
+flowchart TB
+    client([&quot;Request&quot;])
+    handler[&quot;Read path&quot;]
+    keys[&quot;Key builder, one namespace&quot;]
+    cache[&quot;Cache client with a timeout&quot;]
+    guard[&quot;Stampede control&quot;]
+    loader[&quot;The expensive read&quot;]
+    writes[&quot;Write path&quot;]
+    invalidate[&quot;Invalidation&quot;]
+    store[(&quot;Redis&quot;)]
+    source[(&quot;Database&quot;)]
+
+    client --&gt; handler
+    handler --&gt;|&quot;build the key&quot;| keys
+    handler --&gt;|&quot;get&quot;| cache
+    cache --&gt; store
+    cache -.-&gt;|&quot;miss, or unavailable&quot;| handler
+    handler --&gt;|&quot;on a miss&quot;| guard
+    guard --&gt;|&quot;only one caller recomputes&quot;| loader
+    loader --&gt; source
+    loader --&gt;|&quot;set with a ttl&quot;| cache
+    cache -.-&gt;|&quot;value returned&quot;| client
+    writes --&gt;|&quot;the authoritative change&quot;| source
+    writes --&gt;|&quot;in the same code path&quot;| invalidate
+    invalidate --&gt;|&quot;the exact keys this write affects&quot;| keys
+    invalidate --&gt;|&quot;delete&quot;| store
+
+    classDef service fill:#eff6ff,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b;
+    classDef datastore fill:#e9faf3,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b;
+    classDef external fill:#fff4ed,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b;
+    classDef actor fill:#f0eefc,stroke:#4a3aa7,stroke-width:1.5px,color:#0b0b0b;
+    class handler,keys,cache,guard,loader,writes,invalidate service;
+    class store,source datastore;
+    class client actor;</pre>
+<p>The rule the diagram encodes: <strong>the arrow from the cache back to the handler on
+failure is the same arrow as on a miss.</strong> Unavailable and absent are one branch,
+which is what makes degradation the default rather than a special case somebody
+has to remember to write.</p>
+<h2>3. Project structure</h2>
+<div class="hl"><pre><span></span><code>app/cache/
+├── keys.py         every key shape in the system — one file, no exceptions
+├── client.py       get, set, delete, with timeouts and failure containment
+├── decorator.py    the read-through wrapper
+└── invalidate.py   which keys a given write clears
+</code></pre></div>
+
+<p><strong>One rule: no key is formatted anywhere except <code>keys.py</code>.</strong> An f-string in a
+handler is a key that invalidation cannot find, and the entry it writes will be
+served until its TTL regardless of what the database now says. Enforce it with a
+grep in CI, not with review.</p>
+<h2>4. Reference implementation</h2>
+<div class="hl"><pre><span></span><code><span class="c1"># app/cache/keys.py</span>
+<span class="n">NAMESPACE</span> <span class="o">=</span> <span class="s2">&quot;orders&quot;</span>
+<span class="n">VERSION</span> <span class="o">=</span> <span class="s2">&quot;v3&quot;</span>      <span class="c1"># bump to invalidate every entry of a shape at once, without</span>
+                    <span class="c1"># scanning and without a deploy-time flush</span>
+
+<span class="k">def</span> <span class="nf">order</span><span class="p">(</span><span class="n">order_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">NAMESPACE</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">VERSION</span><span class="si">}</span><span class="s2">:order:</span><span class="si">{</span><span class="n">order_id</span><span class="si">}</span><span class="s2">&quot;</span>
+
+<span class="k">def</span> <span class="nf">orders_for_customer</span><span class="p">(</span><span class="n">customer_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">NAMESPACE</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">VERSION</span><span class="si">}</span><span class="s2">:customer:</span><span class="si">{</span><span class="n">customer_id</span><span class="si">}</span><span class="s2">:orders&quot;</span>
+
+<span class="k">def</span> <span class="nf">keys_invalidated_by_order_write</span><span class="p">(</span><span class="n">order</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+    <span class="c1"># The write path asks this rather than deciding for itself. When a new cached</span>
+    <span class="c1"># read is added, it is added here, and every existing write path clears it</span>
+    <span class="c1"># without being touched — which is the only way this stays correct.</span>
+    <span class="k">return</span> <span class="p">[</span><span class="n">order</span><span class="p">(</span><span class="n">order</span><span class="o">.</span><span class="n">id</span><span class="p">),</span> <span class="n">orders_for_customer</span><span class="p">(</span><span class="n">order</span><span class="o">.</span><span class="n">customer_id</span><span class="p">)]</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/cache/client.py</span>
+<span class="kn">import</span> <span class="nn">asyncio</span><span class="o">,</span> <span class="nn">logging</span>
+<span class="kn">from</span> <span class="nn">redis.asyncio</span> <span class="kn">import</span> <span class="n">Redis</span>
+
+<span class="n">log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+<span class="c1"># A cache read that takes longer than the query it replaces is worse than no cache.</span>
+<span class="c1"># Bounded low and deliberately: this is a fast path or it is nothing.</span>
+<span class="n">TIMEOUT</span> <span class="o">=</span> <span class="mf">0.05</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">get</span><span class="p">(</span><span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bytes</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">async</span> <span class="k">with</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">timeout</span><span class="p">(</span><span class="n">TIMEOUT</span><span class="p">):</span>
+            <span class="k">return</span> <span class="k">await</span> <span class="n">redis</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+    <span class="k">except</span> <span class="p">(</span><span class="n">redis</span><span class="o">.</span><span class="n">RedisError</span><span class="p">,</span> <span class="ne">TimeoutError</span><span class="p">):</span>
+        <span class="c1"># Unavailable and absent are one branch. This single decision is what makes</span>
+        <span class="c1"># the cache optional at runtime instead of an undeclared dependency that</span>
+        <span class="c1"># takes the application down with it.</span>
+        <span class="n">log</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;cache unavailable&quot;</span><span class="p">,</span> <span class="n">extra</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;op&quot;</span><span class="p">:</span> <span class="s2">&quot;get&quot;</span><span class="p">})</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">set</span><span class="p">(</span><span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="nb">bytes</span><span class="p">,</span> <span class="n">ttl</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">async</span> <span class="k">with</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">timeout</span><span class="p">(</span><span class="n">TIMEOUT</span><span class="p">):</span>
+            <span class="c1"># Every write has a TTL. An entry without one is served until someone</span>
+            <span class="c1"># notices, and nobody notices — the answer is merely wrong, not broken.</span>
+            <span class="k">await</span> <span class="n">redis</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">ex</span><span class="o">=</span><span class="n">ttl</span><span class="p">)</span>
+    <span class="k">except</span> <span class="p">(</span><span class="n">redis</span><span class="o">.</span><span class="n">RedisError</span><span class="p">,</span> <span class="ne">TimeoutError</span><span class="p">):</span>
+        <span class="n">log</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;cache unavailable&quot;</span><span class="p">,</span> <span class="n">extra</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;op&quot;</span><span class="p">:</span> <span class="s2">&quot;set&quot;</span><span class="p">})</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/cache/decorator.py</span>
+<span class="kn">import</span> <span class="nn">math</span><span class="o">,</span> <span class="nn">random</span><span class="o">,</span> <span class="nn">time</span>
+
+<span class="n">BETA</span> <span class="o">=</span> <span class="mf">1.0</span>
+
+
+<span class="k">def</span> <span class="nf">cached</span><span class="p">(</span><span class="n">key_fn</span><span class="p">,</span> <span class="n">ttl</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">decorator</span><span class="p">(</span><span class="n">fn</span><span class="p">):</span>
+        <span class="k">async</span> <span class="k">def</span> <span class="nf">wrapper</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+            <span class="n">key</span> <span class="o">=</span> <span class="n">key_fn</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="n">raw</span> <span class="o">=</span> <span class="k">await</span> <span class="n">client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">raw</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">value</span><span class="p">,</span> <span class="n">computed_at</span><span class="p">,</span> <span class="n">delta</span> <span class="o">=</span> <span class="n">unpack</span><span class="p">(</span><span class="n">raw</span><span class="p">)</span>
+                <span class="c1"># Probabilistic early expiration. As the TTL approaches, the chance</span>
+                <span class="c1"># that any one request refreshes early rises; the log of a random</span>
+                <span class="c1"># number desynchronises callers, so one recomputes while the rest</span>
+                <span class="c1"># keep serving a nearly-fresh value.</span>
+                <span class="c1">#</span>
+                <span class="c1"># This is preferred to a lock for read-mostly data: a lock makes</span>
+                <span class="c1"># every other caller wait, which converts a database spike into a</span>
+                <span class="c1"># latency spike. Use a lock instead when serving a slightly stale</span>
+                <span class="c1"># value is genuinely unacceptable.</span>
+                <span class="n">expiry</span> <span class="o">=</span> <span class="n">computed_at</span> <span class="o">+</span> <span class="n">ttl</span>
+                <span class="k">if</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">delta</span> <span class="o">*</span> <span class="n">BETA</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">random</span><span class="o">.</span><span class="n">random</span><span class="p">())</span> <span class="o">&lt;</span> <span class="n">expiry</span><span class="p">:</span>
+                    <span class="k">return</span> <span class="n">value</span>
+
+            <span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="k">await</span> <span class="n">fn</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="n">delta</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span> <span class="o">-</span> <span class="n">start</span>        <span class="c1"># how long this costs to rebuild</span>
+            <span class="c1"># Jitter the TTL. Entries written together — after a deploy, or a bulk</span>
+            <span class="c1"># import — otherwise expire together, and the stampede returns on a timer.</span>
+            <span class="k">await</span> <span class="n">client</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">pack</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">(),</span> <span class="n">delta</span><span class="p">),</span>
+                             <span class="n">ttl</span><span class="o">=</span><span class="n">ttl</span> <span class="o">+</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">ttl</span> <span class="o">//</span> <span class="mi">10</span><span class="p">))</span>
+            <span class="k">return</span> <span class="n">value</span>
+        <span class="k">return</span> <span class="n">wrapper</span>
+    <span class="k">return</span> <span class="n">decorator</span>
+
+
+<span class="nd">@cached</span><span class="p">(</span><span class="n">keys</span><span class="o">.</span><span class="n">order</span><span class="p">,</span> <span class="n">ttl</span><span class="o">=</span><span class="mi">300</span><span class="p">)</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">get_order</span><span class="p">(</span><span class="n">order_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Order</span><span class="p">:</span> <span class="o">...</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/cache/invalidate.py</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">after_order_write</span><span class="p">(</span><span class="n">order</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Called from the write path, inside the same function that commits.</span>
+
+<span class="sd">    Delete, never update. A cache write here would race with a concurrent request</span>
+<span class="sd">    that read the old value a moment ago and is about to store it — leaving the</span>
+<span class="sd">    stale value cached for a full TTL, with the database saying otherwise and</span>
+<span class="sd">    nothing to indicate which is which.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">keys</span><span class="o">.</span><span class="n">keys_invalidated_by_order_write</span><span class="p">(</span><span class="n">order</span><span class="p">):</span>
+        <span class="k">await</span> <span class="n">client</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+</code></pre></div>
+
+<h2>5. Golden-standard rules</h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Forbidden:</strong> an entry written without a TTL</td>
+<td>It is served until someone notices, and nobody notices — a wrong answer is not an error. The TTL is the maximum staleness, so it must exist.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> a key formatted outside the key module</td>
+<td>Invalidation cannot find what it cannot enumerate, and that entry will be served regardless of the database.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> a cache failure propagating to the caller</td>
+<td>Then it is not a cache, it is a dependency — and it takes down the application for something meant only to speed it up.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> an unbounded cache operation</td>
+<td>A read that blocks longer than the query it replaces is worse than no cache at all.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> updating a cache entry on write instead of deleting it</td>
+<td>It races with a concurrent read that is about to store the old value, and the loser is cached for a full TTL.</td>
+</tr>
+<tr>
+<td>Invalidation lives in the write path, not beside it</td>
+<td>Somewhere else means a new write path can forget, and it will.</td>
+</tr>
+<tr>
+<td>The key module owns which keys a write clears</td>
+<td>Adding a cached read then updates every write path at once, without touching any of them.</td>
+</tr>
+<tr>
+<td>TTLs are jittered</td>
+<td>Entries written together expire together, and the stampede comes back on a schedule.</td>
+</tr>
+<tr>
+<td>A popular key is refreshed before it expires, not after</td>
+<td>Otherwise every request that arrives during the recompute runs the same expensive work.</td>
+</tr>
+<tr>
+<td>The key namespace carries a version</td>
+<td>A shape change is then one constant, rather than a scan or a flush.</td>
+</tr>
+<tr>
+<td><code>maxmemory-policy</code> evicts</td>
+<td>With <code>noeviction</code> a full cache returns errors on write, turning a capacity problem into an outage.</td>
+</tr>
+<tr>
+<td>Hit rate and cache latency are measured per key shape</td>
+<td>An aggregate hit rate hides the one shape that never hits, which is the one costing you.</td>
+</tr>
+</tbody>
+</table>
+<h2>6. Data contracts</h2>
+<div class="hl"><pre><span></span><code>key       &lt;namespace&gt;:&lt;version&gt;:&lt;entity&gt;:&lt;id&gt;[:&lt;qualifier&gt;]
+value     serialised, with the time it was computed and how long it took
+ttl       always present; jittered; the stated maximum staleness for that read
+</code></pre></div>
+
+<p>Storing the computation cost alongside the value is what makes early refresh
+possible: a read that takes two seconds to rebuild should start refreshing earlier
+than one that takes twenty milliseconds, and the only way to know is to have
+measured it when it was last built.</p>
+<p>The version segment is worth the ugliness. When a cached shape changes, every
+entry of the old shape becomes unreadable at once by changing one constant — no
+scan, no flush, no deploy-time migration, and no window in which a new deployment
+deserialises an old value into the wrong type.</p>
+<h2>7. Build order</h2>
+<ol>
+<li><strong>The key module and the client with timeouts and failure containment</strong>, before
+   anything is cached. Then a test that Redis being unreachable makes the endpoint
+   slower and not broken — that behaviour is the foundation, not a refinement.</li>
+<li><strong>One cached read</strong>, with hit rate and latency measured before and after.</li>
+<li><strong>Invalidation in the write path</strong>, with a test asserting a write makes the next
+   read return the new value.</li>
+<li><strong>TTL jitter.</strong></li>
+<li><strong>Early refresh</strong>, with a load test that misses one popular key concurrently and
+   asserts the loader ran once.</li>
+<li><strong>Serialisation with the version segment</strong>, and a test that an old-shape value
+   is ignored rather than deserialised.</li>
+<li><strong>Per-shape metrics</strong>, then extend to the remaining reads.</li>
+</ol>
+<p>Step 1 first because degradation is the property that makes everything else safe
+to add. A cache built the other way around is a dependency by the time anyone
+thinks to test it.</p>
+<h2>8. Blocks to pull in</h2>
+<p>Nothing here is a prerequisite. These are adjacent problems, by name only —
+resolve them separately if they apply.</p>
+<ul>
+<li>Redis rate limiting and job queues — the same Redis, different guarantees</li>
+<li>WebSocket broadcast with Redis pub/sub — another subsystem sharing this dependency</li>
+<li>PostgreSQL connection pool and lifecycle — the source this cache sits in front of</li>
+<li>Observability and tracing — where hit rate and cache latency are watched</li>
+</ul>
+<h2>9. Metrics</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Hit rate, per key shape</td>
+<td>&gt; 80% for anything worth caching; below that, reconsider</td>
+</tr>
+<tr>
+<td>Cache operation latency, p99</td>
+<td>&lt; 5 ms, and always under the timeout</td>
+</tr>
+<tr>
+<td>Requests served during a Redis outage</td>
+<td>100%, at source latency</td>
+</tr>
+<tr>
+<td>Concurrent loads of one key on expiry</td>
+<td>1</td>
+</tr>
+<tr>
+<td>Entries without a TTL</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Stale reads after a write</td>
+<td>0 beyond the invalidation path's own latency</td>
+</tr>
+<tr>
+<td>Memory used against <code>maxmemory</code></td>
+<td>&lt; 80%, with an evicting policy configured</td>
+</tr>
+</tbody>
+</table>
+<h2>10. Failure modes</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The application goes down when Redis does</td>
+<td>Cache errors propagate to the caller</td>
+<td>Treat unavailable as a miss, in one place</td>
+</tr>
+<tr>
+<td>Every request slows down when Redis is degraded</td>
+<td>No timeout on cache operations, so each request waits on it</td>
+<td>Bound every operation; treat the timeout as a miss</td>
+</tr>
+<tr>
+<td>The database spikes on a schedule with no traffic change</td>
+<td>A popular key expires and every concurrent request recomputes it</td>
+<td>Early refresh, TTL jitter, or a lock for the few keys where staleness is unacceptable</td>
+</tr>
+<tr>
+<td>The database spikes minutes after every deploy</td>
+<td>Entries were all written at start-up and expire together</td>
+<td>Jitter the TTL at write time</td>
+</tr>
+<tr>
+<td>A user updates something and still sees the old value</td>
+<td>The write path does not invalidate, or clears a different key than the read wrote</td>
+<td>One key module; invalidation attached to the write</td>
+</tr>
+<tr>
+<td>A stale value persists for a full TTL after a correct write</td>
+<td>The write updated the cache and raced with a concurrent read storing the old value</td>
+<td>Delete on write; let the next read repopulate</td>
+</tr>
+<tr>
+<td>Some entries are years old</td>
+<td>They were written without a TTL</td>
+<td>Require a TTL in the API so it cannot be omitted</td>
+</tr>
+<tr>
+<td>Writes to Redis start failing under memory pressure</td>
+<td><code>maxmemory-policy</code> is <code>noeviction</code></td>
+<td>Choose an evicting policy; a cache that cannot evict is not a cache</td>
+</tr>
+<tr>
+<td>A deploy causes deserialisation errors on cached values</td>
+<td>The cached shape changed and old entries were still readable</td>
+<td>Bump the version segment in the key namespace</td>
+</tr>
+<tr>
+<td>Hit rate looks healthy and the slow endpoint is still slow</td>
+<td>The aggregate hides one key shape that never hits</td>
+<td>Measure per shape</td>
+</tr>
+<tr>
+<td>Caching a slow query made the p99 worse</td>
+<td>The query was slow because it was wrong; now it runs under accumulated load after each invalidation</td>
+<td>Fix the query; cache what remains expensive</td>
+</tr>
+</tbody>
+</table>
+<h2>11. Definition of done</h2>
+<ul>
+<li class="task">With Redis stopped, every endpoint still answers correctly, covered by a test that asserts both the response and a source-latency timing</li>
+<li class="task">Every cache operation has a timeout, and exceeding it is treated as a miss, covered by a test</li>
+<li class="task">No key is constructed outside the key module, checked by grep in CI</li>
+<li class="task">Every write to the cache sets a TTL, enforced by the API rather than by review</li>
+<li class="task">A write followed immediately by a read returns the new value, covered by a test per cached read</li>
+<li class="task">Concurrent requests missing the same key result in exactly one load, covered by a concurrency test</li>
+<li class="task">TTLs are jittered, verified by writing many entries and asserting a spread of expiry times</li>
+<li class="task">Bumping the key version makes every old entry unreachable, covered by a test</li>
+<li class="task"><code>maxmemory-policy</code> is set to an evicting policy, verified by querying the running server</li>
+<li class="task">Hit rate and operation latency are exported per key shape, not only in aggregate</li>
+<li class="task">Every cached read has its maximum staleness written down next to its TTL</li>
+<li class="task">A cache write failing does not fail the request, covered by a test</li>
+</ul>
+  </article>
+
+  <aside class="tailpiece">
+    <h2>Use this blueprint</h2>
+    <p>
+      Copy the file into your project and point your agent at it. It works with Claude Code,
+      Cursor, Copilot, ChatGPT and anything else that reads a file — there is nothing to install.
+    </p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/redis-cache" target="_blank" rel="noopener">Open on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Browse all blueprints</a>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p><a href="/">Awesome Blueprints</a> — same request, same architecture, every time.</p>
+    <p class="dim">MIT · awesomeblueprints.com</p>
+  </div>
+</footer>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'neutral' });
+</script>
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const now = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', now);
+    try { localStorage.setItem('ab-theme', now); } catch (e) {}
+    location.reload();   // the diagram is themed at render time
+  });
+</script>
+
+</body>
+</html>

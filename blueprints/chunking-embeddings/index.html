@@ -1,0 +1,593 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Chunking and Embeddings for Retrieval — Blueprint for AI Coding Agents | Awesome Blueprints</title>
+<meta name="description" content="Chunking and embedding documents for retrieval: chunk size, overlap, metadata and re-embedding without rebuilding the whole index." />
+<link rel="canonical" href="https://awesomeblueprints.com/blueprints/chunking-embeddings/" />
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="Awesome Blueprints" />
+<meta property="og:url" content="https://awesomeblueprints.com/blueprints/chunking-embeddings/" />
+<meta property="og:title" content="Chunking and Embeddings for Retrieval — Architecture Blueprint" />
+<meta property="og:description" content="Chunking and embedding documents for retrieval: chunk size, overlap, metadata and re-embedding without rebuilding the whole index." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Chunking and Embeddings for Retrieval — Architecture Blueprint" />
+<meta name="twitter:description" content="Chunking and embedding documents for retrieval: chunk size, overlap, metadata and re-embedding without rebuilding the whole index." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/page.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "Chunking and Embeddings for Retrieval", "description": "Chunking and embedding documents for retrieval: chunk size, overlap, metadata and re-embedding without rebuilding the whole index.", "url": "https://awesomeblueprints.com/blueprints/chunking-embeddings/", "dateModified": "2026-08-19", "keywords": "Vector search, Retrieval, Evals", "isAccessibleForFree": true, "license": "https://opensource.org/licenses/MIT", "publisher": {"@type": "Organization", "name": "Awesome Blueprints", "url": "https://awesomeblueprints.com"}}</script>
+<script>
+  (function () {
+    var t;
+    try { t = localStorage.getItem('ab-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">Awesome Blueprints</a>
+    <div class="nav-right">
+      <a class="nav-link" href="/#blueprints">Catalogue</a>
+      <a class="nav-link" href="/#faq">FAQ</a>
+      <a class="nav-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/chunking-embeddings" target="_blank" rel="noopener">GitHub ↗</a>
+      <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Switch theme">◑</button>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/">Home</a> <span>/</span> <a href="/#blueprints">Blueprints</a> <span>/</span>
+    <span>Chunking and Embeddings for Retrieval</span>
+  </nav>
+
+  <header class="page-head">
+    <p class="eyebrow">chunking-embeddings</p>
+    <h1>Chunking and Embeddings for Retrieval</h1>
+    <p class="lede">Chunking and embedding documents for retrieval: chunk size, overlap, metadata and re-embedding without rebuilding the whole index.</p>
+    <div class="facts"><span>medium</span><span>3–5 days</span><span>Verified 2026-08-19</span></div>
+    <div class="tags"><span class="tag">Vector search</span><span class="tag">Retrieval</span><span class="tag">Evals</span></div>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/chunking-embeddings" target="_blank" rel="noopener">Read it on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Back to the catalogue</a>
+    </div>
+  </header>
+
+  <article class="doc">
+<blockquote>
+<p>What happens to a document before it reaches any vector store: split so that a
+chunk still means something on its own, enriched so it can be found, embedded in
+batches with a cache, and updated when the document changes without paying to
+re-embed the corpus.</p>
+</blockquote>
+<p><strong>Complexity:</strong> medium · <strong>Typical build:</strong> 3–5 days · <strong>Verified:</strong> 2026-08-19 (re-check after ~90 days)</p>
+<p><strong>Examples in:</strong> Python. The architecture is language-agnostic: sections 5, 10 and 11 hold wherever you build this. Section 4 is illustrative — if your project is in another language, your agent translates the idioms rather than importing them, and nothing is lost. Nothing here is tied to a particular store: this is the step before the store, and the same pipeline feeds any of them.</p>
+<p><strong>Use when:</strong> retrieval quality is the problem and the search itself looks correct — the right index, the right query, and answers built from fragments that do not say enough to answer with.</p>
+<p><strong>Not for:</strong> documents that are already short and self-contained — a product record, a support macro, a FAQ entry. Splitting those makes them worse. Also not for parsing: extracting clean text from a scanned PDF, a spreadsheet or a slide deck is a separate problem, and this pipeline assumes text that is already correct. Garbage in is chunked faithfully.</p>
+<hr />
+<h2>⚙️ INSTRUCTIONS FOR THE AI — READ BEFORE WRITING ANY CODE</h2>
+<p><strong>Do not start coding.</strong></p>
+<p><strong>Step 1 — Refresh.</strong> Verify the embedding model's <strong>context limit in tokens</strong>,
+its dimensionality, and the provider's batch limits — both the number of inputs
+per request and the total tokens per request, which are separate and both
+enforced. Verify how the provider reports rate limits and whether it returns
+partial results for an oversized batch or rejects the whole thing, because that
+decides how retries have to work. Verify the tokeniser the model actually uses,
+since chunk sizes measured in characters are only a proxy. Report what you
+verified and what turned out wrong.</p>
+<p><strong>Step 2 — Read the project, then audit what already exists.</strong> Take twenty real
+documents and look at what is in them: headings, tables, code, lists, footnotes,
+boilerplate that repeats on every page. That inspection decides the splitting
+strategy, and skipping it is why most pipelines split mid-table. Find how
+documents are identified and whether a stable identifier survives an edit. Find
+whether re-ingestion currently re-embeds everything. Establish the corpus size and
+its growth, because the cost of a full re-embed is the number that decides how
+much of this matters. Then audit §11 item by item, each marked <em>already true</em>,
+<em>partly true</em> or <em>absent</em>, with the file that decides it, reported before anything
+is proposed.</p>
+<p>Assume the project is right until it demonstrably is not; code satisfying an item
+stays even where its shape differs from §4; replacing something that works needs a
+one-line reason; never delete a working path to make room for the blueprint's
+version. The same holds for language — §4 is illustrative, its idioms get
+translated into the project's language, and §11 is what has to become true rather
+than the syntax.</p>
+<p><strong>Step 3 — Write a plan for the gap only, and get it approved</strong>, including a
+<code>## Proposed stack</code> section, the splitting strategy with what in the documents
+justified it, and the cost of one full re-embed of the current corpus. Do not ask
+open framework questions — propose, and ask for confirmation once. Say what you
+are adding, what you are leaving alone, and what you propose to change, and touch
+nothing else.</p>
+<p><strong>Step 4 — Build in the order in §7.</strong> <strong>Step 5 — §11 is the definition of done.</strong></p>
+<hr />
+<h2>1. Where retrieval quality is actually decided</h2>
+<p>A perfect index over bad chunks returns bad chunks perfectly. This is the step
+where most of the quality is won or lost, and it is the one most often treated as
+a utility function.</p>
+<table>
+<thead>
+<tr>
+<th>Splitting by a character count</th>
+<th>Splitting for what a chunk has to do</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A chunk starts mid-sentence and ends mid-table; retrieval returns a fragment that answers nothing</td>
+<td>Boundaries follow the document's own structure</td>
+</tr>
+<tr>
+<td>The chunk says "it costs €40" with no indication of what "it" is</td>
+<td>Each chunk carries the context that makes it interpretable alone</td>
+</tr>
+<tr>
+<td>The whole corpus is re-embedded whenever anything changes</td>
+<td>Only changed chunks are embedded; the rest are cached by content</td>
+</tr>
+<tr>
+<td>Chunk size was picked from a blog post</td>
+<td>Chunk size was measured on this corpus against real questions</td>
+</tr>
+</tbody>
+</table>
+<p>The second row is the failure that survives every other fix. A chunk is retrieved
+alone and read alone, so a passage whose subject is three paragraphs above is
+useless the moment it is separated from them — the retriever finds it, the model
+reads it, and neither can tell what "it" refers to. Overlap helps a little and
+mostly wastes tokens. What works is making each chunk <strong>self-describing</strong>: the
+document title, the section heading, and where useful a sentence of context, added
+before embedding. That is a small, cheap change and it does more for retrieval
+quality than most index tuning.</p>
+<p>The third row is what makes the whole thing affordable to iterate on. Embedding
+is charged per token and a full re-embed of a real corpus is not a decision you
+want to make casually — which is exactly why people stop tuning chunk size. <strong>Key
+the cache on a hash of the chunk text.</strong> Editing one paragraph then re-embeds a
+handful of chunks rather than all of them, and tuning becomes something you can
+afford to do more than once.</p>
+<p>There is a related idea worth knowing about, because it addresses the same problem
+from the other end: index small chunks for precise matching, but return their
+larger parent section to the model. It is more machinery — two granularities to
+store and keep in step — and it is usually the next thing to try when
+self-describing chunks are not enough, rather than the first.</p>
+<h2>2. Architecture</h2>
+<pre class="mermaid">%% GENERATED - do not edit by hand.
+%% Edit the source header in architecture.mmd, then rebuild.
+%% Document to stored vector
+
+flowchart TB
+    source([&quot;Source document&quot;])
+    normalise[&quot;Normalise and strip boilerplate&quot;]
+    split[&quot;Structure aware splitting&quot;]
+    enrich[&quot;Add title, heading and context&quot;]
+    hash[&quot;Content hash&quot;]
+    cache[&quot;Embedding cache&quot;]
+    batch[&quot;Batched embedding&quot;]
+    write[&quot;Write to the store&quot;]
+    provider{{&quot;Embedding provider&quot;}}
+    vectors[(&quot;Vector store&quot;)]
+    manifest[(&quot;Ingestion manifest&quot;)]
+
+    source --&gt; normalise
+    normalise --&gt;|&quot;boundaries follow headings, paragraphs and tables&quot;| split
+    split --&gt;|&quot;each chunk made interpretable alone&quot;| enrich
+    enrich --&gt; hash
+    hash --&gt;|&quot;seen this exact text before&quot;| cache
+    cache --&gt;|&quot;cached vector, nothing spent&quot;| write
+    hash -.-&gt;|&quot;not cached&quot;| batch
+    batch --&gt;|&quot;bounded by inputs and by tokens&quot;| provider
+    provider --&gt;|&quot;store against the hash&quot;| cache
+    batch --&gt; write
+    write --&gt; vectors
+    write --&gt;|&quot;which chunks this document has now&quot;| manifest
+    manifest -.-&gt;|&quot;chunks that disappeared are deleted&quot;| vectors
+
+    classDef service fill:#eff6ff,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b;
+    classDef datastore fill:#e9faf3,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b;
+    classDef external fill:#fff4ed,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b;
+    classDef actor fill:#f0eefc,stroke:#4a3aa7,stroke-width:1.5px,color:#0b0b0b;
+    class normalise,split,enrich,hash,cache,batch,write service;
+    class vectors,manifest datastore;
+    class provider external;
+    class source actor;</pre>
+<p>The rule the diagram encodes: <strong>the manifest is what makes an update an update.</strong>
+Without a record of which chunks a document produced last time, re-ingesting an
+edited document adds the new chunks and leaves the old ones behind — so the corpus
+grows, and retrieval starts returning text that is no longer in the document.</p>
+<h2>3. Project structure</h2>
+<div class="hl"><pre><span></span><code>app/ingest/
+├── normalise.py   text in, clean text out; boilerplate removed
+├── split.py       the splitting strategy, and only this file knows it
+├── enrich.py      title, heading and context added before embedding
+├── embed.py       cache, batching, provider limits, retries
+├── manifest.py    what each document currently contributes
+└── pipeline.py    the sequence, rerunnable end to end
+</code></pre></div>
+
+<p><strong>One rule: chunk text is stored, not only its vector.</strong> The text that was
+embedded — after enrichment — is kept alongside the vector. Without it you cannot
+explain a retrieval, cannot re-embed with a new model without re-running the whole
+pipeline, and cannot tell whether a bad result came from bad chunking or bad
+search.</p>
+<h2>4. Reference implementation</h2>
+<div class="hl"><pre><span></span><code><span class="c1"># app/ingest/split.py</span>
+<span class="k">def</span> <span class="nf">split</span><span class="p">(</span><span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">target_tokens</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">400</span><span class="p">,</span> <span class="n">overlap_tokens</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">50</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Chunk</span><span class="p">]:</span>
+    <span class="sd">&quot;&quot;&quot;Split along the document&#39;s own structure, then only by size if forced.</span>
+
+<span class="sd">    Character counts are a proxy for what the model actually sees. Measure in</span>
+<span class="sd">    tokens: the same character budget holds very different amounts of English,</span>
+<span class="sd">    Japanese and source code, and a limit set in characters is wrong for two of</span>
+<span class="sd">    the three.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">sections</span> <span class="o">=</span> <span class="n">split_on_headings</span><span class="p">(</span><span class="n">text</span><span class="p">)</span>
+    <span class="n">chunks</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Chunk</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="k">for</span> <span class="n">section</span> <span class="ow">in</span> <span class="n">sections</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">count_tokens</span><span class="p">(</span><span class="n">section</span><span class="o">.</span><span class="n">body</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="n">target_tokens</span><span class="p">:</span>
+            <span class="n">chunks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">Chunk</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="n">section</span><span class="o">.</span><span class="n">body</span><span class="p">,</span> <span class="n">heading</span><span class="o">=</span><span class="n">section</span><span class="o">.</span><span class="n">heading</span><span class="p">))</span>
+            <span class="k">continue</span>
+        <span class="c1"># Only now fall back to splitting by size, and prefer paragraph</span>
+        <span class="c1"># boundaries. A table or a code block split down the middle produces two</span>
+        <span class="c1"># chunks that are each unreadable, and retrieval cannot repair that.</span>
+        <span class="k">for</span> <span class="n">piece</span> <span class="ow">in</span> <span class="n">split_on_paragraphs</span><span class="p">(</span><span class="n">section</span><span class="o">.</span><span class="n">body</span><span class="p">,</span> <span class="n">target_tokens</span><span class="p">,</span> <span class="n">overlap_tokens</span><span class="p">,</span>
+                                         <span class="n">keep_together</span><span class="o">=</span><span class="p">(</span><span class="n">TABLE</span><span class="p">,</span> <span class="n">CODE_BLOCK</span><span class="p">)):</span>
+            <span class="n">chunks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">Chunk</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="n">piece</span><span class="p">,</span> <span class="n">heading</span><span class="o">=</span><span class="n">section</span><span class="o">.</span><span class="n">heading</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">chunks</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/ingest/enrich.py</span>
+<span class="k">def</span> <span class="nf">enrich</span><span class="p">(</span><span class="n">chunk</span><span class="p">:</span> <span class="n">Chunk</span><span class="p">,</span> <span class="n">doc</span><span class="p">:</span> <span class="n">Document</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Make the chunk interpretable on its own, before it is embedded.</span>
+
+<span class="sd">    This is the highest-value few lines in the pipeline. A chunk is retrieved</span>
+<span class="sd">    alone and read alone: a passage saying &quot;it costs €40&quot; is useless when its</span>
+<span class="sd">    subject was three paragraphs above. Prefixing the title and heading is cheap,</span>
+<span class="sd">    improves both the embedding and what the model sees, and does more than most</span>
+<span class="sd">    index tuning.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">header</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">doc</span><span class="o">.</span><span class="n">title</span><span class="si">}</span><span class="s2">&quot;</span>
+    <span class="k">if</span> <span class="n">chunk</span><span class="o">.</span><span class="n">heading</span><span class="p">:</span>
+        <span class="n">header</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">&quot; — </span><span class="si">{</span><span class="n">chunk</span><span class="o">.</span><span class="n">heading</span><span class="si">}</span><span class="s2">&quot;</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">header</span><span class="si">}</span><span class="se">\n\n</span><span class="si">{</span><span class="n">chunk</span><span class="o">.</span><span class="n">text</span><span class="si">}</span><span class="s2">&quot;</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/ingest/embed.py</span>
+<span class="kn">import</span> <span class="nn">hashlib</span>
+
+<span class="n">MAX_INPUTS_PER_REQUEST</span> <span class="o">=</span> <span class="mi">96</span>          <span class="c1"># verify both against the provider: they are</span>
+<span class="n">MAX_TOKENS_PER_REQUEST</span> <span class="o">=</span> <span class="mi">100_000</span>     <span class="c1"># separate limits and both are enforced</span>
+
+
+<span class="k">def</span> <span class="nf">content_hash</span><span class="p">(</span><span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="c1"># The model is part of the key. Without it, changing model silently serves</span>
+    <span class="c1"># vectors from the old one out of the cache, and every search is subtly wrong</span>
+    <span class="c1"># with nothing to indicate it.</span>
+    <span class="k">return</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">sha256</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">model</span><span class="si">}</span><span class="se">\x00</span><span class="si">{</span><span class="n">text</span><span class="si">}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">encode</span><span class="p">())</span><span class="o">.</span><span class="n">hexdigest</span><span class="p">()</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">embed_all</span><span class="p">(</span><span class="n">texts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">model</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]]:</span>
+    <span class="n">keys</span> <span class="o">=</span> <span class="p">[</span><span class="n">content_hash</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">model</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">texts</span><span class="p">]</span>
+    <span class="n">cached</span> <span class="o">=</span> <span class="k">await</span> <span class="n">cache</span><span class="o">.</span><span class="n">get_many</span><span class="p">(</span><span class="n">keys</span><span class="p">)</span>
+    <span class="n">todo</span> <span class="o">=</span> <span class="p">[(</span><span class="n">i</span><span class="p">,</span> <span class="n">t</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">k</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">texts</span><span class="p">,</span> <span class="n">keys</span><span class="p">))</span> <span class="k">if</span> <span class="n">k</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">cached</span><span class="p">]</span>
+
+    <span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="n">_batches</span><span class="p">(</span><span class="n">todo</span><span class="p">):</span>
+        <span class="c1"># Both limits, not just the count. A batch of ninety-six short strings is</span>
+        <span class="c1"># fine and ninety-six long ones is rejected — and a provider that rejects</span>
+        <span class="c1"># the whole request rather than part of it turns one oversized chunk into</span>
+        <span class="c1"># a failed batch.</span>
+        <span class="n">vectors</span> <span class="o">=</span> <span class="k">await</span> <span class="n">_with_retry</span><span class="p">(</span><span class="n">provider</span><span class="o">.</span><span class="n">embed</span><span class="p">,</span> <span class="p">[</span><span class="n">t</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">batch</span><span class="p">],</span> <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">)</span>
+        <span class="k">for</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">text</span><span class="p">),</span> <span class="n">vector</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">vectors</span><span class="p">):</span>
+            <span class="n">cached</span><span class="p">[</span><span class="n">keys</span><span class="p">[</span><span class="n">i</span><span class="p">]]</span> <span class="o">=</span> <span class="n">vector</span>
+            <span class="k">await</span> <span class="n">cache</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">keys</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">vector</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="p">[</span><span class="n">cached</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">keys</span><span class="p">]</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">_with_retry</span><span class="p">(</span><span class="n">fn</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="c1"># Rate limits are normal operation at this volume, not an exception. Respect</span>
+    <span class="c1"># the provider&#39;s own retry hint when it gives one; back off with jitter when</span>
+    <span class="c1"># it does not, because synchronised retries from several workers reproduce</span>
+    <span class="c1"># exactly the load that caused the limit.</span>
+    <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">6</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="k">await</span> <span class="n">fn</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">RateLimited</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+            <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">exc</span><span class="o">.</span><span class="n">retry_after</span> <span class="ow">or</span> <span class="p">(</span><span class="mi">2</span> <span class="o">**</span> <span class="n">attempt</span><span class="p">)</span> <span class="o">+</span> <span class="n">random</span><span class="o">.</span><span class="n">random</span><span class="p">())</span>
+    <span class="k">raise</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/ingest/pipeline.py</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">ingest_document</span><span class="p">(</span><span class="n">doc</span><span class="p">:</span> <span class="n">Document</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">IngestResult</span><span class="p">:</span>
+    <span class="n">chunks</span> <span class="o">=</span> <span class="n">split</span><span class="p">(</span><span class="n">normalise</span><span class="p">(</span><span class="n">doc</span><span class="o">.</span><span class="n">text</span><span class="p">))</span>
+    <span class="n">texts</span> <span class="o">=</span> <span class="p">[</span><span class="n">enrich</span><span class="p">(</span><span class="n">c</span><span class="p">,</span> <span class="n">doc</span><span class="p">)</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">chunks</span><span class="p">]</span>
+    <span class="n">ids</span> <span class="o">=</span> <span class="p">[</span><span class="n">chunk_id</span><span class="p">(</span><span class="n">doc</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">chunks</span><span class="p">))]</span>
+    <span class="n">vectors</span> <span class="o">=</span> <span class="k">await</span> <span class="n">embed_all</span><span class="p">(</span><span class="n">texts</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">embedding_model</span><span class="p">)</span>
+
+    <span class="k">await</span> <span class="n">store</span><span class="o">.</span><span class="n">upsert</span><span class="p">(</span><span class="n">ids</span><span class="o">=</span><span class="n">ids</span><span class="p">,</span> <span class="n">texts</span><span class="o">=</span><span class="n">texts</span><span class="p">,</span> <span class="n">vectors</span><span class="o">=</span><span class="n">vectors</span><span class="p">,</span>
+                       <span class="n">metadata</span><span class="o">=</span><span class="p">[{</span><span class="s2">&quot;document_id&quot;</span><span class="p">:</span> <span class="n">doc</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="s2">&quot;chunk_index&quot;</span><span class="p">:</span> <span class="n">i</span><span class="p">,</span>
+                                  <span class="s2">&quot;heading&quot;</span><span class="p">:</span> <span class="n">c</span><span class="o">.</span><span class="n">heading</span><span class="p">,</span> <span class="s2">&quot;title&quot;</span><span class="p">:</span> <span class="n">doc</span><span class="o">.</span><span class="n">title</span><span class="p">,</span>
+                                  <span class="s2">&quot;embedding_model&quot;</span><span class="p">:</span> <span class="n">settings</span><span class="o">.</span><span class="n">embedding_model</span><span class="p">}</span>
+                                 <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">c</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">chunks</span><span class="p">)])</span>
+
+    <span class="c1"># Delete what this document used to produce and no longer does. Skipping this</span>
+    <span class="c1"># is the most common ingestion bug: an edited document leaves its old chunks</span>
+    <span class="c1"># in place, so the corpus grows and retrieval returns text that is no longer</span>
+    <span class="c1"># in the document — with nothing anywhere reporting it.</span>
+    <span class="n">previous</span> <span class="o">=</span> <span class="k">await</span> <span class="n">manifest</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">doc</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">stale</span> <span class="ow">in</span> <span class="nb">set</span><span class="p">(</span><span class="n">previous</span><span class="p">)</span> <span class="o">-</span> <span class="nb">set</span><span class="p">(</span><span class="n">ids</span><span class="p">):</span>
+        <span class="k">await</span> <span class="n">store</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">stale</span><span class="p">)</span>
+    <span class="k">await</span> <span class="n">manifest</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">doc</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">ids</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">IngestResult</span><span class="p">(</span><span class="n">chunks</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">chunks</span><span class="p">),</span> <span class="n">embedded</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">chunks</span><span class="p">)</span> <span class="o">-</span> <span class="n">cache_hits</span><span class="p">())</span>
+</code></pre></div>
+
+<h2>5. Golden-standard rules</h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Forbidden:</strong> splitting without looking at real documents first</td>
+<td>The strategy is decided by what is in them. Skipping this is why pipelines split mid-table.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> measuring chunk size in characters</td>
+<td>The same character budget holds very different amounts of English, Japanese and code. Measure in the model's tokens.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> embedding a chunk that cannot be understood alone</td>
+<td>It is retrieved alone and read alone. Prefixing the title and heading is the cheapest large improvement available.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> re-embedding unchanged text</td>
+<td>Embedding is charged per token, and the cost of a full re-embed is what stops people from ever tuning chunk size.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> a cache key that omits the model</td>
+<td>A model change then serves old vectors from the cache and every search is subtly wrong.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> re-ingesting without removing chunks the document no longer produces</td>
+<td>The corpus grows and retrieval returns text that is no longer in the document.</td>
+</tr>
+<tr>
+<td>Structure is respected before size</td>
+<td>A table or code block split in half yields two unreadable chunks, and retrieval cannot repair that.</td>
+</tr>
+<tr>
+<td>Batches respect both the input count and the token limit</td>
+<td>They are separate limits, both enforced, and a rejected batch usually fails whole.</td>
+</tr>
+<tr>
+<td>Rate limits are handled as normal operation</td>
+<td>At corpus volume they are expected. Backoff needs jitter, or several workers retry in unison and recreate the load.</td>
+</tr>
+<tr>
+<td>The enriched text is stored, not only the vector</td>
+<td>Without it you cannot explain a retrieval or re-embed with a new model without re-running everything.</td>
+</tr>
+<tr>
+<td>Chunk size is chosen by measurement on this corpus</td>
+<td>Sizes from articles are properties of someone else's documents and someone else's questions.</td>
+</tr>
+<tr>
+<td>Ingestion is rerunnable and idempotent</td>
+<td>It will be interrupted. A run that cannot be repeated safely turns a failure into a manual repair.</td>
+</tr>
+</tbody>
+</table>
+<h2>6. Data contracts</h2>
+<div class="hl"><pre><span></span><code><span class="n">Chunk</span><span class="p">(</span>
+    <span class="nb">id</span><span class="o">=</span><span class="s2">&quot;&lt;document_id&gt;:&lt;index&gt;&quot;</span><span class="p">,</span>     <span class="c1"># derived, so re-ingestion replaces</span>
+    <span class="n">text</span><span class="o">=</span><span class="s2">&quot;&lt;title&gt; — &lt;heading&gt;</span><span class="se">\n\n</span><span class="s2">&lt;body&gt;&quot;</span><span class="p">,</span>   <span class="c1"># what was embedded, stored as such</span>
+    <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;document_id&quot;</span><span class="p">,</span> <span class="s2">&quot;chunk_index&quot;</span><span class="p">,</span> <span class="s2">&quot;heading&quot;</span><span class="p">,</span> <span class="s2">&quot;title&quot;</span><span class="p">,</span> <span class="s2">&quot;embedding_model&quot;</span><span class="p">},</span>
+<span class="p">)</span>
+<span class="n">Manifest</span> <span class="o">=</span> <span class="p">{</span><span class="n">document_id</span><span class="p">:</span> <span class="p">[</span><span class="n">chunk_id</span><span class="p">,</span> <span class="o">...</span><span class="p">]}</span>   <span class="c1"># what this document contributes now</span>
+</code></pre></div>
+
+<p>The manifest is the piece most pipelines lack, and its absence is invisible until
+someone notices the corpus is larger than the documents. It answers one question —
+which chunks does this document currently own — and that question is the whole of
+correct updating.</p>
+<p>Storing the enriched text rather than the raw body matters more than it looks: it
+is what was embedded, so it is the only text that explains a retrieval. Storing
+the raw body instead means the vector and the text you can show a developer come
+from different strings.</p>
+<h2>7. Build order</h2>
+<ol>
+<li><strong>Read twenty real documents and write down what is in them.</strong> Headings,
+   tables, code, repeated boilerplate. Everything below follows from this and
+   nothing substitutes for it.</li>
+<li><strong>Split and print — no embedding.</strong> Read fifty chunks. If they do not stand
+   alone as text, no amount of retrieval work will fix it, and this is the
+   cheapest moment to discover that.</li>
+<li><strong>Enrichment</strong>, then read the same fifty again.</li>
+<li><strong>The content-hash cache</strong>, before any tuning. It is what makes step 5
+   affordable to run more than once.</li>
+<li><strong>Measure chunk size against real questions</strong> — two or three sizes, the same
+   question set, recall compared. Choose from the numbers.</li>
+<li><strong>Batching with both provider limits and retries</strong>, then a full corpus run.</li>
+<li><strong>The manifest and deletion</strong>, with a test that editing a document to have
+   fewer chunks removes the extras.</li>
+</ol>
+<p>Step 4 before step 5 is the point of the ordering. Without the cache, each tuning
+run costs a full re-embed, so the first choice becomes the permanent one — and the
+first choice is a guess.</p>
+<h2>8. Blocks to pull in</h2>
+<p>Nothing here is a prerequisite. These are adjacent problems, by name only —
+resolve them separately if they apply.</p>
+<ul>
+<li>Vector search in Postgres, Qdrant vector search, or an embedded store — where these chunks go</li>
+<li>LangChain retrieval chains — what queries them afterwards</li>
+<li>Hybrid search: keyword and vector with RRF — for queries containing identifiers and exact phrases</li>
+<li>Background jobs and workers — where a full corpus ingestion belongs</li>
+<li>LLM eval harness — how to tell whether a chunking change helped</li>
+</ul>
+<h2>9. Metrics</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Chunks that are not interpretable without their document</td>
+<td>0, judged by reading fifty</td>
+</tr>
+<tr>
+<td>Chunks that split a table or code block</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Cache hit rate on re-ingesting an unchanged corpus</td>
+<td>100%</td>
+</tr>
+<tr>
+<td>Chunks embedded when one paragraph of one document changes</td>
+<td>Single digits</td>
+</tr>
+<tr>
+<td>Orphaned chunks after an edit removes content</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Recall at 10 on the question set</td>
+<td>Measured per chunk size, and the choice recorded</td>
+</tr>
+<tr>
+<td>Failed batches per full corpus run</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<h2>10. Failure modes</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Retrieved passages are fragments that answer nothing</td>
+<td>Split by size with no regard for structure</td>
+<td>Split on headings and paragraphs first; fall back to size only when forced</td>
+</tr>
+<tr>
+<td>A chunk is retrieved and the model cannot tell what it refers to</td>
+<td>The chunk is not interpretable alone</td>
+<td>Prefix the title and heading before embedding</td>
+</tr>
+<tr>
+<td>Search returns text that is no longer in the document</td>
+<td>Re-ingestion added new chunks and left the old ones</td>
+<td>Keep a manifest per document and delete what disappeared</td>
+</tr>
+<tr>
+<td>Nobody tunes chunk size because it is too expensive</td>
+<td>Every run re-embeds the corpus</td>
+<td>Cache by content hash and model</td>
+</tr>
+<tr>
+<td>Search became subtly wrong after a model change</td>
+<td>The cache key omitted the model, so old vectors were served</td>
+<td>Include the model in the key</td>
+</tr>
+<tr>
+<td>Batches fail for large documents and succeed for small ones</td>
+<td>The token limit was exceeded although the input count was fine</td>
+<td>Respect both limits</td>
+</tr>
+<tr>
+<td>A corpus run dies partway through with rate-limit errors</td>
+<td>Retries without jitter, or none at all</td>
+<td>Respect the provider's hint; back off with jitter</td>
+</tr>
+<tr>
+<td>Chunk sizes work for English documents and badly for others</td>
+<td>Size measured in characters</td>
+<td>Measure in the model's tokens</td>
+</tr>
+<tr>
+<td>A retrieval cannot be explained after the fact</td>
+<td>Only the vector was stored, or the raw text rather than the enriched text</td>
+<td>Store what was embedded</td>
+</tr>
+<tr>
+<td>An interrupted ingestion left the corpus in an unclear state</td>
+<td>Ingestion is not idempotent</td>
+<td>Derived ids and upsert; rerunning is the repair</td>
+</tr>
+<tr>
+<td>Recall improved on the evaluation and users disagree</td>
+<td>The evaluation questions all match one document type present in the sample</td>
+<td>Draw the question set from real usage</td>
+</tr>
+</tbody>
+</table>
+<h2>11. Definition of done</h2>
+<ul>
+<li class="task">Fifty chunks from real documents were read and none is uninterpretable on its own</li>
+<li class="task">No chunk splits a table or a code block, verified by a test over the sample corpus</li>
+<li class="task">Chunk size is measured in the model's tokens, not characters, verified in the splitter's tests</li>
+<li class="task">Every chunk is enriched with its document title and section heading before embedding, and the enriched text is what is stored</li>
+<li class="task">Re-ingesting an unchanged corpus performs zero embedding calls, covered by a test</li>
+<li class="task">The cache key includes the embedding model, and a test asserts a model change misses the cache</li>
+<li class="task">Editing one paragraph re-embeds only the affected chunks, covered by a test that counts calls</li>
+<li class="task">Editing a document so it produces fewer chunks removes the extras, covered by a test</li>
+<li class="task">Batching respects both the input-count and the token limits, covered by a test with deliberately long inputs</li>
+<li class="task">Rate limits are retried with jitter and the provider's hint is honoured, covered by a test</li>
+<li class="task">Chunk size was chosen by comparing recall across at least two sizes on a committed question set, and the numbers are recorded</li>
+<li class="task">Ingestion can be interrupted and rerun with no manual repair, demonstrated once</li>
+</ul>
+  </article>
+
+  <aside class="tailpiece">
+    <h2>Use this blueprint</h2>
+    <p>
+      Copy the file into your project and point your agent at it. It works with Claude Code,
+      Cursor, Copilot, ChatGPT and anything else that reads a file — there is nothing to install.
+    </p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/chunking-embeddings" target="_blank" rel="noopener">Open on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Browse all blueprints</a>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p><a href="/">Awesome Blueprints</a> — same request, same architecture, every time.</p>
+    <p class="dim">MIT · awesomeblueprints.com</p>
+  </div>
+</footer>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'neutral' });
+</script>
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const now = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', now);
+    try { localStorage.setItem('ab-theme', now); } catch (e) {}
+    location.reload();   // the diagram is themed at render time
+  });
+</script>
+
+</body>
+</html>

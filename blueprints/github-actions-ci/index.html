@@ -1,0 +1,545 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GitHub Actions CI — Blueprint for AI Coding Agents | Awesome Blueprints</title>
+<meta name="description" content="GitHub Actions CI: pull-request workflows, dependency caching, service containers and required checks that genuinely block a merge." />
+<link rel="canonical" href="https://awesomeblueprints.com/blueprints/github-actions-ci/" />
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="Awesome Blueprints" />
+<meta property="og:url" content="https://awesomeblueprints.com/blueprints/github-actions-ci/" />
+<meta property="og:title" content="GitHub Actions CI — Architecture Blueprint" />
+<meta property="og:description" content="GitHub Actions CI: pull-request workflows, dependency caching, service containers and required checks that genuinely block a merge." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="GitHub Actions CI — Architecture Blueprint" />
+<meta name="twitter:description" content="GitHub Actions CI: pull-request workflows, dependency caching, service containers and required checks that genuinely block a merge." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/page.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "GitHub Actions CI", "description": "GitHub Actions CI: pull-request workflows, dependency caching, service containers and required checks that genuinely block a merge.", "url": "https://awesomeblueprints.com/blueprints/github-actions-ci/", "dateModified": "2026-08-19", "keywords": "CI/CD", "isAccessibleForFree": true, "license": "https://opensource.org/licenses/MIT", "publisher": {"@type": "Organization", "name": "Awesome Blueprints", "url": "https://awesomeblueprints.com"}}</script>
+<script>
+  (function () {
+    var t;
+    try { t = localStorage.getItem('ab-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">Awesome Blueprints</a>
+    <div class="nav-right">
+      <a class="nav-link" href="/#blueprints">Catalogue</a>
+      <a class="nav-link" href="/#faq">FAQ</a>
+      <a class="nav-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/github-actions-ci" target="_blank" rel="noopener">GitHub ↗</a>
+      <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Switch theme">◑</button>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/">Home</a> <span>/</span> <a href="/#blueprints">Blueprints</a> <span>/</span>
+    <span>GitHub Actions CI</span>
+  </nav>
+
+  <header class="page-head">
+    <p class="eyebrow">github-actions-ci</p>
+    <h1>GitHub Actions CI</h1>
+    <p class="lede">GitHub Actions CI: pull-request workflows, dependency caching, service containers and required checks that genuinely block a merge.</p>
+    <div class="facts"><span>low</span><span>1–2 days</span><span>Verified 2026-08-19</span></div>
+    <div class="tags"><span class="tag">CI/CD</span></div>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/github-actions-ci" target="_blank" rel="noopener">Read it on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Back to the catalogue</a>
+    </div>
+  </header>
+
+  <article class="doc">
+<blockquote>
+<p>Every pull request checked the same way: lint, types, tests against real
+dependencies, and a build — with third-party actions pinned to immutable
+commits, the token scoped down, and superseded runs cancelled so the queue
+reflects reality.</p>
+</blockquote>
+<p><strong>Complexity:</strong> low · <strong>Typical build:</strong> 1–2 days · <strong>Verified:</strong> 2026-08-19 (re-check after ~90 days)</p>
+<p><strong>Examples in:</strong> GitHub Actions with a Python service. The architecture is language-agnostic: sections 5, 10 and 11 hold wherever you build this. Section 4 is illustrative — if your project is in another language, your agent translates the idioms rather than importing them, and nothing is lost. The concerns map directly onto GitLab CI, Buildkite and CircleCI; only the syntax and the name of the token change.</p>
+<p><strong>Use when:</strong> more than one person merges into a shared branch, or one person merges often enough to have broken it once. Covers the pull-request workflow, dependency caching, service containers, and making the checks actually block a merge.</p>
+<p><strong>Not for:</strong> deployment. That is a different trust boundary — it needs credentials, environments and approvals, and mixing it into the pull-request workflow is how a fork's pull request gets to run with production access. Also not a substitute for tests: a pipeline running a weak suite tells you the suite is weak, on a schedule.</p>
+<hr />
+<h2>⚙️ INSTRUCTIONS FOR THE AI — READ BEFORE WRITING ANY CODE</h2>
+<p><strong>Do not start coding.</strong></p>
+<p><strong>Step 1 — Refresh.</strong> Verify the current major of every action you will use, and
+resolve each to a full commit SHA — tags are mutable and have been moved
+maliciously in real incidents, so the tag is a label, not an identity. Verify the
+default <code>permissions</code> for <code>GITHUB_TOKEN</code> in this repository, since the
+organisation default may be permissive. Confirm the current syntax for service
+containers, dependency caching, and the concurrency group. Report what you
+verified and what turned out wrong.</p>
+<p><strong>Step 2 — Read the project, then audit what already exists.</strong> Find any existing
+workflow and record for each job: what triggers it, how long it takes, whether it
+is required for merge, and which actions it uses at which reference. List every
+action referenced by a mutable tag — that list is a work item. Find whether branch
+protection actually requires these checks, because a workflow that runs and does
+not block is decoration. Find the local commands for lint, types and tests, since
+CI must run the same ones. Then audit §11 item by item, each marked <em>already
+true</em>, <em>partly true</em> or <em>absent</em>, with the file that decides it, reported before
+anything is proposed.</p>
+<p>Assume the project is right until it demonstrably is not; code satisfying an item
+stays even where its shape differs from §4; replacing something that works needs a
+one-line reason; never delete a working path to make room for the blueprint's
+version. The same holds for language — §4 is illustrative, its idioms get
+translated into the project's language, and §11 is what has to become true rather
+than the syntax.</p>
+<p><strong>Step 3 — Write a plan for the gap only, and get it approved</strong>, including a
+<code>## Proposed stack</code> section and a target for total wall-clock time on a pull
+request. Do not ask open framework questions — propose, and ask for confirmation
+once. Say what you are adding, what you are leaving alone, and what you propose to
+change, and touch nothing else.</p>
+<p><strong>Step 4 — Build in the order in §7.</strong> <strong>Step 5 — §11 is the definition of done.</strong></p>
+<hr />
+<h2>1. Why a pipeline that runs is not a pipeline that protects</h2>
+<p>A workflow file is easy. Four things decide whether it does anything.</p>
+<table>
+<thead>
+<tr>
+<th>The usual workflow</th>
+<th>This one</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Checks run and report; merging is still possible while they are red</td>
+<td>The checks are required, so a red one blocks the button</td>
+</tr>
+<tr>
+<td>Actions are referenced by tag — <code>@v4</code> — and the tag can be moved</td>
+<td>Actions are pinned to a commit, which cannot be moved</td>
+</tr>
+<tr>
+<td><code>GITHUB_TOKEN</code> has whatever the organisation default grants</td>
+<td>Read-only by default, widened per job with a reason</td>
+</tr>
+<tr>
+<td>Every push starts a run and the old ones keep going</td>
+<td>Superseded runs are cancelled, so the queue shows the current state</td>
+</tr>
+</tbody>
+</table>
+<p>The second row is not theoretical. A widely used action was compromised and its
+tags were repointed at malicious code, which then ran inside every workflow that
+referenced it by tag — with whatever permissions that workflow's token held. <strong>A
+tag is a label someone else can move; a commit SHA is an identity.</strong> Pinning does
+not solve supply-chain risk on its own — a pinned action can still pull an
+unpinned Docker image or a dependency of its own — but it removes the cheapest
+attack, and combining it with a read-only default token bounds what a compromise
+can reach.</p>
+<p>The first row is the one that quietly makes the rest pointless. A check that is
+not required is a suggestion, and the suggestion is ignored on the afternoon
+somebody needs to ship.</p>
+<h2>2. Architecture</h2>
+<pre class="mermaid">%% GENERATED - do not edit by hand.
+%% Edit the source header in architecture.mmd, then rebuild.
+%% Pull request pipeline
+
+flowchart TB
+    author([&quot;Author&quot;])
+    reviewer([&quot;Reviewer&quot;])
+    trigger[&quot;Pull request event&quot;]
+    cancel[&quot;Concurrency group&quot;]
+    lint[&quot;Lint and format check&quot;]
+    types[&quot;Type check&quot;]
+    unit[&quot;Unit tests&quot;]
+    integration[&quot;Integration tests&quot;]
+    build[&quot;Build the image&quot;]
+    gate[&quot;Required checks&quot;]
+    cache[(&quot;Dependency cache&quot;)]
+    services{{&quot;Service containers&quot;}}
+    registry{{&quot;Action commits pinned by SHA&quot;}}
+
+    author --&gt;|&quot;push to the branch&quot;| trigger
+    trigger --&gt;|&quot;supersede the previous run&quot;| cancel
+    cancel --&gt; lint
+    cancel --&gt; types
+    cancel --&gt; unit
+    cancel --&gt; integration
+    cancel --&gt; build
+    lint --- cache
+    unit --- cache
+    integration --- services
+    lint --- registry
+    build --- registry
+    lint --&gt; gate
+    types --&gt; gate
+    unit --&gt; gate
+    integration --&gt; gate
+    build --&gt; gate
+    gate -.-&gt;|&quot;merge blocked until every check is green&quot;| reviewer
+
+    classDef service fill:#eff6ff,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b;
+    classDef datastore fill:#e9faf3,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b;
+    classDef external fill:#fff4ed,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b;
+    classDef actor fill:#f0eefc,stroke:#4a3aa7,stroke-width:1.5px,color:#0b0b0b;
+    class trigger,cancel,lint,types,unit,integration,build,gate service;
+    class cache datastore;
+    class services,registry external;
+    class author,reviewer actor;</pre>
+<p>The rule the diagram encodes: <strong>the jobs fan out, and the gate is the only path to
+a merge.</strong> Nothing runs after the gate — this workflow produces no artefact anyone
+deploys and holds no credential that could deploy one.</p>
+<h2>3. Project structure</h2>
+<div class="hl"><pre><span></span><code>.github/workflows/
+└── ci.yaml             one file, one purpose: decide whether this change may merge
+Makefile                lint, typecheck, test — the same targets CI and humans run
+</code></pre></div>
+
+<p><strong>One rule: CI runs the same commands a developer runs.</strong> If the workflow inlines
+its own flags, the two drift, and the failure that only reproduces in CI becomes a
+routine cost. Put the commands in the Makefile; let the workflow call the targets.</p>
+<h2>4. Reference implementation</h2>
+<div class="hl"><pre><span></span><code><span class="c1"># .github/workflows/ci.yaml</span><span class="w"></span>
+<span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">CI</span><span class="w"></span>
+
+<span class="nt">on</span><span class="p">:</span><span class="w"></span>
+<span class="w">  </span><span class="nt">pull_request</span><span class="p">:</span><span class="w"></span>
+<span class="w">  </span><span class="nt">push</span><span class="p">:</span><span class="w"></span>
+<span class="w">    </span><span class="nt">branches</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">main</span><span class="p p-Indicator">]</span><span class="w">      </span><span class="c1"># so main&#39;s status is known independently of any PR</span><span class="w"></span>
+
+<span class="c1"># Read-only by default. Every job that needs more says so and says why. The</span><span class="w"></span>
+<span class="c1"># organisation default may be write-all, and this line overrides it — which is the</span><span class="w"></span>
+<span class="c1"># difference between a compromised action reading the repository and rewriting it.</span><span class="w"></span>
+<span class="nt">permissions</span><span class="p">:</span><span class="w"></span>
+<span class="w">  </span><span class="nt">contents</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">read</span><span class="w"></span>
+
+<span class="nt">concurrency</span><span class="p">:</span><span class="w"></span>
+<span class="w">  </span><span class="c1"># One run per branch. Pushing three times leaves one running instead of three,</span><span class="w"></span>
+<span class="w">  </span><span class="c1"># so the queue reflects the current state and nobody merges on the result of a</span><span class="w"></span>
+<span class="w">  </span><span class="c1"># commit that no longer exists.</span><span class="w"></span>
+<span class="w">  </span><span class="nt">group</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ci-${{ github.ref }}</span><span class="w"></span>
+<span class="w">  </span><span class="nt">cancel-in-progress</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w"></span>
+
+<span class="nt">jobs</span><span class="p">:</span><span class="w"></span>
+<span class="w">  </span><span class="nt">static</span><span class="p">:</span><span class="w"></span>
+<span class="w">    </span><span class="nt">runs-on</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ubuntu-24.04</span><span class="w"></span>
+<span class="w">    </span><span class="nt">steps</span><span class="p">:</span><span class="w"></span>
+<span class="w">      </span><span class="c1"># Pinned to a commit, with the tag in a comment for readability. A tag can be</span><span class="w"></span>
+<span class="w">      </span><span class="c1"># repointed by whoever controls the action&#39;s repository — that has happened,</span><span class="w"></span>
+<span class="w">      </span><span class="c1"># and the malicious code then ran inside every workflow trusting the tag.</span><span class="w"></span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683</span><span class="w"> </span><span class="c1"># v4.2.2</span><span class="w"></span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">astral-sh/setup-uv@f0ec1fc3b38f5e7cd731bb6ce540c5af426746bb</span><span class="w"> </span><span class="c1"># v6.1.0</span><span class="w"></span>
+<span class="w">        </span><span class="nt">with</span><span class="p">:</span><span class="w"></span>
+<span class="w">          </span><span class="nt">enable-cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w"></span>
+<span class="w">          </span><span class="nt">cache-dependency-glob</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;uv.lock&quot;</span><span class="w">   </span><span class="c1"># the cache key is the lock, not the code</span><span class="w"></span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">make lint</span><span class="w"></span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">make typecheck</span><span class="w"></span>
+
+<span class="w">  </span><span class="nt">unit</span><span class="p">:</span><span class="w"></span>
+<span class="w">    </span><span class="nt">runs-on</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ubuntu-24.04</span><span class="w"></span>
+<span class="w">    </span><span class="nt">steps</span><span class="p">:</span><span class="w"></span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683</span><span class="w"> </span><span class="c1"># v4.2.2</span><span class="w"></span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">astral-sh/setup-uv@f0ec1fc3b38f5e7cd731bb6ce540c5af426746bb</span><span class="w"> </span><span class="c1"># v6.1.0</span><span class="w"></span>
+<span class="w">        </span><span class="nt">with</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">enable-cache</span><span class="p">:</span><span class="w"> </span><span class="nv">true</span><span class="p p-Indicator">,</span><span class="nt"> cache-dependency-glob</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;uv.lock&quot;</span><span class="p p-Indicator">}</span><span class="w"></span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">make test-unit</span><span class="w"></span>
+
+<span class="w">  </span><span class="nt">integration</span><span class="p">:</span><span class="w"></span>
+<span class="w">    </span><span class="nt">runs-on</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ubuntu-24.04</span><span class="w"></span>
+<span class="w">    </span><span class="nt">services</span><span class="p">:</span><span class="w"></span>
+<span class="w">      </span><span class="nt">postgres</span><span class="p">:</span><span class="w"></span>
+<span class="w">        </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">postgres:17-alpine</span><span class="w"></span>
+<span class="w">        </span><span class="nt">env</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">POSTGRES_PASSWORD</span><span class="p">:</span><span class="w"> </span><span class="nv">ci</span><span class="p p-Indicator">,</span><span class="nt"> POSTGRES_DB</span><span class="p">:</span><span class="w"> </span><span class="nv">test</span><span class="p p-Indicator">}</span><span class="w"></span>
+<span class="w">        </span><span class="nt">ports</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;5432:5432&quot;</span><span class="p p-Indicator">]</span><span class="w"></span>
+<span class="w">        </span><span class="c1"># Without this the job starts before the server accepts queries and the</span><span class="w"></span>
+<span class="w">        </span><span class="c1"># first test fails — the CI form of &quot;it works on the second up&quot;.</span><span class="w"></span>
+<span class="w">        </span><span class="nt">options</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span><span class="w"></span>
+<span class="w">          </span><span class="no">--health-cmd &quot;pg_isready -U postgres -d test&quot;</span><span class="w"></span>
+<span class="w">          </span><span class="no">--health-interval 2s --health-timeout 3s --health-retries 20</span><span class="w"></span>
+<span class="w">    </span><span class="nt">env</span><span class="p">:</span><span class="w"></span>
+<span class="w">      </span><span class="nt">DATABASE_URL</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">postgresql+asyncpg://postgres:ci@localhost:5432/test</span><span class="w"></span>
+<span class="w">    </span><span class="nt">steps</span><span class="p">:</span><span class="w"></span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683</span><span class="w"> </span><span class="c1"># v4.2.2</span><span class="w"></span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">astral-sh/setup-uv@f0ec1fc3b38f5e7cd731bb6ce540c5af426746bb</span><span class="w"> </span><span class="c1"># v6.1.0</span><span class="w"></span>
+<span class="w">        </span><span class="nt">with</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">enable-cache</span><span class="p">:</span><span class="w"> </span><span class="nv">true</span><span class="p p-Indicator">,</span><span class="nt"> cache-dependency-glob</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;uv.lock&quot;</span><span class="p p-Indicator">}</span><span class="w"></span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">make test-integration</span><span class="w"></span>
+
+<span class="w">  </span><span class="nt">build</span><span class="p">:</span><span class="w"></span>
+<span class="w">    </span><span class="nt">runs-on</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ubuntu-24.04</span><span class="w"></span>
+<span class="w">    </span><span class="nt">steps</span><span class="p">:</span><span class="w"></span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683</span><span class="w"> </span><span class="c1"># v4.2.2</span><span class="w"></span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2</span><span class="w"> </span><span class="c1"># v3.10.0</span><span class="w"></span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker/build-push-action@471d1dc4e07e5cdedd4c2171150001c434f0b7a4</span><span class="w"> </span><span class="c1"># v6.15.0</span><span class="w"></span>
+<span class="w">        </span><span class="nt">with</span><span class="p">:</span><span class="w"></span>
+<span class="w">          </span><span class="nt">push</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w">          </span><span class="c1"># CI proves it builds; CD is what pushes and deploys</span><span class="w"></span>
+<span class="w">          </span><span class="nt">cache-from</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">type=gha</span><span class="w"></span>
+<span class="w">          </span><span class="nt">cache-to</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">type=gha,mode=max</span><span class="w"></span>
+<span class="w">          </span><span class="nt">tags</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">app:${{ github.sha }}</span><span class="w"></span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c"># Makefile — one definition of each check, used by CI and by people</span>
+<span class="nf">lint</span><span class="o">:</span>            ; <span class="n">uv</span> <span class="n">run</span> <span class="n">ruff</span> <span class="n">check</span> . &amp;&amp; <span class="n">uv</span> <span class="n">run</span> <span class="n">ruff</span> <span class="n">format</span> --<span class="n">check</span> .
+<span class="nf">typecheck</span><span class="o">:</span>       ; <span class="n">uv</span> <span class="n">run</span> <span class="n">mypy</span> <span class="n">app</span>
+<span class="nf">test-unit</span><span class="o">:</span>       ; <span class="n">uv</span> <span class="n">run</span> <span class="n">pytest</span> <span class="n">tests</span>/<span class="n">unit</span> -<span class="n">q</span>
+<span class="nf">test-integration</span><span class="o">:</span>; <span class="n">uv</span> <span class="n">run</span> <span class="n">pytest</span> <span class="n">tests</span>/<span class="n">integration</span> -<span class="n">q</span>
+</code></pre></div>
+
+<h2>5. Golden-standard rules</h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Forbidden:</strong> third-party actions referenced by tag or branch</td>
+<td>A tag can be repointed by whoever controls that repository, and the replacement runs with your workflow's permissions. This has happened to a widely used action.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> a default token with write permissions</td>
+<td>It is the blast radius of any compromise in any step. Read-only by default; widen per job with a stated reason.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> secrets or deploy credentials in the pull-request workflow</td>
+<td>A pull request can change the workflow it runs under. Keep credentials in the deploy workflow, which runs from a trusted ref.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> checks that run without being required for merge</td>
+<td>An advisory check is ignored on the afternoon somebody needs to ship. Enforce it in branch protection.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> CI inlining commands that differ from the local ones</td>
+<td>They drift, and "only fails in CI" becomes routine. One definition, called from both.</td>
+</tr>
+<tr>
+<td>Superseded runs are cancelled</td>
+<td>Otherwise the queue is full of results for commits that no longer exist, and someone merges on one.</td>
+</tr>
+<tr>
+<td>The dependency cache is keyed on the lock file</td>
+<td>Keyed on anything that changes with the code, the cache misses every run and costs more than it saves.</td>
+</tr>
+<tr>
+<td>Service containers declare health checks</td>
+<td>The job otherwise starts before the dependency accepts work and the first test fails for no reason anyone can reproduce.</td>
+</tr>
+<tr>
+<td>Jobs are separate and run in parallel</td>
+<td>One long job hides which check failed and makes a lint error cost the full test time.</td>
+</tr>
+<tr>
+<td>The runner image is pinned to a version, not <code>latest</code></td>
+<td><code>latest</code> moves under you, and the build that broke overnight changed nothing you can see in the diff.</td>
+</tr>
+<tr>
+<td>CI builds the image but never pushes it</td>
+<td>Pushing needs credentials, and credentials do not belong in a workflow a pull request can influence.</td>
+</tr>
+<tr>
+<td>Total wall-clock time has a target and is measured</td>
+<td>A pipeline slow enough to context-switch away from stops being read, and then stops being trusted.</td>
+</tr>
+</tbody>
+</table>
+<h2>6. Data contracts</h2>
+<p>The contract is the set of required checks, and it is what branch protection
+enforces:</p>
+<div class="hl"><pre><span></span><code>lint          formatting and lint rules, same command as local
+typecheck     the type checker, no new ignores
+unit          the fast suite, shuffled
+integration   the container-backed suite, within its time budget
+build         the production image builds — not pushed
+</code></pre></div>
+
+<p>Adding a check to the workflow does not add it to this contract. The names above
+have to be listed in branch protection, and a renamed job silently drops out of
+the required set — which is why §11 asks for a test of the gate, not a reading of
+the file.</p>
+<h2>7. Build order</h2>
+<ol>
+<li><strong>One job that checks out and runs lint</strong>, required in branch protection from
+   the first day. A pipeline that does not block is a habit that has to be broken
+   later.</li>
+<li><strong>Pin every action to a SHA</strong> and set <code>permissions: contents: read</code>.</li>
+<li><strong>Split into parallel jobs</strong> for types and unit tests, and add caching keyed on
+   the lock file.</li>
+<li><strong>Add the integration job with service containers</strong> and their health checks.</li>
+<li><strong>Add the build job</strong>, without pushing.</li>
+<li><strong>Concurrency cancellation</strong>, then measure total time and set the target.</li>
+<li><strong>Prove the gate:</strong> open a pull request that fails one check and confirm the
+   merge button is blocked.</li>
+</ol>
+<p>Step 7 is not ceremony. Required checks are configured outside the repository, by
+job name, and a renamed job leaves the gate silently open.</p>
+<h2>8. Blocks to pull in</h2>
+<p>Nothing here is a prerequisite. These are adjacent problems, by name only —
+resolve them separately if they apply.</p>
+<ul>
+<li>GitHub Actions CD — the deploy workflow this one deliberately excludes</li>
+<li>Test harness and unit tests — the fast suite this pipeline runs</li>
+<li>Integration tests with real dependencies — what the service containers are for</li>
+<li>Dockerfile for a production service — the image the build job proves still builds</li>
+</ul>
+<h2>9. Metrics</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Wall-clock time on a pull request</td>
+<td>&lt; 5 minutes</td>
+</tr>
+<tr>
+<td>Cache hit rate on unchanged dependencies</td>
+<td>&gt; 90%</td>
+</tr>
+<tr>
+<td>Third-party actions referenced by a mutable tag</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Jobs with write permissions</td>
+<td>0, unless justified in a comment</td>
+</tr>
+<tr>
+<td>Required checks that are not in branch protection</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Flaky CI failures per week</td>
+<td>0 — a retry button is a workaround, not a fix</td>
+</tr>
+<tr>
+<td>Concurrent runs per branch</td>
+<td>1</td>
+</tr>
+</tbody>
+</table>
+<h2>10. Failure modes</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Red main, discovered by the next person to pull</td>
+<td>The checks ran but were not required for merge</td>
+<td>Add them to branch protection and verify by trying to merge a failing pull request</td>
+</tr>
+<tr>
+<td>A workflow started behaving differently with no change in the diff</td>
+<td>A tag-referenced action was updated or repointed</td>
+<td>Pin every action to a full commit SHA</td>
+</tr>
+<tr>
+<td>A compromised step could have rewritten the repository</td>
+<td>The default token had write permissions</td>
+<td><code>permissions: contents: read</code> at the top, widened per job</td>
+</tr>
+<tr>
+<td>The integration job fails on its first database query</td>
+<td>The service container was not health-checked, so the job started before the server was ready</td>
+<td>Add <code>--health-cmd</code> options to the service</td>
+</tr>
+<tr>
+<td>Every run reinstalls dependencies although nothing changed</td>
+<td>The cache key includes files that change with every commit</td>
+<td>Key the cache on the lock file only</td>
+</tr>
+<tr>
+<td>Three runs of the same branch execute at once and the wrong one is merged on</td>
+<td>No concurrency group</td>
+<td>Group by ref with <code>cancel-in-progress</code></td>
+</tr>
+<tr>
+<td>A test fails only in CI and nobody can reproduce it</td>
+<td>CI runs different commands or flags from the local ones</td>
+<td>One definition in the Makefile, called from both</td>
+</tr>
+<tr>
+<td>The pipeline broke overnight with no commits</td>
+<td>The runner label is <code>latest</code> and the image moved</td>
+<td>Pin the runner to a version</td>
+</tr>
+<tr>
+<td>A check was renamed and merges stopped being blocked</td>
+<td>Branch protection lists checks by name, and the old name no longer reports</td>
+<td>Verify the gate after any rename</td>
+</tr>
+<tr>
+<td>A pull request from a fork exfiltrated a secret</td>
+<td>The pull-request workflow had access to credentials</td>
+<td>Keep credentials out of this workflow entirely</td>
+</tr>
+<tr>
+<td>Lint failures cost the same as a full test run</td>
+<td>Everything is in one job</td>
+<td>Split into parallel jobs</td>
+</tr>
+</tbody>
+</table>
+<h2>11. Definition of done</h2>
+<ul>
+<li class="task">Every third-party action is referenced by a full commit SHA, checked automatically in CI</li>
+<li class="task">The workflow declares <code>permissions</code> at the top with read-only defaults, and any widening carries a comment saying why</li>
+<li class="task">A pull request with a failing check cannot be merged — verified by opening one, not by reading the settings</li>
+<li class="task">Renaming a job causes the gate to fail closed, or a check detects that a required check name is missing</li>
+<li class="task">Lint, type check, unit tests, integration tests and the image build each run as separate jobs</li>
+<li class="task">CI runs the same commands as a developer, defined in one place</li>
+<li class="task">The dependency cache is keyed on the lock file, and a run with unchanged dependencies shows a cache hit</li>
+<li class="task">Every service container declares a health check that exercises the service</li>
+<li class="task">Pushing twice to a branch leaves exactly one run in progress</li>
+<li class="task">The runner image and every container image are pinned to a version, not <code>latest</code></li>
+<li class="task">No secret is referenced by this workflow, checked by grep in CI</li>
+<li class="task">Total pull-request wall-clock time is measured and reported, and a regression beyond the target is visible</li>
+</ul>
+  </article>
+
+  <aside class="tailpiece">
+    <h2>Use this blueprint</h2>
+    <p>
+      Copy the file into your project and point your agent at it. It works with Claude Code,
+      Cursor, Copilot, ChatGPT and anything else that reads a file — there is nothing to install.
+    </p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/github-actions-ci" target="_blank" rel="noopener">Open on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Browse all blueprints</a>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p><a href="/">Awesome Blueprints</a> — same request, same architecture, every time.</p>
+    <p class="dim">MIT · awesomeblueprints.com</p>
+  </div>
+</footer>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'neutral' });
+</script>
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const now = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', now);
+    try { localStorage.setItem('ab-theme', now); } catch (e) {}
+    location.reload();   // the diagram is themed at render time
+  });
+</script>
+
+</body>
+</html>

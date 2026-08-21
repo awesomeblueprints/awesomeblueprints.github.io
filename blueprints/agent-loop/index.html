@@ -1,0 +1,542 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>The Agent Loop — Blueprint for AI Coding Agents | Awesome Blueprints</title>
+<meta name="description" content="Build an agent loop that plans, calls tools and stops: step budgets, termination conditions and error handling for LLM agents in Python." />
+<link rel="canonical" href="https://awesomeblueprints.com/blueprints/agent-loop/" />
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="Awesome Blueprints" />
+<meta property="og:url" content="https://awesomeblueprints.com/blueprints/agent-loop/" />
+<meta property="og:title" content="The Agent Loop — Architecture Blueprint" />
+<meta property="og:description" content="Build an agent loop that plans, calls tools and stops: step budgets, termination conditions and error handling for LLM agents in Python." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="The Agent Loop — Architecture Blueprint" />
+<meta name="twitter:description" content="Build an agent loop that plans, calls tools and stops: step budgets, termination conditions and error handling for LLM agents in Python." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/page.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "The Agent Loop", "description": "Build an agent loop that plans, calls tools and stops: step budgets, termination conditions and error handling for LLM agents in Python.", "url": "https://awesomeblueprints.com/blueprints/agent-loop/", "dateModified": "2026-08-18", "keywords": "Agents", "isAccessibleForFree": true, "license": "https://opensource.org/licenses/MIT", "publisher": {"@type": "Organization", "name": "Awesome Blueprints", "url": "https://awesomeblueprints.com"}}</script>
+<script>
+  (function () {
+    var t;
+    try { t = localStorage.getItem('ab-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">Awesome Blueprints</a>
+    <div class="nav-right">
+      <a class="nav-link" href="/#blueprints">Catalogue</a>
+      <a class="nav-link" href="/#faq">FAQ</a>
+      <a class="nav-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/agent-loop" target="_blank" rel="noopener">GitHub ↗</a>
+      <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Switch theme">◑</button>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/">Home</a> <span>/</span> <a href="/#blueprints">Blueprints</a> <span>/</span>
+    <span>The Agent Loop</span>
+  </nav>
+
+  <header class="page-head">
+    <p class="eyebrow">agent-loop</p>
+    <h1>The Agent Loop</h1>
+    <p class="lede">Build an agent loop that plans, calls tools and stops: step budgets, termination conditions and error handling for LLM agents in Python.</p>
+    <div class="facts"><span>medium</span><span>3–5 days</span><span>Verified 2026-08-18</span></div>
+    <div class="tags"><span class="tag">Agents</span></div>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/agent-loop" target="_blank" rel="noopener">Read it on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Back to the catalogue</a>
+    </div>
+  </header>
+
+  <article class="doc">
+<blockquote>
+<p>A <code>while</code> loop that sends conversation state to a model, runs whatever tools it
+asks for, appends the results and repeats until it stops asking. Everything
+else you will bolt on later exists to buy back the predictability this trades
+away.</p>
+</blockquote>
+<p><strong>Complexity:</strong> medium · <strong>Typical build:</strong> 3–5 days · <strong>Verified:</strong> 2026-08-18 (re-check after ~90 days)</p>
+<p><strong>Examples in:</strong> Python. Only §4 is language-specific — the rules, failure modes and definition of done hold anywhere, and your agent translates the code.</p>
+<p><strong>Use when:</strong> the number of steps is unknown at design time, the next action depends on what the last one returned, and the task has an end state you can recognise — "find the bug in this repo", "get this ticket to done".</p>
+<p><strong>Not for:</strong> a sequence of steps that is fixed and known in advance. That is a chain of calls, and it is cheaper, faster and debuggable. Reaching for a loop because it feels more capable is the most common way to make a simple task expensive and non-deterministic.</p>
+<hr />
+<h2>⚙️ INSTRUCTIONS FOR THE AI — READ BEFORE WRITING ANY CODE</h2>
+<p><strong>Do not start coding.</strong></p>
+<p><strong>Step 1 — Refresh.</strong> Search the web and verify: the current message and tool-use
+shape for the provider being used — the block structure, the field names for a
+tool call and its result, and whether parallel tool calls are returned in one
+assistant message; the current model ids and their context limits; whether the
+provider's SDK now offers a built-in loop helper and what it does not cover.
+This is the fastest-moving surface in this whole subject. Report what you
+verified and where your assumptions were wrong.</p>
+<p><strong>Step 2 — Read the project, then audit what exists.</strong> Find any existing model
+client, tool registry, retry wrapper or message store — a project that has been
+calling an LLM at all usually has half of this already, under other names.</p>
+<p><strong>Then audit what exists.</strong> Walk §11 item by item, marking each <em>already true</em>,
+<em>partly true</em> or <em>absent</em> with the file that decides it. Report that before
+proposing anything.</p>
+<p>Assume the project is right until it demonstrably is not. Code that satisfies an
+item stays, whatever its shape — §4 is illustrative, and its idioms translate
+into this project's language. Replacing something that works needs a one-line
+reason. Never delete a working path to make room for the version written here.
+If nothing relevant exists, say so and use §3.</p>
+<p>The same applies to language. §4 is illustrative: translate its idioms into this
+project's language and libraries rather than importing its shape. §11 is what has
+to become true — not the syntax it happens to be written in.</p>
+<p><strong>Step 3 — Write a plan for the gap only, and get it approved.</strong> List: every
+tool the agent will have, the terminal condition, the three budgets, and what is
+out of scope.</p>
+<p><strong>In that plan, include a <code>## Proposed stack</code> section.</strong> Do not ask an open
+question about frameworks. <em>Propose</em> whether to write the loop directly or adopt
+a framework — with a one-line reason, the versions verified in Step 1, and what
+would change the decision. Ask the user to confirm once.</p>
+<p>Name what you are adding, leaving alone, and changing. Touch nothing else.</p>
+<hr />
+<h2>1. What a loop costs you, and what it buys</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>A fixed sequence of calls</th>
+<th>An agent loop</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Who decides the next step</td>
+<td>Your code</td>
+<td>The model</td>
+</tr>
+<tr>
+<td>Number of model calls</td>
+<td>Known</td>
+<td>Unknown until it ends</td>
+</tr>
+<tr>
+<td>Cost per task</td>
+<td>Predictable</td>
+<td>A distribution with a long tail</td>
+</tr>
+<tr>
+<td>Debugging a bad run</td>
+<td>Read the code</td>
+<td>Read the trace</td>
+</tr>
+<tr>
+<td>Failure when it goes wrong</td>
+<td>Wrong answer</td>
+<td>Wrong answer, or never stopping</td>
+</tr>
+<tr>
+<td>What you must add back</td>
+<td>Nothing</td>
+<td>Caps, truncation, loop detection, tracing</td>
+</tr>
+</tbody>
+</table>
+<p>Control flow moves out of your code and into the model. That is the entire
+trade, and it is worth making only when the steps genuinely cannot be written
+down in advance.</p>
+<p>The mistake that follows is subtler than choosing wrong: people write the loop,
+see it work on three examples, and ship it without the governors. A loop with no
+step cap is not a simpler loop — it is the same loop with an unbounded bill and
+no way to stop.</p>
+<h2>2. Architecture</h2>
+<pre class="mermaid">%% GENERATED - do not edit by hand.
+%% Edit the source header in architecture.mmd, then rebuild.
+%% The Tool-Use Loop
+
+flowchart TB
+    subgraph agent[&quot;Agent Process&quot;]
+        direction TB
+        history[&quot;Message History&quot;]
+        modelcall[&quot;Model Call&quot;]
+        branch[&quot;Tool Calls Present&quot;]
+        dispatch[&quot;Dispatcher - validate and route&quot;]
+        governor[&quot;Step Governor&quot;]
+    end
+    subgraph tools[&quot;Tool Layer&quot;]
+        direction TB
+        tool[&quot;Tool Implementation&quot;]
+        world[(&quot;Files, APIs, Database&quot;)]
+    end
+
+    user([&quot;User&quot;])
+    provider{{&quot;Model Provider&quot;}}
+
+    user --&gt;|&quot;task&quot;| history
+    history --&gt;|&quot;history plus tool schemas&quot;| modelcall
+    modelcall --&gt;|&quot;request&quot;| provider
+    provider -.-&gt;|&quot;assistant message&quot;| modelcall
+    modelcall --&gt;|&quot;inspect the reply&quot;| branch
+    branch --&gt;|&quot;no tool calls, so this is the answer&quot;| user
+    branch --&gt;|&quot;one or more tool calls&quot;| dispatch
+    dispatch --&gt;|&quot;validated arguments&quot;| tool
+    tool --&gt;|&quot;read or write&quot;| world
+    tool --&gt;|&quot;result, truncated&quot;| history
+    governor ---|&quot;caps steps, wall clock and spend&quot;| branch
+
+    classDef service fill:#eff6ff,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b;
+    classDef datastore fill:#e9faf3,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b;
+    classDef external fill:#fff4ed,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b;
+    classDef actor fill:#f0eefc,stroke:#4a3aa7,stroke-width:1.5px,color:#0b0b0b;
+    class history,modelcall,branch,dispatch,governor,tool service;
+    class world datastore;
+    class provider external;
+    class user actor;</pre>
+<p><strong>The rule this diagram encodes:</strong> the only exit is the model choosing not to
+call a tool. Everything else — the governor, the truncator — exists because that
+exit is not guaranteed to arrive.</p>
+<h2>3. Project structure</h2>
+<div class="hl"><pre><span></span><code>agent/
+├── loop.py           # the loop itself. Small, and it should stay small.
+├── registry.py       # name -&gt; (schema, handler). One place a tool is declared.
+├── dispatch.py       # validate arguments, run, catch, serialise
+├── budget.py         # steps, wall clock, cumulative tokens
+├── truncate.py       # bound one tool result, with an explicit elision marker
+└── tools/            # one file per tool. Each is a plain function.
+</code></pre></div>
+
+<p><strong>The rule that keeps this maintainable:</strong> a tool is a plain function that knows
+nothing about the loop. It takes arguments, returns a string, and raises on
+failure. Tools that reach into conversation state cannot be tested, cannot be
+reused outside the agent, and cannot be reasoned about when the agent misbehaves.</p>
+<h2>4. Reference implementation</h2>
+<p><strong>The loop.</strong> Provider details will differ — Step 1 is where you check them —
+but the shape does not:</p>
+<div class="hl"><pre><span></span><code><span class="k">def</span> <span class="nf">run_agent</span><span class="p">(</span><span class="n">task</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">tools</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tool</span><span class="p">],</span> <span class="n">cfg</span><span class="p">:</span> <span class="n">AgentConfig</span><span class="p">,</span> <span class="n">system</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="n">messages</span> <span class="o">=</span> <span class="p">[{</span><span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;user&quot;</span><span class="p">,</span> <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="n">task</span><span class="p">}]</span>
+    <span class="n">schemas</span> <span class="o">=</span> <span class="p">[</span><span class="n">t</span><span class="o">.</span><span class="n">schema</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">tools</span><span class="o">.</span><span class="n">values</span><span class="p">()]</span>
+    <span class="n">deadline</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span> <span class="o">+</span> <span class="n">cfg</span><span class="o">.</span><span class="n">max_wall_clock_s</span>
+
+    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">max_steps</span><span class="p">):</span>
+        <span class="c1"># Out of budget: take the tools away and ask for an answer. Cutting the</span>
+        <span class="c1"># loop dead instead returns nothing, and the work already paid for is lost.</span>
+        <span class="n">spent</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span> <span class="o">&gt;</span> <span class="n">deadline</span>
+        <span class="n">reply</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
+            <span class="n">system</span><span class="o">=</span><span class="n">system</span> <span class="o">+</span> <span class="p">(</span><span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">Budget exhausted. Answer now with what you have.&quot;</span>
+                             <span class="k">if</span> <span class="n">spent</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span><span class="p">),</span>
+            <span class="n">tools</span><span class="o">=</span><span class="p">[]</span> <span class="k">if</span> <span class="n">spent</span> <span class="k">else</span> <span class="n">schemas</span><span class="p">,</span>
+            <span class="n">messages</span><span class="o">=</span><span class="n">messages</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">messages</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;assistant&quot;</span><span class="p">,</span> <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="n">reply</span><span class="o">.</span><span class="n">content</span><span class="p">})</span>
+
+        <span class="n">calls</span> <span class="o">=</span> <span class="p">[</span><span class="n">b</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">reply</span><span class="o">.</span><span class="n">content</span> <span class="k">if</span> <span class="n">b</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;tool_use&quot;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">calls</span><span class="p">:</span>
+            <span class="k">return</span> <span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">b</span><span class="o">.</span><span class="n">text</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">reply</span><span class="o">.</span><span class="n">content</span> <span class="k">if</span> <span class="n">b</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;text&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Every tool_use needs exactly one tool_result, in the same order, with</span>
+        <span class="c1"># matching ids. Drop or reorder one and the next request is rejected.</span>
+        <span class="n">messages</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;user&quot;</span><span class="p">,</span> <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">execute</span><span class="p">(</span><span class="n">c</span><span class="p">,</span> <span class="n">tools</span><span class="p">,</span> <span class="n">cfg</span><span class="p">)</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">calls</span><span class="p">]})</span>
+
+    <span class="k">return</span> <span class="s2">&quot;Step budget exhausted without a final answer.&quot;</span>
+</code></pre></div>
+
+<p><strong>Errors are messages, not exceptions.</strong> The model cannot recover from something
+it never sees:</p>
+<div class="hl"><pre><span></span><code><span class="k">def</span> <span class="nf">execute</span><span class="p">(</span><span class="n">block</span><span class="p">,</span> <span class="n">tools</span><span class="p">,</span> <span class="n">cfg</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">block</span><span class="o">.</span><span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">tools</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">result</span><span class="p">(</span><span class="n">block</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Unknown tool </span><span class="si">{</span><span class="n">block</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2">. Available: </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">tools</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+                      <span class="n">is_error</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="n">tools</span><span class="p">[</span><span class="n">block</span><span class="o">.</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="o">**</span><span class="n">block</span><span class="o">.</span><span class="n">input</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">result</span><span class="p">(</span><span class="n">block</span><span class="p">,</span> <span class="n">truncate</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">out</span><span class="p">),</span> <span class="n">cfg</span><span class="o">.</span><span class="n">max_tool_output_chars</span><span class="p">))</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="c1"># Actionable text, never a stack trace: the trace tells the model about</span>
+        <span class="c1"># your file layout and nothing about what to do differently.</span>
+        <span class="k">return</span> <span class="n">result</span><span class="p">(</span><span class="n">block</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">is_error</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</code></pre></div>
+
+<p><strong>Truncation says that it happened.</strong> A silently cut result is worse than a
+short one, because the model treats a fragment as the whole:</p>
+<div class="hl"><pre><span></span><code><span class="k">def</span> <span class="nf">truncate</span><span class="p">(</span><span class="n">s</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">limit</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">s</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="n">limit</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">s</span>
+    <span class="n">keep</span> <span class="o">=</span> <span class="n">limit</span> <span class="o">//</span> <span class="mi">2</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">s</span><span class="p">[:</span><span class="n">keep</span><span class="p">]</span><span class="si">}</span><span class="se">\n\n</span><span class="s2">...[</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">s</span><span class="p">)</span> <span class="o">-</span> <span class="n">limit</span><span class="si">}</span><span class="s2"> chars elided]...</span><span class="se">\n\n</span><span class="si">{</span><span class="n">s</span><span class="p">[</span><span class="o">-</span><span class="n">keep</span><span class="p">:]</span><span class="si">}</span><span class="s2">&quot;</span>
+</code></pre></div>
+
+<p><strong>Loop detection.</strong> The most common runaway is not chaos, it is the same call
+repeating because the result never answered the question:</p>
+<div class="hl"><pre><span></span><code><span class="n">seen</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+<span class="n">key</span> <span class="o">=</span> <span class="p">(</span><span class="n">block</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">block</span><span class="o">.</span><span class="n">input</span><span class="p">,</span> <span class="n">sort_keys</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+<span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">seen</span><span class="p">:</span>
+    <span class="k">return</span> <span class="n">result</span><span class="p">(</span><span class="n">block</span><span class="p">,</span> <span class="s2">&quot;This identical call was already made and returned the &quot;</span>
+                         <span class="s2">&quot;same thing. Try a different approach.&quot;</span><span class="p">,</span> <span class="n">is_error</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">seen</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+</code></pre></div>
+
+<h2>5. Golden-standard rules</h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Three budgets, always: steps, wall clock, cumulative tokens</td>
+<td>Each bounds a different runaway; a step cap alone does not stop one expensive step</td>
+</tr>
+<tr>
+<td>The system prompt names the terminal condition explicitly</td>
+<td>"Reply with text and no tool call when you have the answer" — models do not reliably infer this</td>
+</tr>
+<tr>
+<td>Exceptions become tool results marked as errors</td>
+<td>An error the model cannot see is an error it retries blindly</td>
+</tr>
+<tr>
+<td>Never return a stack trace to the model</td>
+<td>It describes your file layout and suggests nothing to do differently</td>
+</tr>
+<tr>
+<td>Every tool result is truncated with a visible elision marker</td>
+<td>A silently cut result is read as the whole result</td>
+</tr>
+<tr>
+<td>Every <code>tool_use</code> gets exactly one matching result, in order</td>
+<td>Reorder or drop one and the provider rejects the next request</td>
+</tr>
+<tr>
+<td>Identical repeated calls are detected and reported back</td>
+<td>The commonest runaway is a call that repeats because its result did not answer the question</td>
+</tr>
+<tr>
+<td>Tools return observable state, not <code>"ok"</code></td>
+<td>A model that cannot see the effect of its action cannot tell success from silence</td>
+</tr>
+<tr>
+<td>The system prefix is byte-stable across turns</td>
+<td>Rewriting it every turn defeats prompt caching, which is most of the bill</td>
+</tr>
+<tr>
+<td>Mutable state goes in a tool result or the last user turn</td>
+<td>Same reason: the cached prefix must not change</td>
+</tr>
+<tr>
+<td>Temperature stays low</td>
+<td>This is tool selection, not creative writing</td>
+</tr>
+<tr>
+<td>Above roughly fifteen tools, split the agent rather than adding another</td>
+<td>Selection accuracy falls off a cliff, and no prompt wording recovers it</td>
+</tr>
+<tr>
+<td>Every run emits a trace: per step, the tool, the arguments, tokens, latency</td>
+<td>A loop you cannot replay is a loop you cannot fix</td>
+</tr>
+</tbody>
+</table>
+<h2>6. Data contracts</h2>
+<div class="hl"><pre><span></span><code><span class="k">class</span> <span class="nc">ToolResult</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">tool_call_id</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">content</span><span class="p">:</span> <span class="nb">str</span>          <span class="c1"># always a string; serialise structured data yourself</span>
+    <span class="n">is_error</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+
+<span class="k">class</span> <span class="nc">Tool</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>             <span class="c1"># ^[a-z0-9_]{1,64}$</span>
+    <span class="n">description</span><span class="p">:</span> <span class="nb">str</span>      <span class="c1"># when to use it AND when not to</span>
+    <span class="n">input_schema</span><span class="p">:</span> <span class="nb">dict</span>    <span class="c1"># JSON Schema, additionalProperties: false</span>
+    <span class="k">def</span> <span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span> <span class="o">...</span>
+
+<span class="k">class</span> <span class="nc">AgentConfig</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">max_steps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">20</span>
+    <span class="n">max_wall_clock_s</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">300.0</span>
+    <span class="n">max_tokens_total</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">200_000</span>
+    <span class="n">max_tool_output_chars</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">8_000</span>
+    <span class="n">parallel_tools</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>     <span class="c1"># false when tools mutate shared state</span>
+</code></pre></div>
+
+<h2>7. Build order</h2>
+<ol>
+<li><strong>The bare loop</strong> with two or three tools and a hard step cap. Nothing else.</li>
+<li><strong>The dispatcher</strong>: argument validation, exceptions turned into error results.</li>
+<li><strong>Truncation</strong>, with the elision marker visible in a real transcript.</li>
+<li><strong>The terminal condition</strong> written into the system prompt, and a test that the
+   agent stops on a task it can finish in one step.</li>
+<li><strong>The remaining budgets</strong> — wall clock, then cumulative tokens.</li>
+<li><strong>Tracing</strong>: one line per step with tool, arguments, tokens, latency. Do this
+   before adding more tools, or you will be debugging blind.</li>
+<li><strong>Loop detection</strong> on repeated identical calls.</li>
+<li><strong>Parallel tool execution</strong>, only once you have confirmed the tools do not
+   share mutable state.</li>
+<li><strong>An eval set of at least thirty tasks</strong> with known outcomes, run in CI.</li>
+</ol>
+<h2>8. Related reading</h2>
+<p>Every blueprint here stands on its own: nothing below is a prerequisite, and
+nothing above needs any of it to be implemented. These are adjacent problems you
+will meet next, listed so you know they have been thought about.</p>
+<ul>
+<li><strong>Tool Design</strong> — the single highest-leverage change to how well a loop works.</li>
+<li><strong>Context Engineering</strong> — what to do when the history stops fitting.</li>
+<li><strong>Human in the Loop</strong> — gating actions that spend money or destroy data.</li>
+<li><strong>Observability and Tracing</strong> — reconstructing a run after it went wrong.</li>
+</ul>
+<h2>9. Metrics</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Task success on a fixed eval set</td>
+<td>≥ 85%, and never below the last release</td>
+</tr>
+<tr>
+<td>Steps per task, p95</td>
+<td>≤ 0.6 × the cap. At the cap means the cap is doing the deciding</td>
+</tr>
+<tr>
+<td>Tool error rate</td>
+<td>&lt; 3%; above 10% the schemas or descriptions are wrong</td>
+</tr>
+<tr>
+<td>Runs containing a repeated identical call</td>
+<td>&lt; 1%</td>
+</tr>
+<tr>
+<td>Cost per task, p95 vs p50</td>
+<td>p95 &lt; 3 × p50; a fatter tail means runaways</td>
+</tr>
+<tr>
+<td>Cached input tokens as a share of input</td>
+<td>&gt; 70%; below 40% the prefix is not stable</td>
+</tr>
+<tr>
+<td>Runs with a complete trace</td>
+<td>100%</td>
+</tr>
+</tbody>
+</table>
+<h2>10. Failure modes</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Same tool, same arguments, over and over</td>
+<td>The result never answered the model's question</td>
+<td>Detect the repeat and say so in the result</td>
+</tr>
+<tr>
+<td>The loop never ends</td>
+<td>No terminal condition in the system prompt</td>
+<td>State it: text and no tool call means done</td>
+</tr>
+<tr>
+<td>Context overflows mid-run</td>
+<td>Tool results unbounded</td>
+<td>Truncate every result; compact the history</td>
+</tr>
+<tr>
+<td>Invented tool names or arguments</td>
+<td>Overlapping or vague descriptions</td>
+<td>Make descriptions mutually exclusive; <code>additionalProperties: false</code></td>
+</tr>
+<tr>
+<td>Right plan, wrong execution</td>
+<td>Tools return <code>"ok"</code> instead of what changed</td>
+<td>Return observable state</td>
+</tr>
+<tr>
+<td>One request costs twenty times the median</td>
+<td>A retry storm inside a tool</td>
+<td>Budget on cumulative tokens, not only steps</td>
+</tr>
+<tr>
+<td>A tool is never chosen</td>
+<td>Its description does not use the words users use</td>
+<td>Put real user vocabulary in the description</td>
+</tr>
+<tr>
+<td>Provider rejects the next request</td>
+<td>A tool result missing, reordered or mis-ided</td>
+<td>One result per call, same order, matching ids</td>
+</tr>
+<tr>
+<td>Cost doubled after a prompt tweak</td>
+<td>The system prefix changed every turn</td>
+<td>Keep the prefix byte-stable; move state into messages</td>
+</tr>
+<tr>
+<td>Works in testing, wanders in production</td>
+<td>Real tasks are longer than test tasks</td>
+<td>Eval on the p95 task length, not the median</td>
+</tr>
+</tbody>
+</table>
+<h2>11. Definition of done</h2>
+<ul>
+<li class="task">Step, wall-clock and cumulative-token budgets all exist and are all enforced.</li>
+<li class="task">Running out of budget produces an answer from what was gathered, not a dropped request.</li>
+<li class="task">The system prompt states the terminal condition in words.</li>
+<li class="task">Every tool has a JSON Schema with <code>additionalProperties: false</code> and required fields declared.</li>
+<li class="task">Every tool description says when <strong>not</strong> to use it.</li>
+<li class="task">Exceptions reach the model as actionable text marked as errors; no stack trace ever does.</li>
+<li class="task">Every tool result is truncated with a visible elision marker.</li>
+<li class="task">Every <code>tool_use</code> has exactly one matching result, in the same order.</li>
+<li class="task">A repeated identical call is detected and reported back to the model.</li>
+<li class="task">Every run emits a trace with per-step tool, arguments, tokens and latency.</li>
+<li class="task">The system prefix is byte-stable across turns, verified by the cache hit rate.</li>
+<li class="task">An eval set of at least thirty tasks runs in CI and blocks a regression.</li>
+</ul>
+  </article>
+
+  <aside class="tailpiece">
+    <h2>Use this blueprint</h2>
+    <p>
+      Copy the file into your project and point your agent at it. It works with Claude Code,
+      Cursor, Copilot, ChatGPT and anything else that reads a file — there is nothing to install.
+    </p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/agent-loop" target="_blank" rel="noopener">Open on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Browse all blueprints</a>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p><a href="/">Awesome Blueprints</a> — same request, same architecture, every time.</p>
+    <p class="dim">MIT · awesomeblueprints.com</p>
+  </div>
+</footer>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'neutral' });
+</script>
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const now = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', now);
+    try { localStorage.setItem('ab-theme', now); } catch (e) {}
+    location.reload();   // the diagram is themed at render time
+  });
+</script>
+
+</body>
+</html>

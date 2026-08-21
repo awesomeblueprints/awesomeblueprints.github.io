@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>One Error Envelope for an HTTP API — Blueprint for AI Coding Agents | Awesome Blueprints</title>
+<meta name="description" content="One error envelope for an HTTP API: stable error codes, machine-readable payloads and handlers that clients and agents can branch on." />
+<link rel="canonical" href="https://awesomeblueprints.com/blueprints/error-envelope/" />
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="Awesome Blueprints" />
+<meta property="og:url" content="https://awesomeblueprints.com/blueprints/error-envelope/" />
+<meta property="og:title" content="One Error Envelope for an HTTP API — Architecture Blueprint" />
+<meta property="og:description" content="One error envelope for an HTTP API: stable error codes, machine-readable payloads and handlers that clients and agents can branch on." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="One Error Envelope for an HTTP API — Architecture Blueprint" />
+<meta name="twitter:description" content="One error envelope for an HTTP API: stable error codes, machine-readable payloads and handlers that clients and agents can branch on." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/page.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "One Error Envelope for an HTTP API", "description": "One error envelope for an HTTP API: stable error codes, machine-readable payloads and handlers that clients and agents can branch on.", "url": "https://awesomeblueprints.com/blueprints/error-envelope/", "dateModified": "2026-08-18", "keywords": "API", "isAccessibleForFree": true, "license": "https://opensource.org/licenses/MIT", "publisher": {"@type": "Organization", "name": "Awesome Blueprints", "url": "https://awesomeblueprints.com"}}</script>
+<script>
+  (function () {
+    var t;
+    try { t = localStorage.getItem('ab-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">Awesome Blueprints</a>
+    <div class="nav-right">
+      <a class="nav-link" href="/#blueprints">Catalogue</a>
+      <a class="nav-link" href="/#faq">FAQ</a>
+      <a class="nav-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/error-envelope" target="_blank" rel="noopener">GitHub ↗</a>
+      <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Switch theme">◑</button>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/">Home</a> <span>/</span> <a href="/#blueprints">Blueprints</a> <span>/</span>
+    <span>One Error Envelope for an HTTP API</span>
+  </nav>
+
+  <header class="page-head">
+    <p class="eyebrow">error-envelope</p>
+    <h1>One Error Envelope for an HTTP API</h1>
+    <p class="lede">One error envelope for an HTTP API: stable error codes, machine-readable payloads and handlers that clients and agents can branch on.</p>
+    <div class="facts"><span>low</span><span>1–2 days</span><span>Verified 2026-08-18</span></div>
+    <div class="tags"><span class="tag">API</span></div>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/error-envelope" target="_blank" rel="noopener">Read it on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Back to the catalogue</a>
+    </div>
+  </header>
+
+  <article class="doc">
+<blockquote>
+<p>One error shape for a whole API: machine-readable, safe to show a stranger,
+and honest about whether retrying will help. Written so that a client can
+branch on failures without reading prose.</p>
+</blockquote>
+<p><strong>Complexity:</strong> low · <strong>Typical build:</strong> 1–2 days · <strong>Verified:</strong> 2026-08-18 (re-check after ~90 days)</p>
+<p><strong>Examples in:</strong> TypeScript. Only §4 is language-specific — the rules, failure modes and definition of done hold anywhere, and your agent translates the code.</p>
+<p><strong>Use when:</strong> anything with clients — a web app, a mobile app, another service, or an AI agent — needs to react differently to different failures, and you want one shape rather than one per route.</p>
+<p><strong>Not for:</strong> a script or a single-consumer internal tool where a stack trace in the log is the whole requirement.</p>
+<hr />
+<h2>⚙️ INSTRUCTIONS FOR THE AI — READ BEFORE WRITING ANY CODE</h2>
+<p><strong>Do not start coding.</strong></p>
+<p><strong>Step 1 — Refresh.</strong> Search the web and verify: the current state of RFC 9457
+<em>Problem Details for HTTP APIs</em> — it obsoleted RFC 7807 in July 2023, and older
+tutorials and libraries still emit the 7807 shape and media type; whether the
+framework in use has a built-in problem-details helper and which RFC it targets;
+and the framework's current exception-handler API. Report what you verified.</p>
+<p><strong>Step 2 — Read the project.</strong> Find every place that currently returns an error:
+route handlers, middleware, the framework's default handler, and anything that
+catches and rethrows. Count the distinct shapes already in use — that number is
+the size of the problem.</p>
+<p><strong>Then audit what exists.</strong> Walk §11 item by item, marking each <em>already true</em>,
+<em>partly true</em> or <em>absent</em> with the file that decides it. Report that before
+proposing anything.</p>
+<p>Assume the project is right until it demonstrably is not. Code that satisfies an
+item stays, whatever its shape — §4 is illustrative, and its idioms translate
+into this project's language. Replacing something that works needs a one-line
+reason. Never delete a working path to make room for the version written here.
+If nothing relevant exists, say so and use §3.</p>
+<p><strong>Step 3 — Write a plan for the gap only, and get it approved.</strong> List: the envelope
+fields, the initial error-code vocabulary, the mapping from internal exception
+types to codes and statuses, and what is deliberately out of scope.</p>
+<p><strong>In that plan, include a <code>## Proposed stack</code> section.</strong> <em>Propose</em> whether to
+adopt RFC 9457 verbatim or a project-local shape — with a one-line reason and
+what would change the decision. Ask the user to confirm once.</p>
+<p>Name what you are adding, leaving alone, and changing. Touch nothing else.</p>
+<p><strong>Step 4 — Build in the order in §7.</strong> <strong>Step 5 — §11 is the definition of done.</strong></p>
+<hr />
+<h2>1. Why a message string is not an error</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Ad-hoc errors</th>
+<th>An envelope</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>What the client branches on</td>
+<td>Substring matching on English prose</td>
+<td>A stable code</td>
+</tr>
+<tr>
+<td>Effect of rewording a message</td>
+<td>Client breaks, silently</td>
+<td>Nothing</td>
+</tr>
+<tr>
+<td>"Should I retry?"</td>
+<td>Guesswork from the status code</td>
+<td>An explicit field</td>
+</tr>
+<tr>
+<td>Localisation</td>
+<td>Impossible — the server picked the language</td>
+<td>Client maps code to its own text</td>
+</tr>
+<tr>
+<td>Support ticket</td>
+<td>"It said something went wrong"</td>
+<td>A trace id that finds the request</td>
+</tr>
+<tr>
+<td>Leaking internals</td>
+<td>Stack traces reach users</td>
+<td>Never crosses the boundary</td>
+</tr>
+</tbody>
+</table>
+<p>The failure this prevents is quiet. A client somewhere does
+<code>if (msg.includes("not found"))</code>, someone improves the wording six months later,
+and the branch stops firing. Nothing throws. The behaviour just changes.</p>
+<h2>2. Architecture</h2>
+<pre class="mermaid">%% GENERATED - do not edit by hand.
+%% Edit the source header in architecture.mmd, then rebuild.
+%% One Error Shape at the Boundary
+
+flowchart TB
+    subgraph app[&quot;Application&quot;]
+        direction TB
+        route[&quot;Route Handler&quot;]
+        domain[&quot;Domain Logic&quot;]
+        mapper[&quot;Error Mapper&quot;]
+        handler[&quot;Exception Handler&quot;]
+    end
+    subgraph obs[&quot;Observability&quot;]
+        direction TB
+        logs[(&quot;Structured Log&quot;)]
+    end
+
+    client([&quot;Client&quot;])
+    vendor{{&quot;Third-Party API&quot;}}
+
+    client --&gt;|&quot;request&quot;| route
+    route --&gt;|&quot;call&quot;| domain
+    domain --&gt;|&quot;typed domain error&quot;| mapper
+    vendor -.-&gt;|&quot;failure, timeout, rate limit&quot;| domain
+    domain --&gt;|&quot;anything unmapped&quot;| handler
+    mapper --&gt;|&quot;code, status, retryable&quot;| handler
+    handler --&gt;|&quot;full detail, internal only&quot;| logs
+    handler --&gt;|&quot;the envelope, nothing more&quot;| client
+
+    classDef service fill:#eff6ff,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b;
+    classDef datastore fill:#e9faf3,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b;
+    classDef external fill:#fff4ed,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b;
+    classDef actor fill:#f0eefc,stroke:#4a3aa7,stroke-width:1.5px,color:#0b0b0b;
+    class route,domain,mapper,handler service;
+    class logs datastore;
+    class vendor external;
+    class client actor;</pre>
+<p><strong>The rule this diagram encodes:</strong> two audiences, two payloads, one place. The
+log gets everything; the client gets the envelope; both are written by the same
+handler so they cannot disagree about what happened.</p>
+<h2>3. Project structure</h2>
+<div class="hl"><pre><span></span><code>src/
+├── errors/
+│   ├── envelope.ts       # the response type. One definition, exported.
+│   ├── codes.ts          # the closed vocabulary of error codes
+│   ├── domain.ts         # typed domain errors: NotFound, Conflict, RateLimited…
+│   └── handler.ts        # the single exception handler, mounted once
+├── domain/               # throws domain errors. Knows nothing about HTTP.
+└── routes/               # throws or lets through. Never formats an error.
+</code></pre></div>
+
+<p><strong>The rule that keeps this maintainable:</strong> exactly one place constructs the
+envelope. A second one appears the first time somebody is in a hurry, and from
+then on the shape has two versions and the client has to handle both.</p>
+<h2>4. Reference implementation</h2>
+<p><strong>The envelope.</strong> Small on purpose — every field earns its place:</p>
+<div class="hl"><pre><span></span><code><span class="k">export</span> <span class="kr">type</span> <span class="nx">ErrorEnvelope</span> <span class="o">=</span> <span class="p">{</span>
+  <span class="nx">error</span>: <span class="kt">ErrorCode</span><span class="p">;</span>      <span class="c1">// stable, machine-readable, from a closed set</span>
+  <span class="nx">message</span>: <span class="kt">string</span><span class="p">;</span>       <span class="c1">// human-readable, safe to display, never parsed</span>
+  <span class="nx">retryable</span>: <span class="kt">boolean</span><span class="p">;</span>    <span class="c1">// explicit: does trying again have any chance</span>
+  <span class="nx">traceId</span>: <span class="kt">string</span><span class="p">;</span>       <span class="c1">// the one string support asks for</span>
+  <span class="nx">details?</span>: <span class="kt">unknown</span><span class="p">;</span>     <span class="c1">// structured, per-code; field errors live here</span>
+<span class="p">};</span>
+</code></pre></div>
+
+<p><code>retryable</code> is a field rather than an inference from the status code because the
+status alone cannot say it. A 429 is retryable; a 400 is not; a 500 usually is
+but not when it is a permanent downstream misconfiguration. Only the code that
+raised it knows.</p>
+<p><strong>Domain errors carry their mapping.</strong> The domain layer never imports HTTP:</p>
+<div class="hl"><pre><span></span><code><span class="k">export</span> <span class="k">abstract</span> <span class="kd">class</span> <span class="nx">DomainError</span> <span class="k">extends</span> <span class="ne">Error</span> <span class="p">{</span>
+  <span class="k">abstract</span> <span class="k">readonly</span> <span class="nx">code</span>: <span class="kt">ErrorCode</span><span class="p">;</span>
+  <span class="k">abstract</span> <span class="k">readonly</span> <span class="nx">status</span>: <span class="kt">number</span><span class="p">;</span>
+  <span class="k">readonly</span> <span class="nx">retryable</span>: <span class="kt">boolean</span> <span class="o">=</span> <span class="kc">false</span><span class="p">;</span>
+  <span class="k">readonly</span> <span class="nx">details?</span>: <span class="kt">unknown</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="k">export</span> <span class="kd">class</span> <span class="nx">NotFound</span> <span class="k">extends</span> <span class="nx">DomainError</span> <span class="p">{</span>
+  <span class="k">readonly</span> <span class="nx">code</span> <span class="o">=</span> <span class="s1">&#39;not_found&#39;</span><span class="p">;</span> <span class="k">readonly</span> <span class="nx">status</span> <span class="o">=</span> <span class="mf">404</span><span class="p">;</span>
+  <span class="kr">constructor</span><span class="p">(</span><span class="nx">resource</span>: <span class="kt">string</span><span class="p">)</span> <span class="p">{</span> <span class="k">super</span><span class="p">(</span><span class="sb">`</span><span class="si">${</span><span class="nx">resource</span><span class="si">}</span><span class="sb"> not found`</span><span class="p">);</span> <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">export</span> <span class="kd">class</span> <span class="nx">RateLimited</span> <span class="k">extends</span> <span class="nx">DomainError</span> <span class="p">{</span>
+  <span class="k">readonly</span> <span class="nx">code</span> <span class="o">=</span> <span class="s1">&#39;rate_limited&#39;</span><span class="p">;</span> <span class="k">readonly</span> <span class="nx">status</span> <span class="o">=</span> <span class="mf">429</span><span class="p">;</span>
+  <span class="k">readonly</span> <span class="nx">retryable</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+  <span class="kr">constructor</span><span class="p">(</span><span class="k">readonly</span> <span class="nx">retryAfterSeconds</span>: <span class="kt">number</span><span class="p">)</span> <span class="p">{</span> <span class="k">super</span><span class="p">(</span><span class="s1">&#39;Rate limit exceeded&#39;</span><span class="p">);</span> <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><strong>One handler, two audiences.</strong> The only place an envelope is built:</p>
+<div class="hl"><pre><span></span><code><span class="k">export</span> <span class="kd">function</span> <span class="nx">toEnvelope</span><span class="p">(</span><span class="nx">err</span>: <span class="kt">unknown</span><span class="p">,</span> <span class="nx">traceId</span>: <span class="kt">string</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">if</span> <span class="p">(</span><span class="nx">err</span> <span class="ow">instanceof</span> <span class="nx">DomainError</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nx">logger</span><span class="p">.</span><span class="nx">warn</span><span class="p">({</span> <span class="nx">traceId</span><span class="p">,</span> <span class="nx">code</span>: <span class="kt">err.code</span><span class="p">,</span> <span class="nx">err</span> <span class="p">});</span>        <span class="c1">// expected: warn</span>
+    <span class="k">return</span> <span class="p">{</span> <span class="nx">status</span>: <span class="kt">err.status</span><span class="p">,</span> <span class="nx">body</span><span class="o">:</span> <span class="p">{</span>
+      <span class="nx">error</span>: <span class="kt">err.code</span><span class="p">,</span> <span class="nx">message</span>: <span class="kt">err.message</span><span class="p">,</span>
+      <span class="nx">retryable</span>: <span class="kt">err.retryable</span><span class="p">,</span> <span class="nx">traceId</span><span class="p">,</span> <span class="nx">details</span>: <span class="kt">err.details</span> <span class="p">}</span> <span class="p">};</span>
+  <span class="p">}</span>
+
+  <span class="c1">// Unknown means a bug. Log everything; tell the client nothing.</span>
+  <span class="nx">logger</span><span class="p">.</span><span class="nx">error</span><span class="p">({</span> <span class="nx">traceId</span><span class="p">,</span> <span class="nx">err</span> <span class="p">});</span>
+  <span class="k">return</span> <span class="p">{</span> <span class="nx">status</span>: <span class="kt">500</span><span class="p">,</span> <span class="nx">body</span><span class="o">:</span> <span class="p">{</span>
+    <span class="nx">error</span><span class="o">:</span> <span class="s1">&#39;internal_error&#39;</span><span class="p">,</span>
+    <span class="nx">message</span><span class="o">:</span> <span class="s1">&#39;Something went wrong on our side.&#39;</span><span class="p">,</span>   <span class="c1">// deliberately uninformative</span>
+    <span class="nx">retryable</span>: <span class="kt">true</span><span class="p">,</span> <span class="nx">traceId</span> <span class="p">}</span> <span class="p">};</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>The generic message is not laziness. An unmapped exception's text can contain a
+connection string, a file path or a row from another tenant — and nobody
+auditing that message knows what it will say next month.</p>
+<h2>5. Golden-standard rules</h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>One module builds every envelope</td>
+<td>Two builders means two shapes and a client that handles both</td>
+</tr>
+<tr>
+<td>Error codes come from a closed set, checked at compile time</td>
+<td>A typo becomes a code nobody handles, and it ships</td>
+</tr>
+<tr>
+<td><code>message</code> is for humans and is never parsed by a client</td>
+<td>Rewording must never break a caller</td>
+</tr>
+<tr>
+<td><code>retryable</code> is set explicitly at the raise site</td>
+<td>The status code cannot express it, and the handler cannot infer it</td>
+</tr>
+<tr>
+<td>Unmapped exceptions become one generic 500</td>
+<td>Their text is unaudited and may contain anything</td>
+</tr>
+<tr>
+<td>Every response carries a trace id, success or failure</td>
+<td>Without it a support ticket is unanswerable</td>
+</tr>
+<tr>
+<td>The domain layer imports nothing HTTP</td>
+<td>It has to work from a job, a CLI and a test</td>
+</tr>
+<tr>
+<td>Validation failures return field-level <code>details</code>, not a sentence</td>
+<td>A form needs to know which input to highlight</td>
+</tr>
+<tr>
+<td>Auth failures are deliberately vague to the client, detailed in the log</td>
+<td>"No such user" is an account-enumeration oracle</td>
+</tr>
+<tr>
+<td>4xx is logged at warn, 5xx at error</td>
+<td>Expected failures must not drown the real ones</td>
+</tr>
+<tr>
+<td>Never 200 with <code>{ ok: false }</code></td>
+<td>Proxies, caches, retries and clients all read the status</td>
+</tr>
+<tr>
+<td>Adding a code is a versioned change</td>
+<td>Clients switch on it; new codes must be additive</td>
+</tr>
+</tbody>
+</table>
+<h2>6. Data contracts</h2>
+<div class="hl"><pre><span></span><code><span class="cm">/** Closed vocabulary. Adding is additive; renaming is a breaking change. */</span>
+<span class="k">export</span> <span class="kd">const</span> <span class="nx">ERROR_CODES</span> <span class="o">=</span> <span class="p">[</span>
+  <span class="s1">&#39;validation_failed&#39;</span><span class="p">,</span> <span class="s1">&#39;not_found&#39;</span><span class="p">,</span> <span class="s1">&#39;conflict&#39;</span><span class="p">,</span> <span class="s1">&#39;unauthenticated&#39;</span><span class="p">,</span>
+  <span class="s1">&#39;forbidden&#39;</span><span class="p">,</span> <span class="s1">&#39;rate_limited&#39;</span><span class="p">,</span> <span class="s1">&#39;upstream_unavailable&#39;</span><span class="p">,</span> <span class="s1">&#39;internal_error&#39;</span><span class="p">,</span>
+<span class="p">]</span> <span class="kr">as</span> <span class="kd">const</span><span class="p">;</span>
+<span class="k">export</span> <span class="kr">type</span> <span class="nx">ErrorCode</span> <span class="o">=</span> <span class="ow">typeof</span> <span class="nx">ERROR_CODES</span><span class="p">[</span><span class="kt">number</span><span class="p">];</span>
+
+<span class="cm">/** details for validation_failed — enough to point at the offending input. */</span>
+<span class="k">export</span> <span class="kr">type</span> <span class="nx">FieldError</span> <span class="o">=</span> <span class="p">{</span> <span class="nx">path</span>: <span class="kt">string</span><span class="p">;</span> <span class="nx">code</span>: <span class="kt">string</span><span class="p">;</span> <span class="nx">message</span>: <span class="kt">string</span> <span class="p">};</span>
+</code></pre></div>
+
+<h2>7. Build order</h2>
+<ol>
+<li><strong><code>envelope.ts</code> and <code>codes.ts</code>.</strong> Types only, no behaviour.</li>
+<li><strong>The exception handler</strong>, mounted once, mapping unknown errors to 500.</li>
+<li><strong>One domain error</strong> — <code>NotFound</code> — through a real route, end to end.</li>
+<li><strong>Trace id</strong> threaded into every response, success included.</li>
+<li><strong>The remaining domain errors</strong>, one at a time, each with a test asserting
+   code, status and <code>retryable</code>.</li>
+<li><strong>Validation details</strong>, shaped as field errors.</li>
+<li><strong>Sweep the codebase</strong> for hand-built error responses and delete them.</li>
+<li><strong>A test that asserts no 5xx body contains a stack trace or a file path.</strong></li>
+</ol>
+<h2>8. Related reading</h2>
+<p>Every blueprint here stands on its own: nothing below is a prerequisite, and
+nothing above needs any of it to be implemented. These are adjacent problems you
+will meet next, listed so you know they have been thought about.</p>
+<ul>
+<li><strong>Validation at the Boundary</strong> — where field-level failure details come from.</li>
+<li><strong>Trace Id and Structured Logging</strong> — where the trace id in the envelope is minted and carried.</li>
+</ul>
+<h2>9. Metrics</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Responses carrying a trace id</td>
+<td>100%</td>
+</tr>
+<tr>
+<td>Distinct error shapes observed at the edge</td>
+<td>1</td>
+</tr>
+<tr>
+<td>Share of 5xx that are <code>internal_error</code> (unmapped)</td>
+<td>Falling over time; a plateau means missing domain errors</td>
+</tr>
+<tr>
+<td>5xx bodies containing a stack trace or path</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Retryable failures that clients actually retried</td>
+<td>Near 1; if not, the field is being ignored and clients need telling</td>
+</tr>
+</tbody>
+</table>
+<h2>10. Failure modes</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A client broke after a copy change</td>
+<td>It matched on <code>message</code></td>
+<td>Codes are the contract; message is display only</td>
+</tr>
+<tr>
+<td>Users see a connection string</td>
+<td>An unmapped exception was rendered</td>
+<td>Generic body for anything not a domain error</td>
+</tr>
+<tr>
+<td>Everything is a 500</td>
+<td>Domain errors thrown as plain <code>Error</code></td>
+<td>Give each a class with code, status, retryable</td>
+</tr>
+<tr>
+<td>Support cannot find the request</td>
+<td>No trace id in the response</td>
+<td>Return it on every response</td>
+</tr>
+<tr>
+<td>Retry storms after a bad deploy</td>
+<td>Non-retryable failures marked retryable</td>
+<td>Set it at the raise site, deliberately</td>
+</tr>
+<tr>
+<td>Log volume exploded</td>
+<td>Expected 4xx logged at error</td>
+<td>4xx warn, 5xx error</td>
+</tr>
+<tr>
+<td>Client shows "undefined"</td>
+<td>Two shapes in flight; one lacks <code>message</code></td>
+<td>One builder, one shape</td>
+</tr>
+<tr>
+<td>Account enumeration reported</td>
+<td>Auth error distinguished unknown user from wrong password</td>
+<td>One vague code for both; keep the detail in the log</td>
+</tr>
+</tbody>
+</table>
+<h2>11. Definition of done</h2>
+<ul>
+<li class="task">Exactly one module constructs error responses; no route builds its own.</li>
+<li class="task">Every error response validates against the envelope type.</li>
+<li class="task">Error codes are a closed union, checked at compile time.</li>
+<li class="task"><code>retryable</code> is set at the raise site, never inferred by the handler.</li>
+<li class="task">Every response, success or failure, carries a trace id.</li>
+<li class="task">An unmapped exception yields a generic 500 — verified by a test that throws a raw <code>Error</code>.</li>
+<li class="task">No 5xx body contains a stack trace, a file path or an internal identifier.</li>
+<li class="task">Validation failures return field-level details a form can act on.</li>
+<li class="task">Authentication failures do not reveal whether the account exists.</li>
+<li class="task">The domain layer imports nothing from the HTTP framework.</li>
+</ul>
+  </article>
+
+  <aside class="tailpiece">
+    <h2>Use this blueprint</h2>
+    <p>
+      Copy the file into your project and point your agent at it. It works with Claude Code,
+      Cursor, Copilot, ChatGPT and anything else that reads a file — there is nothing to install.
+    </p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/error-envelope" target="_blank" rel="noopener">Open on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Browse all blueprints</a>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p><a href="/">Awesome Blueprints</a> — same request, same architecture, every time.</p>
+    <p class="dim">MIT · awesomeblueprints.com</p>
+  </div>
+</footer>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'neutral' });
+</script>
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const now = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', now);
+    try { localStorage.setItem('ab-theme', now); } catch (e) {}
+    location.reload();   // the diagram is themed at render time
+  });
+</script>
+
+</body>
+</html>

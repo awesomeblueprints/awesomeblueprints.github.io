@@ -1,0 +1,552 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LLM Tool Design — Blueprint for AI Coding Agents | Awesome Blueprints</title>
+<meta name="description" content="LLM tool design: naming, parameters, descriptions and results a model can actually use, and the failures caused by tools that read badly." />
+<link rel="canonical" href="https://awesomeblueprints.com/blueprints/tool-design/" />
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="Awesome Blueprints" />
+<meta property="og:url" content="https://awesomeblueprints.com/blueprints/tool-design/" />
+<meta property="og:title" content="LLM Tool Design — Architecture Blueprint" />
+<meta property="og:description" content="LLM tool design: naming, parameters, descriptions and results a model can actually use, and the failures caused by tools that read badly." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="LLM Tool Design — Architecture Blueprint" />
+<meta name="twitter:description" content="LLM tool design: naming, parameters, descriptions and results a model can actually use, and the failures caused by tools that read badly." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/page.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "LLM Tool Design", "description": "LLM tool design: naming, parameters, descriptions and results a model can actually use, and the failures caused by tools that read badly.", "url": "https://awesomeblueprints.com/blueprints/tool-design/", "dateModified": "2026-08-19", "keywords": "Agents", "isAccessibleForFree": true, "license": "https://opensource.org/licenses/MIT", "publisher": {"@type": "Organization", "name": "Awesome Blueprints", "url": "https://awesomeblueprints.com"}}</script>
+<script>
+  (function () {
+    var t;
+    try { t = localStorage.getItem('ab-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">Awesome Blueprints</a>
+    <div class="nav-right">
+      <a class="nav-link" href="/#blueprints">Catalogue</a>
+      <a class="nav-link" href="/#faq">FAQ</a>
+      <a class="nav-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/tool-design" target="_blank" rel="noopener">GitHub ↗</a>
+      <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Switch theme">◑</button>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/">Home</a> <span>/</span> <a href="/#blueprints">Blueprints</a> <span>/</span>
+    <span>LLM Tool Design</span>
+  </nav>
+
+  <header class="page-head">
+    <p class="eyebrow">tool-design</p>
+    <h1>LLM Tool Design</h1>
+    <p class="lede">LLM tool design: naming, parameters, descriptions and results a model can actually use, and the failures caused by tools that read badly.</p>
+    <div class="facts"><span>low</span><span>2–4 days</span><span>Verified 2026-08-19</span></div>
+    <div class="tags"><span class="tag">Agents</span></div>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/tool-design" target="_blank" rel="noopener">Read it on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Back to the catalogue</a>
+    </div>
+  </header>
+
+  <article class="doc">
+<blockquote>
+<p>The name, description, argument schema and return shape of each tool an agent
+can call. This is the interface the model programs against, and it is written
+for a reader with no memory, no debugger and one attempt per call.</p>
+</blockquote>
+<p><strong>Complexity:</strong> low · <strong>Typical build:</strong> 2–4 days · <strong>Verified:</strong> 2026-08-19 (re-check after ~90 days)</p>
+<p><strong>Examples in:</strong> Python with Pydantic. Only §4 and §6 are language-specific — the rules, failure modes and definition of done hold anywhere, and your agent translates the code.</p>
+<p><strong>Use when:</strong> an agent has more than one tool, and it picks the wrong one, sends malformed arguments, or misreads what came back. Also whenever tool schemas, descriptions or return shapes are being written or reworked.</p>
+<p><strong>Not for:</strong> a single-tool agent, or a call site where your code decides what runs and with which arguments. Nothing here applies when the model is not the one choosing.</p>
+<hr />
+<h2>⚙️ INSTRUCTIONS FOR THE AI — READ BEFORE WRITING ANY CODE</h2>
+<p><strong>Do not start coding.</strong></p>
+<p><strong>Step 1 — Refresh.</strong> Search the web and verify: the JSON Schema subset the
+provider in use actually enforces — several accept a schema and silently ignore
+parts of it, and <code>additionalProperties</code>, <code>oneOf</code> and nested <code>$ref</code> are the usual
+casualties; whether the provider supports strict schema adherence and what it
+costs; the current cap on tool count and total schema size. Report what you
+verified and where your assumptions were wrong.</p>
+<p><strong>Step 2 — Read the project, then audit what exists.</strong> Find every tool the agent
+already has, and read the descriptions rather than the handlers. Collect: names,
+what each description says about when <em>not</em> to use it, whether closed-set fields
+are enums, and what a typical result looks like in bytes.</p>
+<p><strong>Then audit what exists.</strong> Walk §11 item by item, marking each <em>already true</em>,
+<em>partly true</em> or <em>absent</em> with the file that decides it. Report that before
+proposing anything.</p>
+<p>Assume the project is right until it demonstrably is not. Code that satisfies an
+item stays, whatever its shape — §4 is illustrative, and its idioms translate
+into this project's language. Replacing something that works needs a one-line
+reason. Never delete a working path to make room for the version written here.
+If nothing relevant exists, say so and use §3.</p>
+<p>The same applies to language. §4 is illustrative: translate its idioms into this
+project's language and libraries rather than importing its shape. §11 is what has
+to become true — not the syntax it happens to be written in.</p>
+<p><strong>Step 3 — Write a plan for the gap only, and get it approved.</strong> List: which
+tools get a rewritten description, which arguments become enums, which responses
+get a size budget, and which tools should be merged or dropped. Order by how
+often each is chosen wrongly today, not by how easy it is to change.</p>
+<p><strong>In that plan, include a <code>## Proposed stack</code> section.</strong> Do not ask an open
+question. <em>Propose</em> whether schemas are generated from typed models or written
+by hand — with a one-line reason, the versions verified in Step 1, and what
+would change the decision. Ask the user to confirm once.</p>
+<p>Name what you are adding, leaving alone, and changing. Touch nothing else.</p>
+<hr />
+<h2>1. Why "the agent is dumb" is usually a bad interface</h2>
+<p>Most reports of a stupid agent are interface bugs. Two descriptions overlap, so
+the model picks whichever came first. A tool returns two hundred kilobytes of
+JSON, so the next turn has no room to think. A mutation returns <code>{"ok": true}</code>,
+so the model cannot tell whether anything changed and does it again.</p>
+<p>In each case the model is reasoning correctly over a bad interface.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Endpoint-shaped tools</th>
+<th>Task-shaped tools</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>What a tool maps to</td>
+<td>One route in your service</td>
+<td>One thing a user wants</td>
+</tr>
+<tr>
+<td>Calls per user request</td>
+<td>Four, chained by id</td>
+<td>One</td>
+</tr>
+<tr>
+<td>Chances to fail</td>
+<td>Four</td>
+<td>One</td>
+</tr>
+<tr>
+<td>Description written from</td>
+<td>The API reference</td>
+<td>The words users type</td>
+</tr>
+<tr>
+<td>Result</td>
+<td>Whatever the endpoint returns</td>
+<td>What the model needs to decide next</td>
+</tr>
+</tbody>
+</table>
+<p>This is the cheapest work in the whole subject: no runtime cost, no new
+dependency, and the improvement lands on every task at once. It is also the work
+that a stronger model does not do for you — a better reader still cannot tell
+two identical descriptions apart.</p>
+<h2>2. Architecture</h2>
+<pre class="mermaid">%% GENERATED - do not edit by hand.
+%% Edit the source header in architecture.mmd, then rebuild.
+%% The Agent-Computer Interface
+
+flowchart TB
+    subgraph iface[&quot;What the Model Sees&quot;]
+        direction TB
+        name[&quot;Name - verb_noun, namespaced&quot;]
+        desc[&quot;Description - use when, do not use for&quot;]
+        schema[&quot;Input Schema - enums, required, no extras&quot;]
+    end
+    subgraph runtime[&quot;Server Side&quot;]
+        direction TB
+        validator[&quot;Argument Validator&quot;]
+        handler[&quot;Handler - idempotent where possible&quot;]
+        formatter[&quot;Response Formatter - bounded&quot;]
+        errmap[&quot;Error Mapper - retry or change what&quot;]
+    end
+
+    model([&quot;Model&quot;])
+    world[(&quot;Files, APIs, Database&quot;)]
+
+    model --&gt;|&quot;reads every turn&quot;| name
+    model --&gt;|&quot;reads every turn&quot;| desc
+    model --&gt;|&quot;reads every turn&quot;| schema
+    model --&gt;|&quot;emitted arguments&quot;| validator
+    validator -.-&gt;|&quot;rejected&quot;| errmap
+    validator --&gt;|&quot;accepted&quot;| handler
+    handler --&gt;|&quot;read or write&quot;| world
+    handler --&gt;|&quot;raw result&quot;| formatter
+    handler -.-&gt;|&quot;raised&quot;| errmap
+    formatter --&gt;|&quot;signal, under budget&quot;| model
+    errmap --&gt;|&quot;what to change&quot;| model
+
+    classDef service fill:#eff6ff,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b;
+    classDef datastore fill:#e9faf3,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b;
+    classDef external fill:#fff4ed,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b;
+    classDef actor fill:#f0eefc,stroke:#4a3aa7,stroke-width:1.5px,color:#0b0b0b;
+    class name,desc,schema,validator,handler,formatter,errmap service;
+    class world datastore;
+    class model actor;</pre>
+<p><strong>The rule this diagram encodes:</strong> the three boxes at the top are re-read on
+every single turn and are paid for in tokens every single turn; the two at the
+bottom decide whether the model can recover. Effort spent anywhere else moves
+less.</p>
+<h2>3. Project structure</h2>
+<div class="hl"><pre><span></span><code>tools/
+├── registry.py        # name -&gt; (schema, handler). One place a tool is declared.
+├── schemas.py         # typed input models; schemas are generated, never hand-written twice
+├── format.py          # result -&gt; bounded text. One formatter per result shape.
+├── errors.py          # exception class -&gt; instruction for the model
+└── impl/              # one file per tool. Plain functions, no agent imports.
+</code></pre></div>
+
+<p><strong>The rule that keeps this maintainable:</strong> the schema the model sees is generated
+from the same type the handler takes. Hand-written schemas drift from handlers
+silently, and the symptom is an argument error the model cannot fix because the
+documentation it was given is a lie.</p>
+<h2>4. Reference implementation</h2>
+<p><strong>The schema is the documentation.</strong> Every field says its format, its units and
+where the value comes from:</p>
+<div class="hl"><pre><span></span><code><span class="k">class</span> <span class="nc">SearchOrdersInput</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Search orders. Filters are ANDed.&quot;&quot;&quot;</span>
+    <span class="n">model_config</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;extra&quot;</span><span class="p">:</span> <span class="s2">&quot;forbid&quot;</span><span class="p">}</span>      <span class="c1"># -&gt; additionalProperties: false</span>
+
+    <span class="n">customer_email</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
+        <span class="kc">None</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Exact match, lowercase. Get it from get_customer if unknown.&quot;</span><span class="p">)</span>
+    <span class="n">status</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;pending&quot;</span><span class="p">,</span> <span class="s2">&quot;shipped&quot;</span><span class="p">,</span> <span class="s2">&quot;delivered&quot;</span><span class="p">,</span> <span class="s2">&quot;cancelled&quot;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
+        <span class="kc">None</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Order status. Omit for any status.&quot;</span><span class="p">)</span>
+    <span class="n">created_after</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
+        <span class="kc">None</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s2">&quot;ISO-8601 date, e.g. 2026-01-31. Inclusive, UTC.&quot;</span><span class="p">)</span>
+    <span class="n">limit</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="mi">20</span><span class="p">,</span> <span class="n">ge</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">le</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Max rows returned. Default 20.&quot;</span><span class="p">)</span>
+</code></pre></div>
+
+<p><strong>The description is a selection policy</strong>, not a summary. Four lines, in this
+order:</p>
+<div class="hl"><pre><span></span><code>&lt;One line: what it does.&gt;
+Use when &lt;situation, in the words a user would use&gt;. Returns &lt;shape of result&gt;.
+Do not use for &lt;the adjacent case&gt; - use &lt;other_tool&gt; instead.
+&lt;Any precondition: &quot;Requires a customer_id from get_customer.&quot;&gt;
+</code></pre></div>
+
+<p><strong>The same tool, wrong and right:</strong></p>
+<div class="hl"><pre><span></span><code><span class="c1"># WRONG - mirrors an endpoint, dumps whatever came back, says nothing on failure</span>
+<span class="k">def</span> <span class="nf">query_db</span><span class="p">(</span><span class="n">sql</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Run SQL.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">conn</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">sql</span><span class="p">)</span><span class="o">.</span><span class="n">fetchall</span><span class="p">())</span>      <span class="c1"># 200 KB of UUIDs and nulls</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># RIGHT - task-shaped, bounded, and every exit tells the model what to do next</span>
+<span class="k">def</span> <span class="nf">search_orders</span><span class="p">(</span><span class="n">customer_email</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">status</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">created_after</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">limit</span><span class="o">=</span><span class="mi">20</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Search orders by customer, status and date.</span>
+
+<span class="sd">    Use when the user asks about order history, refunds or shipping status.</span>
+<span class="sd">    Returns a compact table of up to `limit` rows plus a total count.</span>
+<span class="sd">    Do not use to change an order - use update_order_status.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">rows</span><span class="p">,</span> <span class="n">total</span> <span class="o">=</span> <span class="n">repo</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">customer_email</span><span class="p">,</span> <span class="n">status</span><span class="p">,</span> <span class="n">created_after</span><span class="p">,</span> <span class="n">limit</span><span class="p">)</span>
+
+    <span class="c1"># &quot;No results&quot; is a dead end. Say how to get unstuck instead.</span>
+    <span class="k">if</span> <span class="n">total</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">(</span><span class="s2">&quot;No orders matched. Check the email with get_customer, &quot;</span>
+                <span class="s2">&quot;or widen the search by removing `status`.&quot;</span><span class="p">)</span>
+
+    <span class="n">header</span> <span class="o">=</span> <span class="s2">&quot;order_id | date | status | total_usd | items&quot;</span>
+    <span class="n">lines</span> <span class="o">=</span> <span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">r</span><span class="o">.</span><span class="n">id</span><span class="si">}</span><span class="s2"> | </span><span class="si">{</span><span class="n">r</span><span class="o">.</span><span class="n">created_at</span><span class="si">:</span><span class="s2">%Y-%m-%d</span><span class="si">}</span><span class="s2"> | </span><span class="si">{</span><span class="n">r</span><span class="o">.</span><span class="n">status</span><span class="si">:</span><span class="s2">9</span><span class="si">}</span><span class="s2"> | &quot;</span>
+             <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">r</span><span class="o">.</span><span class="n">total_usd</span><span class="si">:</span><span class="s2">&gt;8.2f</span><span class="si">}</span><span class="s2"> | </span><span class="si">{</span><span class="n">r</span><span class="o">.</span><span class="n">item_summary</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">]</span>
+    <span class="n">footer</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Showing </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">rows</span><span class="p">)</span><span class="si">}</span><span class="s2"> of </span><span class="si">{</span><span class="n">total</span><span class="si">}</span><span class="s2">.&quot;</span>
+    <span class="k">if</span> <span class="n">total</span> <span class="o">&gt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">rows</span><span class="p">):</span>
+        <span class="n">footer</span> <span class="o">+=</span> <span class="s2">&quot; Narrow with created_after to see the rest.&quot;</span>
+    <span class="k">return</span> <span class="n">header</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">lines</span><span class="p">)</span> <span class="o">+</span> <span class="n">footer</span>
+</code></pre></div>
+
+<p><strong>Errors are instructions.</strong> Every one answers two questions: retry or not, and
+change what:</p>
+<div class="hl"><pre><span></span><code><span class="n">ERROR_HINTS</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;NotFound&quot;</span><span class="p">:</span>    <span class="s2">&quot;No such </span><span class="si">{entity}</span><span class="s2">. Use list_</span><span class="si">{entity}</span><span class="s2">s to see valid ids.&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;Forbidden&quot;</span><span class="p">:</span>   <span class="s2">&quot;This account lacks permission. Ask the user; do not retry.&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;RateLimited&quot;</span><span class="p">:</span> <span class="s2">&quot;Rate limited. Wait before retrying, and batch your requests.&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;Validation&quot;</span><span class="p">:</span>  <span class="s2">&quot;</span><span class="si">{detail}</span><span class="s2"> Fix the argument and call again.&quot;</span><span class="p">,</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><strong>Mutations return the resulting state</strong>, because a model that cannot observe
+its own effect cannot distinguish success from silence — and will repeat the
+call:</p>
+<div class="hl"><pre><span></span><code><span class="c1"># not &quot;ok&quot;</span>
+<span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;order_2026_00412: status pending -&gt; shipped, tracking DHL-77Q4A2.&quot;</span>
+</code></pre></div>
+
+<h2>5. Golden-standard rules</h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>One tool per user task, not per API endpoint</td>
+<td>Four chained calls are four chances to fail and four descriptions to confuse</td>
+</tr>
+<tr>
+<td>Every description says when <strong>not</strong> to use it, and names the tool to use instead</td>
+<td>Positive-only descriptions produce confident wrong matches</td>
+</tr>
+<tr>
+<td>Every closed set is an enum, never a free string</td>
+<td>Removes an entire class of argument error at zero cost</td>
+</tr>
+<tr>
+<td><code>additionalProperties: false</code> on every schema, required fields declared</td>
+<td>Otherwise invented arguments arrive silently and are ignored</td>
+</tr>
+<tr>
+<td>Every field description states format, units and where to obtain the value</td>
+<td>The model guesses otherwise, and guesses consistently wrongly</td>
+</tr>
+<tr>
+<td>The schema is generated from the type the handler takes</td>
+<td>Hand-written copies drift, and the model is blamed for following stale documentation</td>
+</tr>
+<tr>
+<td>Every response is bounded, and says what was left out</td>
+<td>An unbounded result eats the context the next decision needs</td>
+</tr>
+<tr>
+<td>A truncated or paginated response carries an explicit way to continue</td>
+<td>Silently dropped rows are read as "that was all of them"</td>
+</tr>
+<tr>
+<td>Mutations return the resulting observable state</td>
+<td>A model that cannot see the effect repeats the call</td>
+</tr>
+<tr>
+<td>Every error says whether to retry and what to change</td>
+<td>An error with neither is a dead end the model retries blindly</td>
+</tr>
+<tr>
+<td>No stack traces, no bare HTTP codes</td>
+<td>They describe your internals and suggest nothing to do differently</td>
+</tr>
+<tr>
+<td>Identifiers are human-readable and stable</td>
+<td><code>order_2026_00412</code> can be reasoned about; a raw UUID cannot</td>
+</tr>
+<tr>
+<td>Tool names are unique across every connected server</td>
+<td>Two <code>search</code> tools make selection a coin flip</td>
+</tr>
+<tr>
+<td>Above roughly fifteen tools, split the agent</td>
+<td>Selection accuracy falls off, and no wording of the descriptions recovers it</td>
+</tr>
+<tr>
+<td>No <code>execute</code> or <code>misc</code> catch-all tool</td>
+<td>It absorbs every ambiguous call and hides the real gap in the toolset</td>
+</tr>
+</tbody>
+</table>
+<h2>6. Data contracts</h2>
+<div class="hl"><pre><span></span><code><span class="k">class</span> <span class="nc">ToolSpec</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>            <span class="c1"># ^[a-z0-9_]{1,64}$, namespaced: crm_search_orders</span>
+    <span class="n">description</span><span class="p">:</span> <span class="nb">str</span>     <span class="c1"># what / use when / do not use for / preconditions</span>
+    <span class="n">input_schema</span><span class="p">:</span> <span class="nb">dict</span>   <span class="c1"># generated; additionalProperties: false</span>
+    <span class="n">mutating</span><span class="p">:</span> <span class="nb">bool</span>       <span class="c1"># true =&gt; must return observable state</span>
+    <span class="n">max_result_tokens</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2_000</span>
+
+<span class="k">class</span> <span class="nc">ToolOutcome</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">content</span><span class="p">:</span> <span class="nb">str</span>         <span class="c1"># always a string; you serialise structured data yourself</span>
+    <span class="n">is_error</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">elided</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span> <span class="c1"># true =&gt; content states what was left out and how to get it</span>
+</code></pre></div>
+
+<p>Result-size budget, as a starting point: 2 000 tokens per call, 20 rows by
+default. Set the default <code>limit</code> to what a typical request needs, not to what
+the backend can return.</p>
+<h2>7. Build order</h2>
+<ol>
+<li><strong>Inventory.</strong> List every tool with its description and a real result, in
+   bytes. The problems are usually visible before you measure anything.</li>
+<li><strong>A labelled set of at least fifty requests</strong>, each tagged with the tool that
+   should be chosen. Without it you cannot tell an improvement from a change.</li>
+<li><strong>Descriptions.</strong> Rewrite to the four-line template. Add the "do not use for"
+   clause to <em>both</em> tools in every confusable pair.</li>
+<li><strong>Schemas.</strong> Enums for closed sets, <code>additionalProperties: false</code>, per-field
+   format and units. Generate them from the handler's own types.</li>
+<li><strong>Response formatting.</strong> One formatter per result shape, with a size budget
+   and an explicit elision marker.</li>
+<li><strong>Error mapping.</strong> Every exception class gets a sentence that says retry-or-not
+   and change-what.</li>
+<li><strong>Mutations</strong> start returning the resulting state.</li>
+<li><strong>Re-run the labelled set.</strong> Record selection accuracy and argument error rate
+   as the numbers you defend from now on.</li>
+<li><strong>Merge or delete.</strong> Any tool never chosen correctly is either badly described
+   or should not exist.</li>
+</ol>
+<h2>8. Related reading</h2>
+<p>Every blueprint here stands on its own: nothing below is a prerequisite, and
+nothing above needs any of it to be implemented. These are adjacent problems you
+will meet next, listed so you know they have been thought about.</p>
+<ul>
+<li><strong>The Agent Loop</strong> — where these tools are dispatched and their results appended.</li>
+<li><strong>Structured Output</strong> — when it is the model's <em>reply</em> that needs a schema.</li>
+<li><strong>Context Engineering</strong> — budgeting the tokens tools consume across a long run.</li>
+<li><strong>Observability and Tracing</strong> — measuring selection accuracy from real runs.</li>
+</ul>
+<h2>9. Metrics</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Tool selection accuracy on the labelled set</td>
+<td>≥ 95%; below 90% is an interface bug, not a model problem</td>
+</tr>
+<tr>
+<td>Argument validation error rate</td>
+<td>&lt; 2%; above 5% the schema demands something the model cannot know</td>
+</tr>
+<tr>
+<td>Tokens per tool result, p95</td>
+<td>&lt; 2 000; above 5 000 one tool is eating the context</td>
+</tr>
+<tr>
+<td>Calls per successfully completed task, p50</td>
+<td>≤ 4; above 8 the tools are endpoint-shaped</td>
+</tr>
+<tr>
+<td>Repeated identical calls</td>
+<td>&lt; 1%; above that, results are not observable enough</td>
+</tr>
+<tr>
+<td>Tools never chosen in a week of traffic</td>
+<td>0 — each one is dead weight paid for on every turn</td>
+</tr>
+</tbody>
+</table>
+<h2>10. Failure modes</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Right intent, wrong tool</td>
+<td>Two descriptions overlap</td>
+<td>Add "do not use for X, use Y" to both, and re-measure</td>
+</tr>
+<tr>
+<td>Repeated argument validation errors</td>
+<td>The schema needs a value the model has no way to know</td>
+<td>Add a discovery tool, or accept a looser type and resolve it internally</td>
+</tr>
+<tr>
+<td>Context blows up after one call</td>
+<td>Unbounded response</td>
+<td>Budget the result, paginate, return ids instead of blobs</td>
+</tr>
+<tr>
+<td>The model repeats a mutation</td>
+<td>The response did not confirm the effect</td>
+<td>Return the resulting state, not <code>"ok"</code></td>
+</tr>
+<tr>
+<td>A good tool is never chosen</td>
+<td>The description uses internal jargon</td>
+<td>Rewrite it in the vocabulary users actually type</td>
+</tr>
+<tr>
+<td>The agent thrashes between two tools</td>
+<td>Neither returns enough to decide</td>
+<td>Merge them into one task-shaped tool</td>
+</tr>
+<tr>
+<td>Correct call, wrong interpretation</td>
+<td>Ambiguous units or timezone</td>
+<td>Put units in the field description <strong>and</strong> in the response</td>
+</tr>
+<tr>
+<td>Invented arguments, silently ignored</td>
+<td><code>additionalProperties</code> not set to false</td>
+<td>Set it, and let the validation error reach the model</td>
+</tr>
+<tr>
+<td>Accuracy fell after adding one tool</td>
+<td>Count crossed the selection cliff</td>
+<td>Split into sub-agents with disjoint toolsets</td>
+</tr>
+<tr>
+<td>Retry duplicated a side effect</td>
+<td>Handler is not idempotent</td>
+<td>Take an idempotency key, or make the write conditional</td>
+</tr>
+</tbody>
+</table>
+<h2>11. Definition of done</h2>
+<ul>
+<li class="task">Every tool maps to a user task, not to an API endpoint.</li>
+<li class="task">Every description states what it does, when to use it, when <strong>not</strong> to, and any precondition.</li>
+<li class="task">Every confusable pair names the other tool explicitly, in both descriptions.</li>
+<li class="task">Every closed-set field is an enum; no free strings where the set is known.</li>
+<li class="task">Every schema sets <code>additionalProperties: false</code> and declares required fields.</li>
+<li class="task">Every field description gives format, units and where the value comes from.</li>
+<li class="task">Schemas are generated from the handler's own types, not maintained separately.</li>
+<li class="task">Every response has a size budget and states explicitly what was elided.</li>
+<li class="task">Every mutation returns the resulting observable state.</li>
+<li class="task">Every error tells the model whether to retry and what to change; no stack traces reach it.</li>
+<li class="task">Identifiers in results are human-readable and stable.</li>
+<li class="task">Tool names are unique across every connected server.</li>
+<li class="task">A labelled set of at least fifty requests measures selection accuracy, and runs in CI.</li>
+</ul>
+  </article>
+
+  <aside class="tailpiece">
+    <h2>Use this blueprint</h2>
+    <p>
+      Copy the file into your project and point your agent at it. It works with Claude Code,
+      Cursor, Copilot, ChatGPT and anything else that reads a file — there is nothing to install.
+    </p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/tool-design" target="_blank" rel="noopener">Open on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Browse all blueprints</a>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p><a href="/">Awesome Blueprints</a> — same request, same architecture, every time.</p>
+    <p class="dim">MIT · awesomeblueprints.com</p>
+  </div>
+</footer>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'neutral' });
+</script>
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const now = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', now);
+    try { localStorage.setItem('ab-theme', now); } catch (e) {}
+    location.reload();   // the diagram is themed at render time
+  });
+</script>
+
+</body>
+</html>

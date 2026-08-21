@@ -1,0 +1,494 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Input Validation at the API Boundary — Blueprint for AI Coding Agents | Awesome Blueprints</title>
+<meta name="description" content="Input validation at the API boundary: parsing untrusted data once into types the rest of the code can trust, instead of checking everywhere." />
+<link rel="canonical" href="https://awesomeblueprints.com/blueprints/validation-at-the-boundary/" />
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="Awesome Blueprints" />
+<meta property="og:url" content="https://awesomeblueprints.com/blueprints/validation-at-the-boundary/" />
+<meta property="og:title" content="Input Validation at the API Boundary — Architecture Blueprint" />
+<meta property="og:description" content="Input validation at the API boundary: parsing untrusted data once into types the rest of the code can trust, instead of checking everywhere." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Input Validation at the API Boundary — Architecture Blueprint" />
+<meta name="twitter:description" content="Input validation at the API boundary: parsing untrusted data once into types the rest of the code can trust, instead of checking everywhere." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/page.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "Input Validation at the API Boundary", "description": "Input validation at the API boundary: parsing untrusted data once into types the rest of the code can trust, instead of checking everywhere.", "url": "https://awesomeblueprints.com/blueprints/validation-at-the-boundary/", "dateModified": "2026-08-18", "keywords": "API", "isAccessibleForFree": true, "license": "https://opensource.org/licenses/MIT", "publisher": {"@type": "Organization", "name": "Awesome Blueprints", "url": "https://awesomeblueprints.com"}}</script>
+<script>
+  (function () {
+    var t;
+    try { t = localStorage.getItem('ab-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">Awesome Blueprints</a>
+    <div class="nav-right">
+      <a class="nav-link" href="/#blueprints">Catalogue</a>
+      <a class="nav-link" href="/#faq">FAQ</a>
+      <a class="nav-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/validation-at-the-boundary" target="_blank" rel="noopener">GitHub ↗</a>
+      <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Switch theme">◑</button>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/">Home</a> <span>/</span> <a href="/#blueprints">Blueprints</a> <span>/</span>
+    <span>Input Validation at the API Boundary</span>
+  </nav>
+
+  <header class="page-head">
+    <p class="eyebrow">validation-at-the-boundary</p>
+    <h1>Input Validation at the API Boundary</h1>
+    <p class="lede">Input validation at the API boundary: parsing untrusted data once into types the rest of the code can trust, instead of checking everywhere.</p>
+    <div class="facts"><span>low</span><span>1–2 days</span><span>Verified 2026-08-18</span></div>
+    <div class="tags"><span class="tag">API</span></div>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/validation-at-the-boundary" target="_blank" rel="noopener">Read it on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Back to the catalogue</a>
+    </div>
+  </header>
+
+  <article class="doc">
+<blockquote>
+<p>Parse, don't validate: one schema at each edge turns unknown input into a
+typed value, and everything inward can stop asking whether the data is real.</p>
+</blockquote>
+<p><strong>Complexity:</strong> low · <strong>Typical build:</strong> 1–2 days · <strong>Verified:</strong> 2026-08-18 (re-check after ~90 days)</p>
+<p><strong>Examples in:</strong> TypeScript, with Zod. Only §4 is language-specific — the rules, failure modes and definition of done hold anywhere, and your agent translates the code. Parse-don't-validate holds in any language; only the library changes — Pydantic in Python, Ecto changesets in Elixir, <code>go-playground/validator</code> or a hand-rolled constructor in Go.</p>
+<p><strong>Use when:</strong> data arrives from anywhere you do not control — HTTP bodies, query strings, webhooks, queue messages, environment variables, third-party responses, model output — and the rest of the code should be able to trust it.</p>
+<p><strong>Not for:</strong> validating your own database rows on the way out, or re-checking a value that has already been parsed once — that is duplicated logic that will drift.</p>
+<hr />
+<h2>⚙️ INSTRUCTIONS FOR THE AI — READ BEFORE WRITING ANY CODE</h2>
+<p><strong>Do not start coding.</strong></p>
+<p><strong>Step 1 — Refresh.</strong> Search the web and verify the current major of the
+validation library and its import path. This one has a live trap: Zod 4 is now
+the default export from <code>"zod"</code>, with <code>"zod/v3"</code> kept for the old major and
+<code>"zod/v4"</code> as a legacy alias — and because v4 first shipped inside late 3.x
+releases under a subpath, a <em>minor</em> upgrade can change behaviour. Confirm which
+major the project resolves to before writing a single schema. Also verify the
+framework's current way to attach a parsed value to the request.</p>
+<p><strong>Step 2 — Read the project.</strong> Find where input is checked today: inline <code>if</code>
+statements, framework decorators, hand-written type guards, casts. Note which
+layers currently receive untyped objects — those are the ones that will stop
+needing defensive code.</p>
+<p><strong>Then audit what exists.</strong> Walk §11 item by item, marking each <em>already true</em>,
+<em>partly true</em> or <em>absent</em> with the file that decides it. Report that before
+proposing anything.</p>
+<p>Assume the project is right until it demonstrably is not. Code that satisfies an
+item stays, whatever its shape — §4 is illustrative, and its idioms translate
+into this project's language. Replacing something that works needs a one-line
+reason. Never delete a working path to make room for the version written here.
+If nothing relevant exists, say so and use §3.</p>
+<p><strong>Step 3 — Write a plan for the gap only, and get it approved.</strong> List: every boundary you
+are covering, the schema for each, what happens to unknown fields, and the error
+shape a failure produces.</p>
+<p><strong>In that plan, include a <code>## Proposed stack</code> section.</strong> <em>Propose</em> the validation
+library and where parsed values are attached — with a one-line reason, the major
+verified in Step 1, and what would change the decision.</p>
+<p>Name what you are adding, leaving alone, and changing. Touch nothing else.</p>
+<p><strong>Step 4 — Build in the order in §7.</strong> <strong>Step 5 — §11 is the definition of done.</strong></p>
+<hr />
+<h2>1. Why checking is weaker than parsing</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Validate, then use</th>
+<th>Parse into a type</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>What the next function receives</td>
+<td>The original untyped object</td>
+<td>A value that cannot be malformed</td>
+</tr>
+<tr>
+<td>Forgetting a check</td>
+<td>Compiles, ships, fails later</td>
+<td>Does not compile</td>
+</tr>
+<tr>
+<td>Where the rules live</td>
+<td>Wherever somebody remembered</td>
+<td>One schema per boundary</td>
+</tr>
+<tr>
+<td>Unknown extra fields</td>
+<td>Ride along, unnoticed</td>
+<td>Stripped or rejected, by policy</td>
+</tr>
+<tr>
+<td>Coercion</td>
+<td>Ad hoc, per call site</td>
+<td>Declared once, in the schema</td>
+</tr>
+<tr>
+<td>Second caller of the same logic</td>
+<td>Repeats the checks, slightly differently</td>
+<td>Inherits the guarantee</td>
+</tr>
+</tbody>
+</table>
+<p>The distinction is not stylistic. <em>Validating</em> returns a boolean and leaves the
+data exactly as untrustworthy as it was; the knowledge lives in the programmer's
+head until it evaporates. <em>Parsing</em> returns a new value whose type encodes what
+was proven, so the compiler carries the knowledge instead.</p>
+<p>The practical consequence: with parsing, a missing check is a type error at the
+call site. With validation, it is an incident.</p>
+<h2>2. Architecture</h2>
+<pre class="mermaid">%% GENERATED - do not edit by hand.
+%% Edit the source header in architecture.mmd, then rebuild.
+%% One Parse Per Boundary
+
+flowchart TB
+    subgraph edge[&quot;Boundary&quot;]
+        direction TB
+        http_parse[&quot;Request Schema&quot;]
+        msg_parse[&quot;Message Schema&quot;]
+        vendor_parse[&quot;Response Schema&quot;]
+    end
+    subgraph inside[&quot;Trusted Interior&quot;]
+        direction TB
+        domain[&quot;Domain Logic&quot;]
+        repo[&quot;Repository&quot;]
+    end
+    subgraph cfg[&quot;Startup&quot;]
+        direction TB
+        env_parse[&quot;Environment Schema&quot;]
+        settings[(&quot;Settings Object&quot;)]
+    end
+
+    client([&quot;HTTP Client&quot;])
+    queue{{&quot;Queue Message&quot;}}
+    vendor{{&quot;Third-Party Response&quot;}}
+
+    client --&gt;|&quot;unknown JSON&quot;| http_parse
+    queue -.-&gt;|&quot;unknown payload&quot;| msg_parse
+    vendor -.-&gt;|&quot;unknown shape&quot;| vendor_parse
+    http_parse --&gt;|&quot;typed value&quot;| domain
+    msg_parse --&gt;|&quot;typed value&quot;| domain
+    vendor_parse --&gt;|&quot;typed value&quot;| domain
+    domain --&gt;|&quot;typed value&quot;| repo
+    env_parse --&gt;|&quot;parsed once, at boot&quot;| settings
+    settings ---|&quot;injected&quot;| domain
+
+    classDef service fill:#eff6ff,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b;
+    classDef datastore fill:#e9faf3,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b;
+    classDef external fill:#fff4ed,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b;
+    classDef actor fill:#f0eefc,stroke:#4a3aa7,stroke-width:1.5px,color:#0b0b0b;
+    class http_parse,msg_parse,vendor_parse,domain,repo,env_parse service;
+    class settings datastore;
+    class queue,vendor external;
+    class client actor;</pre>
+<p><strong>The rule this diagram encodes:</strong> every arrow crossing into the interior passes
+through a schema, and no arrow inside it does. Third-party responses and queue
+messages are boundaries too — that is the pair people forget.</p>
+<h2>3. Project structure</h2>
+<div class="hl"><pre><span></span><code>src/
+├── schemas/
+│   ├── http/             # one file per route group; request and response
+│   ├── messages/         # queue and event payloads
+│   ├── vendors/          # third-party responses — yes, these too
+│   └── env.ts            # parsed once at boot, exported as a frozen object
+├── domain/               # takes typed values. No guards, no casts, no `any`.
+└── routes/               # parse, then hand the result to the domain
+</code></pre></div>
+
+<p><strong>The rule that keeps this maintainable:</strong> a schema is defined once and the type
+is <em>derived from it</em>, never written alongside it. Hand-written types drift from
+the runtime rules within weeks, and the compiler will not notice, because both
+are individually valid.</p>
+<h2>4. Reference implementation</h2>
+<p><strong>The schema is the type.</strong> One declaration, both guarantees:</p>
+<div class="hl"><pre><span></span><code><span class="k">import</span> <span class="o">*</span> <span class="kr">as</span> <span class="nx">z</span> <span class="kr">from</span> <span class="s1">&#39;zod&#39;</span><span class="p">;</span>   <span class="c1">// v4 — see Step 1 before trusting this import</span>
+
+<span class="k">export</span> <span class="kd">const</span> <span class="nx">CreateOrder</span> <span class="o">=</span> <span class="nx">z</span><span class="p">.</span><span class="nx">object</span><span class="p">({</span>
+  <span class="nx">productId</span>: <span class="kt">z.string</span><span class="p">().</span><span class="nx">uuid</span><span class="p">(),</span>
+  <span class="nx">quantity</span>:  <span class="kt">z.number</span><span class="p">().</span><span class="kr">int</span><span class="p">().</span><span class="nx">positive</span><span class="p">().</span><span class="nx">max</span><span class="p">(</span><span class="mf">100</span><span class="p">),</span>
+  <span class="nx">note</span>:      <span class="kt">z.string</span><span class="p">().</span><span class="nx">max</span><span class="p">(</span><span class="mf">500</span><span class="p">).</span><span class="nx">optional</span><span class="p">(),</span>
+  <span class="c1">// Amounts are integer minor units at the boundary, so no float ever</span>
+  <span class="c1">// reaches the domain and gets rounded on the way through.</span>
+  <span class="nx">tipMinor</span>:  <span class="kt">z.number</span><span class="p">().</span><span class="kr">int</span><span class="p">().</span><span class="nx">nonnegative</span><span class="p">().</span><span class="k">default</span><span class="p">(</span><span class="mf">0</span><span class="p">),</span>
+<span class="p">}).</span><span class="nx">strict</span><span class="p">();</span>               <span class="c1">// unknown keys are an error, not silent baggage</span>
+
+<span class="k">export</span> <span class="kr">type</span> <span class="nx">CreateOrder</span> <span class="o">=</span> <span class="nx">z</span><span class="p">.</span><span class="nx">infer</span><span class="o">&lt;</span><span class="ow">typeof</span> <span class="nx">CreateOrder</span><span class="o">&gt;</span><span class="p">;</span>   <span class="c1">// derived, never written</span>
+</code></pre></div>
+
+<p><code>.strict()</code> is a decision worth making deliberately. Stripping unknown keys is
+forgiving and hides client bugs; rejecting them catches a misspelled field on
+the first request instead of the first support ticket. Reject on your own API;
+strip on third-party responses, which add fields without warning.</p>
+<p><strong>Parse once, at the edge.</strong> The handler is the last place that sees <code>unknown</code>:</p>
+<div class="hl"><pre><span></span><code><span class="k">export</span> <span class="k">async</span> <span class="kd">function</span> <span class="nx">POST</span><span class="p">(</span><span class="nx">req</span>: <span class="kt">Request</span><span class="p">)</span> <span class="p">{</span>
+  <span class="kd">const</span> <span class="nx">parsed</span> <span class="o">=</span> <span class="nx">CreateOrder</span><span class="p">.</span><span class="nx">safeParse</span><span class="p">(</span><span class="k">await</span> <span class="nx">req</span><span class="p">.</span><span class="nx">json</span><span class="p">());</span>
+  <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">parsed</span><span class="p">.</span><span class="nx">success</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// Field-level detail, so a form can highlight the input that failed.</span>
+    <span class="k">return</span> <span class="nx">jsonResponse</span><span class="p">(</span><span class="mf">422</span><span class="p">,</span> <span class="p">{</span>
+      <span class="nx">error</span><span class="o">:</span> <span class="s1">&#39;validation_failed&#39;</span><span class="p">,</span>
+      <span class="nx">fields</span>: <span class="kt">parsed.error.issues.map</span><span class="p">(</span><span class="nx">i</span> <span class="p">=&gt;</span> <span class="p">({</span>
+        <span class="nx">path</span>: <span class="kt">i.path.join</span><span class="p">(</span><span class="s1">&#39;.&#39;</span><span class="p">),</span> <span class="nx">code</span>: <span class="kt">i.code</span><span class="p">,</span> <span class="nx">message</span>: <span class="kt">i.message</span><span class="p">,</span>
+      <span class="p">})),</span>
+    <span class="p">});</span>
+  <span class="p">}</span>
+  <span class="k">return</span> <span class="nx">createOrder</span><span class="p">(</span><span class="nx">parsed</span><span class="p">.</span><span class="nx">data</span><span class="p">);</span>        <span class="c1">// typed from here inward</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><strong>Configuration is input too.</strong> Parse it at boot and fail loudly:</p>
+<div class="hl"><pre><span></span><code><span class="kd">const</span> <span class="nx">Env</span> <span class="o">=</span> <span class="nx">z</span><span class="p">.</span><span class="nx">object</span><span class="p">({</span>
+  <span class="nx">DATABASE_URL</span>: <span class="kt">z.string</span><span class="p">().</span><span class="nx">url</span><span class="p">(),</span>
+  <span class="nx">PORT</span>: <span class="kt">z.coerce.number</span><span class="p">().</span><span class="kr">int</span><span class="p">().</span><span class="k">default</span><span class="p">(</span><span class="mf">3000</span><span class="p">),</span>   <span class="c1">// env values are always strings</span>
+  <span class="nx">LOG_LEVEL</span>: <span class="kt">z.enum</span><span class="p">([</span><span class="s1">&#39;debug&#39;</span><span class="p">,</span> <span class="s1">&#39;info&#39;</span><span class="p">,</span> <span class="s1">&#39;warn&#39;</span><span class="p">,</span> <span class="s1">&#39;error&#39;</span><span class="p">]).</span><span class="k">default</span><span class="p">(</span><span class="s1">&#39;info&#39;</span><span class="p">),</span>
+<span class="p">});</span>
+
+<span class="c1">// Throwing here kills the process at startup. A missing variable discovered at</span>
+<span class="c1">// boot is a failed deploy; discovered at 3am it is an outage.</span>
+<span class="k">export</span> <span class="kd">const</span> <span class="nx">settings</span> <span class="o">=</span> <span class="nb">Object</span><span class="p">.</span><span class="nx">freeze</span><span class="p">(</span><span class="nx">Env</span><span class="p">.</span><span class="nx">parse</span><span class="p">(</span><span class="nx">process</span><span class="p">.</span><span class="nx">env</span><span class="p">));</span>
+</code></pre></div>
+
+<h2>5. Golden-standard rules</h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The static type is derived from the schema, never written beside it</td>
+<td>Two hand-kept definitions drift, and neither side reports it</td>
+</tr>
+<tr>
+<td>Every boundary parses: HTTP, queue, webhook, vendor response, environment</td>
+<td>The ones people skip are queue payloads and vendor responses</td>
+</tr>
+<tr>
+<td>Nothing past the boundary receives <code>unknown</code> or <code>any</code></td>
+<td>One cast reintroduces every problem this prevents</td>
+</tr>
+<tr>
+<td>Environment is parsed at startup and the process dies on failure</td>
+<td>A missing variable must fail the deploy, not the first request that needs it</td>
+</tr>
+<tr>
+<td>Your own API rejects unknown fields; vendor responses strip them</td>
+<td>Catch client typos; survive a vendor adding a field</td>
+</tr>
+<tr>
+<td>Coercion is declared in the schema, not done at the call site</td>
+<td>Otherwise <code>"3"</code> becomes 3 in one place and stays a string in another</td>
+</tr>
+<tr>
+<td>Every string has a maximum length</td>
+<td>An unbounded string is a memory and storage problem waiting for a bored user</td>
+</tr>
+<tr>
+<td>Failures return field-level detail</td>
+<td>A single sentence cannot tell a form which input to highlight</td>
+</tr>
+<tr>
+<td>Parsed values are immutable after the boundary</td>
+<td>Mutating one silently invalidates what was proven about it</td>
+</tr>
+<tr>
+<td>Money is integer minor units at the boundary</td>
+<td>A float that gets this far will be rounded somewhere you cannot see</td>
+</tr>
+<tr>
+<td>The same schema is reused by tests to build fixtures</td>
+<td>A fixture that cannot pass its own schema is testing a shape that cannot exist</td>
+</tr>
+<tr>
+<td>Never parse the same input twice at different depths</td>
+<td>The second parse is the one that will be forgotten when the rules change</td>
+</tr>
+</tbody>
+</table>
+<h2>6. Data contracts</h2>
+<div class="hl"><pre><span></span><code><span class="cm">/** Uniform failure shape, so every boundary reports the same way. */</span>
+<span class="k">export</span> <span class="kr">type</span> <span class="nx">ParseFailure</span> <span class="o">=</span> <span class="p">{</span>
+  <span class="nx">code</span><span class="o">:</span> <span class="s1">&#39;validation_failed&#39;</span><span class="p">;</span>
+  <span class="nx">fields</span>: <span class="kt">Array</span><span class="o">&lt;</span><span class="p">{</span> <span class="nx">path</span>: <span class="kt">string</span><span class="p">;</span> <span class="nx">code</span>: <span class="kt">string</span><span class="p">;</span> <span class="nx">message</span>: <span class="kt">string</span> <span class="p">}</span><span class="o">&gt;</span><span class="p">;</span>
+<span class="p">};</span>
+
+<span class="cm">/** Boundaries return a result rather than throwing: a malformed request is an</span>
+<span class="cm"> *  expected outcome, not an exceptional one. */</span>
+<span class="k">export</span> <span class="kr">type</span> <span class="nx">Parsed</span><span class="o">&lt;</span><span class="nx">T</span><span class="o">&gt;</span> <span class="o">=</span> <span class="p">{</span> <span class="nx">ok</span>: <span class="kt">true</span><span class="p">;</span> <span class="nx">value</span>: <span class="kt">T</span> <span class="p">}</span> <span class="o">|</span> <span class="p">{</span> <span class="nx">ok</span>: <span class="kt">false</span><span class="p">;</span> <span class="nx">error</span>: <span class="kt">ParseFailure</span> <span class="p">};</span>
+</code></pre></div>
+
+<h2>7. Build order</h2>
+<ol>
+<li><strong>Environment schema</strong>, parsed at boot. Smallest boundary, immediate payoff.</li>
+<li><strong>One route</strong>, parsed end to end, with the failure shape settled.</li>
+<li><strong>The failure mapper</strong>, shared by every boundary from here on.</li>
+<li><strong>The remaining HTTP routes</strong>, one at a time.</li>
+<li><strong>Queue and webhook payloads</strong> — the boundary that gets skipped.</li>
+<li><strong>Third-party responses</strong>, stripping unknown keys rather than rejecting.</li>
+<li><strong>Delete the defensive code</strong> the interior no longer needs: guards, casts,
+   null checks that can no longer fire. This step is the actual reward.</li>
+<li><strong>A lint rule</strong> banning <code>any</code> and non-null assertions in the domain layer.</li>
+</ol>
+<h2>8. Related reading</h2>
+<p>Every blueprint here stands on its own: nothing below is a prerequisite, and
+nothing above needs any of it to be implemented. These are adjacent problems you
+will meet next, listed so you know they have been thought about.</p>
+<ul>
+<li><strong>The Error Envelope</strong> — the response shape a parse failure turns into.</li>
+<li><strong>Structured Output from a Model</strong> — validating model output, which needs a repair loop as well as a schema.</li>
+</ul>
+<h2>9. Metrics</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Boundaries with a schema</td>
+<td>100% — count them explicitly, including queue and vendor</td>
+</tr>
+<tr>
+<td><code>any</code> or non-null assertions in the domain layer</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Hand-written types duplicating a schema</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Startup failures caused by bad configuration</td>
+<td>Caught at boot, never at request time</td>
+</tr>
+<tr>
+<td>5xx traceable to malformed input</td>
+<td>0 — those are 4xx, by definition</td>
+</tr>
+<tr>
+<td>Validation failure rate per route</td>
+<td>Stable; a jump means a client changed or a schema tightened</td>
+</tr>
+</tbody>
+</table>
+<h2>10. Failure modes</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Type says one thing, runtime another</td>
+<td>Type hand-written next to the schema</td>
+<td>Derive it with <code>infer</code></td>
+</tr>
+<tr>
+<td>A field silently stopped arriving</td>
+<td>Client renamed it; schema strips unknowns</td>
+<td><code>.strict()</code> on your own API</td>
+</tr>
+<tr>
+<td>Crash at 3am on a missing env var</td>
+<td>Configuration read lazily where it is used</td>
+<td>Parse the whole environment at boot</td>
+</tr>
+<tr>
+<td><code>"5"</code> compared against <code>5</code></td>
+<td>Coercion done at some call sites only</td>
+<td>Declare coercion in the schema</td>
+</tr>
+<tr>
+<td>Poison message loops forever</td>
+<td>Queue payload never parsed</td>
+<td>Parse it; route failures to the dead letter queue</td>
+</tr>
+<tr>
+<td>Vendor deploy broke your service</td>
+<td>Their response parsed strictly</td>
+<td>Strip unknown keys on inbound third-party data</td>
+</tr>
+<tr>
+<td>500 on a malformed body</td>
+<td>Parse throwing instead of returning a result</td>
+<td><code>safeParse</code>, mapped to 422</td>
+</tr>
+<tr>
+<td>Behaviour changed after a minor dependency bump</td>
+<td>Zod's major moved under you</td>
+<td>Pin the major; verify the import path</td>
+</tr>
+<tr>
+<td>Form cannot highlight the bad field</td>
+<td>Failure returned as one sentence</td>
+<td>Field-level details in the failure shape</td>
+</tr>
+</tbody>
+</table>
+<h2>11. Definition of done</h2>
+<ul>
+<li class="task">Every boundary — HTTP, queue, webhook, vendor response, environment — parses through a schema.</li>
+<li class="task">No static type duplicates a schema by hand; all are derived.</li>
+<li class="task">The domain layer contains no <code>any</code>, no casts and no non-null assertions, enforced by lint.</li>
+<li class="task">Configuration is parsed at startup and the process exits on failure.</li>
+<li class="task">Your own API rejects unknown fields; third-party responses strip them.</li>
+<li class="task">Every string field has a maximum length.</li>
+<li class="task">A malformed request returns 4xx with field-level details, never 5xx.</li>
+<li class="task">Tests build fixtures from the same schemas the runtime uses.</li>
+<li class="task">The defensive checks the interior no longer needs have been deleted.</li>
+</ul>
+  </article>
+
+  <aside class="tailpiece">
+    <h2>Use this blueprint</h2>
+    <p>
+      Copy the file into your project and point your agent at it. It works with Claude Code,
+      Cursor, Copilot, ChatGPT and anything else that reads a file — there is nothing to install.
+    </p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/validation-at-the-boundary" target="_blank" rel="noopener">Open on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Browse all blueprints</a>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p><a href="/">Awesome Blueprints</a> — same request, same architecture, every time.</p>
+    <p class="dim">MIT · awesomeblueprints.com</p>
+  </div>
+</footer>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'neutral' });
+</script>
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const now = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', now);
+    try { localStorage.setItem('ab-theme', now); } catch (e) {}
+    location.reload();   // the diagram is themed at render time
+  });
+</script>
+
+</body>
+</html>

@@ -1,0 +1,555 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Docker Compose for Local Development — Blueprint for AI Coding Agents | Awesome Blueprints</title>
+<meta name="description" content="Docker Compose for local development: databases, caches and queues, health checks, seed data and file watching behind one command." />
+<link rel="canonical" href="https://awesomeblueprints.com/blueprints/docker-compose-dev/" />
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="Awesome Blueprints" />
+<meta property="og:url" content="https://awesomeblueprints.com/blueprints/docker-compose-dev/" />
+<meta property="og:title" content="Docker Compose for Local Development — Architecture Blueprint" />
+<meta property="og:description" content="Docker Compose for local development: databases, caches and queues, health checks, seed data and file watching behind one command." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Docker Compose for Local Development — Architecture Blueprint" />
+<meta name="twitter:description" content="Docker Compose for local development: databases, caches and queues, health checks, seed data and file watching behind one command." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/page.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "Docker Compose for Local Development", "description": "Docker Compose for local development: databases, caches and queues, health checks, seed data and file watching behind one command.", "url": "https://awesomeblueprints.com/blueprints/docker-compose-dev/", "dateModified": "2026-08-19", "keywords": "Docker", "isAccessibleForFree": true, "license": "https://opensource.org/licenses/MIT", "publisher": {"@type": "Organization", "name": "Awesome Blueprints", "url": "https://awesomeblueprints.com"}}</script>
+<script>
+  (function () {
+    var t;
+    try { t = localStorage.getItem('ab-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">Awesome Blueprints</a>
+    <div class="nav-right">
+      <a class="nav-link" href="/#blueprints">Catalogue</a>
+      <a class="nav-link" href="/#faq">FAQ</a>
+      <a class="nav-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/docker-compose-dev" target="_blank" rel="noopener">GitHub ↗</a>
+      <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Switch theme">◑</button>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/">Home</a> <span>/</span> <a href="/#blueprints">Blueprints</a> <span>/</span>
+    <span>Docker Compose for Local Development</span>
+  </nav>
+
+  <header class="page-head">
+    <p class="eyebrow">docker-compose-dev</p>
+    <h1>Docker Compose for Local Development</h1>
+    <p class="lede">Docker Compose for local development: databases, caches and queues, health checks, seed data and file watching behind one command.</p>
+    <div class="facts"><span>low</span><span>1 day</span><span>Verified 2026-08-19</span></div>
+    <div class="tags"><span class="tag">Docker</span></div>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/docker-compose-dev" target="_blank" rel="noopener">Read it on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Back to the catalogue</a>
+    </div>
+  </header>
+
+  <article class="doc">
+<blockquote>
+<p>The whole stack up with one command on a machine that has never seen the
+project: services started in an order that waits for readiness rather than for
+containers, code reloading without a rebuild, and a documented way to throw it
+all away and start again.</p>
+</blockquote>
+<p><strong>Complexity:</strong> low · <strong>Typical build:</strong> 1 day · <strong>Verified:</strong> 2026-08-19 (re-check after ~90 days)</p>
+<p><strong>Examples in:</strong> Compose v2 with a Python service and PostgreSQL. The architecture is language-agnostic: sections 5, 10 and 11 hold wherever you build this. Section 4 is illustrative — if your project is in another language, your agent translates the idioms rather than importing them, and nothing is lost. The dependency ordering, seeding and reset concerns are identical under Tilt, Skaffold or a <code>justfile</code> wrapping plain <code>docker run</code>.</p>
+<p><strong>Use when:</strong> the project needs more than one process to run — an application plus a database, a cache, a queue, an object store — and onboarding currently involves a wiki page with steps that no longer work.</p>
+<p><strong>Not for:</strong> production orchestration. Compose has no rolling deploys, no health-based traffic shifting and no rescheduling; a stack that runs in it will run, right up until the first node failure. Also not for a single process with no dependencies, where a virtual environment and one command is the whole story.</p>
+<hr />
+<h2>⚙️ INSTRUCTIONS FOR THE AI — READ BEFORE WRITING ANY CODE</h2>
+<p><strong>Do not start coding.</strong></p>
+<p><strong>Step 1 — Refresh.</strong> Verify the installed Compose version. This blueprint uses
+<code>depends_on</code> with <code>condition: service_healthy</code>, and the <code>develop.watch</code> section,
+which needs a recent v2 — confirm both are supported. Confirm that the top-level
+<code>version:</code> key is obsolete and should be absent. Verify the readiness command for
+each dependency image you will use: it is image-specific and getting it wrong is
+the single most common defect in a compose file. Report what you verified and what
+turned out wrong.</p>
+<p><strong>Step 2 — Read the project, then audit what already exists.</strong> Find any existing
+compose file and record: whether <code>depends_on</code> uses conditions or bare names, which
+services declare healthchecks, whether data lives in a named volume or in the
+container, and how code currently reaches the container. Find how the application
+gets its configuration, and whether any secret is committed in the compose file
+today. Find out what a new developer currently has to do by hand — that list is
+the specification for this work. Then audit §11 item by item, each marked <em>already
+true</em>, <em>partly true</em> or <em>absent</em>, with the file that decides it, reported before
+anything is proposed.</p>
+<p>Assume the project is right until it demonstrably is not; code satisfying an item
+stays even where its shape differs from §4; replacing something that works needs a
+one-line reason; never delete a working path to make room for the blueprint's
+version. The same holds for language — §4 is illustrative, its idioms get
+translated into the project's language, and §11 is what has to become true rather
+than the syntax.</p>
+<p><strong>Step 3 — Write a plan for the gap only, and get it approved</strong>, including a
+<code>## Proposed stack</code> section listing every service with a one-line reason for its
+presence. Do not ask open framework questions — propose, and ask for confirmation
+once. Say what you are adding, what you are leaving alone, and what you propose to
+change, and touch nothing else.</p>
+<p><strong>Step 4 — Build in the order in §7.</strong> <strong>Step 5 — §11 is the definition of done.</strong></p>
+<hr />
+<h2>1. Why "it works on the second <code>up</code>" is the defect</h2>
+<p>Every compose file starts correct and accumulates the same four problems.</p>
+<table>
+<thead>
+<tr>
+<th>The compose file that grew</th>
+<th>The one that is a specification</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>depends_on: [db]</code> waits for the container to exist, not for the database to accept queries — so the first <code>up</code> fails and the second works</td>
+<td>Dependencies are gated on readiness commands, and the first <code>up</code> on a clean machine succeeds</td>
+</tr>
+<tr>
+<td>Data lives inside the container, so <code>down</code> loses it and nobody knows which resets are destructive</td>
+<td>Data is in a named volume; there is one documented command that destroys it and it is the only one that does</td>
+</tr>
+<tr>
+<td>Code reaches the container by rebuilding the image</td>
+<td>Code is synced into the running container; a rebuild happens only when dependencies change</td>
+</tr>
+<tr>
+<td>Optional services start every time, so the machine runs eleven containers to work on one</td>
+<td>Optional services are behind profiles and start when asked for</td>
+</tr>
+</tbody>
+</table>
+<p>The first row deserves the attention, because "run it again" is a workaround that
+survives for years and quietly costs every new hire an afternoon. Containers
+accept TCP connections well before the software inside them is ready — Postgres
+binds its port during initialisation, then runs setup, restarts internally, and
+only then accepts queries. A dependency expressed as "start db first" is not a
+dependency at all; it is a hint about ordering that the failure mode ignores.</p>
+<p><strong>A compose file is the executable version of the onboarding document.</strong> Judge it
+by one question: does a colleague who has never seen the repository get a working
+stack from one command? Anything that answer depends on belongs in the file.</p>
+<h2>2. Architecture</h2>
+<pre class="mermaid">%% GENERATED - do not edit by hand.
+%% Edit the source header in architecture.mmd, then rebuild.
+%% Local stack and its start order
+
+flowchart TB
+    dev([&quot;Developer&quot;])
+    watch[&quot;File sync and rebuild rules&quot;]
+    api[&quot;Application service&quot;]
+    migrate[&quot;Migration service, runs once&quot;]
+    seed[&quot;Seed service, profile gated&quot;]
+    store[(&quot;PostgreSQL, named volume&quot;)]
+    cache[(&quot;Redis&quot;)]
+    mail{{&quot;Mail catcher, profile gated&quot;}}
+    netmain[&quot;Default network&quot;]
+
+    dev --&gt;|&quot;edits a source file&quot;| watch
+    watch --&gt;|&quot;sync, or rebuild when the lock changes&quot;| api
+    dev --&gt;|&quot;http on a published port&quot;| api
+    store --- netmain
+    cache --- netmain
+    api --- netmain
+    migrate --&gt;|&quot;waits for readiness, then applies&quot;| store
+    api --&gt;|&quot;starts only after migrate exits cleanly&quot;| store
+    api --&gt; cache
+    seed --&gt;|&quot;optional, after migrate&quot;| store
+    api -.-&gt;|&quot;optional, captured not sent&quot;| mail
+
+    classDef service fill:#eff6ff,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b;
+    classDef datastore fill:#e9faf3,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b;
+    classDef external fill:#fff4ed,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b;
+    classDef actor fill:#f0eefc,stroke:#4a3aa7,stroke-width:1.5px,color:#0b0b0b;
+    class watch,api,migrate,seed,netmain service;
+    class store,cache datastore;
+    class mail external;
+    class dev actor;</pre>
+<p>The rule the diagram encodes: <strong>every arrow into the store passes through a
+readiness gate, and the application's arrow passes through the migration service
+as well.</strong> Ordering by declaration order is not ordering.</p>
+<h2>3. Project structure</h2>
+<div class="hl"><pre><span></span><code>compose.yaml            the stack — services, volumes, profiles, watch rules
+compose.override.yaml   personal, git-ignored, applied automatically
+.env.example            every variable the stack needs, with safe local values — committed
+.env                    local values — git-ignored
+Makefile                up, down, reset, seed, logs — the five commands anyone runs
+</code></pre></div>
+
+<p><strong>One rule: the compose file contains no value that is a secret anywhere else.</strong>
+Local passwords are literals in the file so the stack works with no setup;
+anything that is also real elsewhere comes from <code>.env</code>, and <code>.env</code> is ignored. The
+moment a real credential appears here it is committed, and rotating it is a
+conversation rather than an edit.</p>
+<h2>4. Reference implementation</h2>
+<div class="hl"><pre><span></span><code><span class="c1"># compose.yaml</span><span class="w"></span>
+<span class="c1"># No top-level `version:` — it is obsolete in Compose v2 and only produces a warning.</span><span class="w"></span>
+
+<span class="nt">services</span><span class="p">:</span><span class="w"></span>
+<span class="w">  </span><span class="nt">db</span><span class="p">:</span><span class="w"></span>
+<span class="w">    </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">postgres:17-alpine</span><span class="w"></span>
+<span class="w">    </span><span class="nt">environment</span><span class="p">:</span><span class="w"></span>
+<span class="w">      </span><span class="nt">POSTGRES_PASSWORD</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span><span class="w">          </span><span class="c1"># deliberately a literal: the stack must work</span><span class="w"></span>
+<span class="w">      </span><span class="nt">POSTGRES_DB</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">orders</span><span class="w">               </span><span class="c1"># with no setup step at all</span><span class="w"></span>
+<span class="w">    </span><span class="nt">ports</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;5432:5432&quot;</span><span class="p p-Indicator">]</span><span class="w">                </span><span class="c1"># published so a local client can attach</span><span class="w"></span>
+<span class="w">    </span><span class="nt">volumes</span><span class="p">:</span><span class="w"></span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pgdata:/var/lib/postgresql/data</span><span class="w"></span>
+<span class="w">    </span><span class="nt">healthcheck</span><span class="p">:</span><span class="w"></span>
+<span class="w">      </span><span class="c1"># Image-specific and the most commonly wrong line in a compose file. A port</span><span class="w"></span>
+<span class="w">      </span><span class="c1"># check passes during initialisation, when the server is up but not accepting</span><span class="w"></span>
+<span class="w">      </span><span class="c1"># queries — which is exactly the window that makes the first `up` fail.</span><span class="w"></span>
+<span class="w">      </span><span class="nt">test</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;CMD-SHELL&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;pg_isready</span><span class="nv"> </span><span class="s">-U</span><span class="nv"> </span><span class="s">postgres</span><span class="nv"> </span><span class="s">-d</span><span class="nv"> </span><span class="s">orders&quot;</span><span class="p p-Indicator">]</span><span class="w"></span>
+<span class="w">      </span><span class="nt">interval</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2s</span><span class="w"></span>
+<span class="w">      </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3s</span><span class="w"></span>
+<span class="w">      </span><span class="nt">retries</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">20</span><span class="w"></span>
+<span class="w">      </span><span class="nt">start_period</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5s</span><span class="w">                  </span><span class="c1"># failures here do not count toward retries</span><span class="w"></span>
+
+<span class="w">  </span><span class="nt">cache</span><span class="p">:</span><span class="w"></span>
+<span class="w">    </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">redis:7-alpine</span><span class="w"></span>
+<span class="w">    </span><span class="nt">healthcheck</span><span class="p">:</span><span class="w"></span>
+<span class="w">      </span><span class="nt">test</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;CMD&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;redis-cli&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;ping&quot;</span><span class="p p-Indicator">]</span><span class="w"></span>
+<span class="w">      </span><span class="nt">interval</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2s</span><span class="w"></span>
+<span class="w">      </span><span class="nt">retries</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span><span class="w"></span>
+
+<span class="w">  </span><span class="nt">migrate</span><span class="p">:</span><span class="w"></span>
+<span class="w">    </span><span class="nt">build</span><span class="p">:</span><span class="w"></span>
+<span class="w">      </span><span class="nt">context</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">.</span><span class="w"></span>
+<span class="w">      </span><span class="nt">target</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">dev</span><span class="w">                       </span><span class="c1"># the dev target from the same Dockerfile</span><span class="w"></span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;alembic&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;upgrade&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;head&quot;</span><span class="p p-Indicator">]</span><span class="w"></span>
+<span class="w">    </span><span class="nt">env_file</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">.env</span><span class="p p-Indicator">]</span><span class="w"></span>
+<span class="w">    </span><span class="nt">depends_on</span><span class="p">:</span><span class="w"></span>
+<span class="w">      </span><span class="nt">db</span><span class="p">:</span><span class="w"></span>
+<span class="w">        </span><span class="nt">condition</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">service_healthy</span><span class="w"></span>
+<span class="w">    </span><span class="nt">restart</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;no&quot;</span><span class="w">                       </span><span class="c1"># a one-shot task; restarting it on exit would loop</span><span class="w"></span>
+
+<span class="w">  </span><span class="nt">api</span><span class="p">:</span><span class="w"></span>
+<span class="w">    </span><span class="nt">build</span><span class="p">:</span><span class="w"></span>
+<span class="w">      </span><span class="nt">context</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">.</span><span class="w"></span>
+<span class="w">      </span><span class="nt">target</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">dev</span><span class="w"></span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;uvicorn&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;app.main:app&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;--host&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;0.0.0.0&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;--port&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;8000&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;--reload&quot;</span><span class="p p-Indicator">]</span><span class="w"></span>
+<span class="w">    </span><span class="nt">ports</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;8000:8000&quot;</span><span class="p p-Indicator">]</span><span class="w"></span>
+<span class="w">    </span><span class="nt">env_file</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">.env</span><span class="p p-Indicator">]</span><span class="w"></span>
+<span class="w">    </span><span class="nt">depends_on</span><span class="p">:</span><span class="w"></span>
+<span class="w">      </span><span class="nt">db</span><span class="p">:</span><span class="w"></span>
+<span class="w">        </span><span class="nt">condition</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">service_healthy</span><span class="w"></span>
+<span class="w">      </span><span class="nt">cache</span><span class="p">:</span><span class="w"></span>
+<span class="w">        </span><span class="nt">condition</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">service_healthy</span><span class="w"></span>
+<span class="w">      </span><span class="nt">migrate</span><span class="p">:</span><span class="w"></span>
+<span class="w">        </span><span class="c1"># Not service_started: the API must wait for migrations to finish, and to</span><span class="w"></span>
+<span class="w">        </span><span class="c1"># have finished successfully. A failed migration should stop the stack,</span><span class="w"></span>
+<span class="w">        </span><span class="c1"># not produce an app running against a half-applied schema.</span><span class="w"></span>
+<span class="w">        </span><span class="nt">condition</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">service_completed_successfully</span><span class="w"></span>
+<span class="w">    </span><span class="nt">develop</span><span class="p">:</span><span class="w"></span>
+<span class="w">      </span><span class="nt">watch</span><span class="p">:</span><span class="w"></span>
+<span class="w">        </span><span class="c1"># sync copies changed files into the running container — the reload watcher</span><span class="w"></span>
+<span class="w">        </span><span class="c1"># picks them up. No rebuild, so the inner loop is a save, not a minute.</span><span class="w"></span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">action</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sync</span><span class="w"></span>
+<span class="w">          </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./app</span><span class="w"></span>
+<span class="w">          </span><span class="nt">target</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/app/app</span><span class="w"></span>
+<span class="w">          </span><span class="nt">ignore</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;__pycache__/&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;*.pyc&quot;</span><span class="p p-Indicator">]</span><span class="w"></span>
+<span class="w">        </span><span class="c1"># A dependency change cannot be synced; it needs a new image.</span><span class="w"></span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">action</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">rebuild</span><span class="w"></span>
+<span class="w">          </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./uv.lock</span><span class="w"></span>
+
+<span class="w">  </span><span class="nt">seed</span><span class="p">:</span><span class="w"></span>
+<span class="w">    </span><span class="nt">build</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">context</span><span class="p">:</span><span class="w"> </span><span class="nv">.</span><span class="p p-Indicator">,</span><span class="nt"> target</span><span class="p">:</span><span class="w"> </span><span class="nv">dev</span><span class="p p-Indicator">}</span><span class="w"></span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;python&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;-m&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;scripts.seed&quot;</span><span class="p p-Indicator">]</span><span class="w"></span>
+<span class="w">    </span><span class="nt">env_file</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">.env</span><span class="p p-Indicator">]</span><span class="w"></span>
+<span class="w">    </span><span class="nt">depends_on</span><span class="p">:</span><span class="w"></span>
+<span class="w">      </span><span class="nt">migrate</span><span class="p">:</span><span class="w"></span>
+<span class="w">        </span><span class="nt">condition</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">service_completed_successfully</span><span class="w"></span>
+<span class="w">    </span><span class="nt">restart</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;no&quot;</span><span class="w"></span>
+<span class="w">    </span><span class="nt">profiles</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;seed&quot;</span><span class="p p-Indicator">]</span><span class="w">                  </span><span class="c1"># never starts unless asked for by name</span><span class="w"></span>
+
+<span class="w">  </span><span class="nt">mail</span><span class="p">:</span><span class="w"></span>
+<span class="w">    </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">axllent/mailpit</span><span class="w"></span>
+<span class="w">    </span><span class="nt">ports</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;8025:8025&quot;</span><span class="p p-Indicator">]</span><span class="w"></span>
+<span class="w">    </span><span class="nt">profiles</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;extras&quot;</span><span class="p p-Indicator">]</span><span class="w"></span>
+
+<span class="nt">volumes</span><span class="p">:</span><span class="w"></span>
+<span class="w">  </span><span class="nt">pgdata</span><span class="p">:</span><span class="w">                               </span><span class="c1"># named, so `down` keeps it and `down -v` does not</span><span class="w"></span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c"># Makefile — the five commands anyone needs. Their existence is the documentation.</span>
+<span class="nf">up</span><span class="o">:</span>            <span class="c">## start the stack and follow logs</span>
+    docker compose up --watch
+
+<span class="nf">down</span><span class="o">:</span>          <span class="c">## stop everything, keep the data</span>
+    docker compose down
+
+<span class="nf">reset</span><span class="o">:</span>         <span class="c">## destroy the data and start clean — the ONLY destructive command</span>
+    docker compose down -v
+    docker compose up -d
+    docker compose --profile seed run --rm seed
+
+<span class="nf">seed</span><span class="o">:</span>          <span class="c">## load sample data into the current database</span>
+    docker compose --profile seed run --rm seed
+
+<span class="nf">logs</span><span class="o">:</span>          <span class="c">## follow one service: make logs S=api</span>
+    docker compose logs -f <span class="k">$(</span>S<span class="k">)</span>
+</code></pre></div>
+
+<h2>5. Golden-standard rules</h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Forbidden:</strong> <code>depends_on</code> without a condition</td>
+<td>It waits for the container, not for the software. This is the whole of "it works on the second <code>up</code>".</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> a port check used as a healthcheck</td>
+<td>The port opens during initialisation, before the service accepts work — so the check passes exactly when it should not.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> data written inside a container rather than a named volume</td>
+<td><code>down</code> then destroys it, so no one can tell which commands are safe, and everyone hoards containers.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> any credential in the compose file that is also real elsewhere</td>
+<td>It is committed the moment it is written. Local literals only; everything else from an ignored <code>.env</code>.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> editing the compose file to work on your machine</td>
+<td>That is what <code>compose.override.yaml</code> is for. Personal edits to the shared file get committed by accident and break everyone.</td>
+</tr>
+<tr>
+<td>Migrations are a service that must complete successfully before the app starts</td>
+<td><code>service_completed_successfully</code>, not <code>service_started</code>. A failed migration must stop the stack rather than produce an app on a half-applied schema.</td>
+</tr>
+<tr>
+<td>One-shot services set <code>restart: "no"</code></td>
+<td>Otherwise the default restart policy loops them forever on their normal exit.</td>
+</tr>
+<tr>
+<td>Code reaches the container by sync, not by rebuild</td>
+<td>A rebuild per edit is a minute; a sync is instant. Rebuild only when the lock file changes.</td>
+</tr>
+<tr>
+<td>Optional services live behind profiles</td>
+<td>Otherwise every developer runs every service the project has ever needed, and the machine is the bottleneck.</td>
+</tr>
+<tr>
+<td><code>start_period</code> is set on slow dependencies</td>
+<td>Failures during it do not count toward the retry budget, so a slow first start does not mark a healthy service dead.</td>
+</tr>
+<tr>
+<td>Exactly one command destroys data, and it is named for what it does</td>
+<td>If <code>down</code> sometimes destroys and sometimes does not, people stop trusting either.</td>
+</tr>
+<tr>
+<td><code>.env.example</code> lists every variable and is committed</td>
+<td>It is the only artefact that tells a new developer what the stack needs.</td>
+</tr>
+</tbody>
+</table>
+<h2>6. Data contracts</h2>
+<p>The contract is the set of commands, and it is small on purpose:</p>
+<div class="hl"><pre><span></span><code>make up       clean machine to working stack, no manual step, first attempt
+make down     stops everything, data survives
+make reset    destroys data, recreates, reseeds — the only destructive command
+make seed     loads sample data into the current database
+make logs     follows one service
+</code></pre></div>
+
+<p>Five commands with stable meanings are worth more than a correct compose file
+nobody can drive. The test of the contract is not that the file is right — it is
+that a colleague with a clean machine gets a working stack from <code>make up</code> without
+asking a question.</p>
+<h2>7. Build order</h2>
+<ol>
+<li><strong>One service, up and reachable.</strong> No dependencies yet.</li>
+<li><strong>Add the database with a real readiness check</strong>, and gate the app on it.
+   Confirm <code>docker compose down -v &amp;&amp; docker compose up</code> succeeds on the first
+   attempt — that single check is most of this blueprint's value.</li>
+<li><strong>Named volume</strong>, and confirm data survives <code>down</code> and <code>up</code>.</li>
+<li><strong>Migrations as a service</strong> the app waits to complete successfully. Break a
+   migration deliberately and confirm the app does not start.</li>
+<li><strong>Watch rules</strong> — sync for source, rebuild for the lock file — and confirm an
+   edit is live without a rebuild.</li>
+<li><strong>Profiles</strong> for anything not needed on every run.</li>
+<li><strong>The Makefile and <code>.env.example</code></strong>, then test the whole thing the only way
+   that counts: on a machine that has never run the project.</li>
+</ol>
+<p>Step 2 is the load-bearing one. Everything after it is convenience; that step is
+the difference between a compose file and a working onboarding.</p>
+<h2>8. Blocks to pull in</h2>
+<p>Nothing here is a prerequisite. These are adjacent problems, by name only —
+resolve them separately if they apply.</p>
+<ul>
+<li>Dockerfile for a production service — the multi-stage file whose dev target this builds</li>
+<li>Alembic migrations — what the migration service runs</li>
+<li>PostgreSQL connection pool and lifecycle — what the application does once the database is ready</li>
+<li>Typed config and settings — what reads the variables this file supplies</li>
+<li>Integration tests with real dependencies — the same services, started by the test run</li>
+</ul>
+<h2>9. Metrics</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Manual steps between cloning and a working stack</td>
+<td>0 beyond <code>make up</code></td>
+</tr>
+<tr>
+<td>First-attempt success rate of <code>up</code> from a clean machine</td>
+<td>100%</td>
+</tr>
+<tr>
+<td>Time from <code>make up</code> on a warm cache to a serving application</td>
+<td>&lt; 30 s</td>
+</tr>
+<tr>
+<td>Time from saving a source file to the change being live</td>
+<td>&lt; 3 s</td>
+</tr>
+<tr>
+<td>Containers started by default that the task does not need</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Commands that destroy data</td>
+<td>Exactly 1</td>
+</tr>
+</tbody>
+</table>
+<h2>10. Failure modes</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The first <code>up</code> fails and the second works</td>
+<td><code>depends_on</code> waited for the container; the database was still initialising</td>
+<td>Add a real readiness check and <code>condition: service_healthy</code></td>
+</tr>
+<tr>
+<td>The database is marked unhealthy on a cold start although it recovers</td>
+<td>The retry budget expired during first-time initialisation</td>
+<td>Set <code>start_period</code> so early failures do not count</td>
+</tr>
+<tr>
+<td>The app starts against a schema that is missing the newest tables</td>
+<td>It depends on the migration service as <code>service_started</code> rather than <code>service_completed_successfully</code></td>
+<td>Change the condition; a failed migration must stop the stack</td>
+</tr>
+<tr>
+<td>The migration container restarts forever</td>
+<td>It exits when finished, and the default restart policy treats that as a crash</td>
+<td><code>restart: "no"</code> on one-shot services</td>
+</tr>
+<tr>
+<td>Data disappears and nobody agrees which command did it</td>
+<td>It was written inside the container, so any recreate lost it</td>
+<td>Named volume, and one documented destructive command</td>
+</tr>
+<tr>
+<td>Every code change costs a rebuild</td>
+<td>Code reaches the container through the image</td>
+<td>Add <code>develop.watch</code> with a sync rule for source and a rebuild rule for the lock</td>
+</tr>
+<tr>
+<td>A dependency change appears to have no effect</td>
+<td>The sync rule copied the lock file without rebuilding the image</td>
+<td>A separate <code>rebuild</code> action keyed on the lock file</td>
+</tr>
+<tr>
+<td>The machine runs eleven containers to work on one service</td>
+<td>Everything starts by default</td>
+<td>Move optional services behind profiles</td>
+</tr>
+<tr>
+<td>A colleague's compose changes break the stack for everyone</td>
+<td>Personal adjustments were made to the shared file</td>
+<td>Use <code>compose.override.yaml</code>, git-ignored</td>
+</tr>
+<tr>
+<td>A real credential is in the repository history</td>
+<td>It was written as a literal in the compose file</td>
+<td>Rotate it; move it to <code>.env</code>; keep only local-only literals in the file</td>
+</tr>
+<tr>
+<td>The stack works locally and the same images fail in CI</td>
+<td>CI runs without the <code>.env</code> that everyone has locally and nobody has committed</td>
+<td>Keep <code>.env.example</code> complete, and have CI build its environment from it</td>
+</tr>
+</tbody>
+</table>
+<h2>11. Definition of done</h2>
+<ul>
+<li class="task"><code>docker compose down -v &amp;&amp; docker compose up</code> succeeds on the first attempt, run in CI on a clean runner</li>
+<li class="task">Every service with dependents declares a healthcheck that exercises the service, not the port</li>
+<li class="task">The application service depends on migrations with <code>service_completed_successfully</code>, and a deliberately broken migration prevents it from starting — covered by a test</li>
+<li class="task">All persistent data is in named volumes; a test asserts data survives <code>down</code> and <code>up</code></li>
+<li class="task">Exactly one documented command destroys data, and its name says so</li>
+<li class="task">Saving a source file changes behaviour in under three seconds with no rebuild</li>
+<li class="task">Changing the lock file triggers a rebuild, verified by observing the build</li>
+<li class="task">Starting with no profile brings up only the services needed to run the application</li>
+<li class="task"><code>.env.example</code> lists every variable the stack reads, verified by starting from a copy of it and nothing else</li>
+<li class="task">No credential in the compose file exists in any other environment, checked by a secret scanner in CI</li>
+<li class="task">A person who has never run the project reaches a working stack from <code>make up</code> without asking a question — tested with an actual person, once</li>
+</ul>
+  </article>
+
+  <aside class="tailpiece">
+    <h2>Use this blueprint</h2>
+    <p>
+      Copy the file into your project and point your agent at it. It works with Claude Code,
+      Cursor, Copilot, ChatGPT and anything else that reads a file — there is nothing to install.
+    </p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/docker-compose-dev" target="_blank" rel="noopener">Open on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Browse all blueprints</a>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p><a href="/">Awesome Blueprints</a> — same request, same architecture, every time.</p>
+    <p class="dim">MIT · awesomeblueprints.com</p>
+  </div>
+</footer>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'neutral' });
+</script>
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const now = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', now);
+    try { localStorage.setItem('ab-theme', now); } catch (e) {}
+    location.reload();   // the diagram is themed at render time
+  });
+</script>
+
+</body>
+</html>

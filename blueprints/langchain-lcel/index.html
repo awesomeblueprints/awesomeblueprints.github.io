@@ -1,0 +1,558 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LangChain LCEL: Composable Chains — Blueprint for AI Coding Agents | Awesome Blueprints</title>
+<meta name="description" content="LangChain LCEL chains: composing prompt, model and parser into one object that streams, batches and falls back, behind a replaceable boundary." />
+<link rel="canonical" href="https://awesomeblueprints.com/blueprints/langchain-lcel/" />
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="Awesome Blueprints" />
+<meta property="og:url" content="https://awesomeblueprints.com/blueprints/langchain-lcel/" />
+<meta property="og:title" content="LangChain LCEL: Composable Chains — Architecture Blueprint" />
+<meta property="og:description" content="LangChain LCEL chains: composing prompt, model and parser into one object that streams, batches and falls back, behind a replaceable boundary." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="LangChain LCEL: Composable Chains — Architecture Blueprint" />
+<meta name="twitter:description" content="LangChain LCEL chains: composing prompt, model and parser into one object that streams, batches and falls back, behind a replaceable boundary." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/page.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "LangChain LCEL: Composable Chains", "description": "LangChain LCEL chains: composing prompt, model and parser into one object that streams, batches and falls back, behind a replaceable boundary.", "url": "https://awesomeblueprints.com/blueprints/langchain-lcel/", "dateModified": "2026-08-19", "keywords": "LangChain", "isAccessibleForFree": true, "license": "https://opensource.org/licenses/MIT", "publisher": {"@type": "Organization", "name": "Awesome Blueprints", "url": "https://awesomeblueprints.com"}}</script>
+<script>
+  (function () {
+    var t;
+    try { t = localStorage.getItem('ab-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">Awesome Blueprints</a>
+    <div class="nav-right">
+      <a class="nav-link" href="/#blueprints">Catalogue</a>
+      <a class="nav-link" href="/#faq">FAQ</a>
+      <a class="nav-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/langchain-lcel" target="_blank" rel="noopener">GitHub ↗</a>
+      <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Switch theme">◑</button>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/">Home</a> <span>/</span> <a href="/#blueprints">Blueprints</a> <span>/</span>
+    <span>LangChain LCEL: Composable Chains</span>
+  </nav>
+
+  <header class="page-head">
+    <p class="eyebrow">langchain-lcel</p>
+    <h1>LangChain LCEL: Composable Chains</h1>
+    <p class="lede">LangChain LCEL chains: composing prompt, model and parser into one object that streams, batches and falls back, behind a replaceable boundary.</p>
+    <div class="facts"><span>medium</span><span>2–3 days</span><span>Verified 2026-08-19</span></div>
+    <div class="tags"><span class="tag">LangChain</span></div>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/langchain-lcel" target="_blank" rel="noopener">Read it on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Back to the catalogue</a>
+    </div>
+  </header>
+
+  <article class="doc">
+<blockquote>
+<p>Prompt, model and parser composed into one reusable object that streams,
+batches and falls back without any of it being written twice — and a boundary
+that keeps the framework out of the rest of the application.</p>
+</blockquote>
+<p><strong>Complexity:</strong> medium · <strong>Typical build:</strong> 2–3 days · <strong>Verified:</strong> 2026-08-19 (re-check after ~90 days)</p>
+<p><strong>Examples in:</strong> Python, with LangChain. The architecture is language-agnostic: sections 5, 10 and 11 hold wherever you build this. Section 4 is illustrative — if your project is in another language, your agent translates the idioms rather than importing them, and nothing is lost. The composition idea exists as the Vercel AI SDK's pipeline helpers in TypeScript and as plain function composition anywhere; what matters is the boundary in §3, which applies to any framework you adopt.</p>
+<p><strong>Use when:</strong> several places need the same prompt-to-parsed-output path, and you want streaming, batching and fallbacks once rather than per call site.</p>
+<p><strong>Not for:</strong> a single model call in a single place. Wrapping one call in a framework buys an abstraction with no second user and a dependency with its own release schedule. Also not for an agent that decides its own next step — that is a loop with tools, and a linear chain is the wrong shape for it however many branches you add.</p>
+<hr />
+<h2>⚙️ INSTRUCTIONS FOR THE AI — READ BEFORE WRITING ANY CODE</h2>
+<p><strong>Do not start coding.</strong></p>
+<p><strong>Step 1 — Refresh.</strong> Verify the installed LangChain major and <strong>what moved out of
+it</strong>. The 1.0 release kept the pipe composition and the runnable interface in the
+core package but relocated a large amount of older surface — including the legacy
+sequential chain helpers and the classic agent executor — into a separate
+compatibility package. Most examples you will find predate that split, so confirm
+before importing: an example that runs is not evidence it is current. Verify the
+current names for structured output, fallbacks and batching, and whether the
+agent-building entry point has changed. Report what you verified and what turned
+out wrong.</p>
+<p><strong>Step 2 — Read the project, then audit what already exists.</strong> Find every model
+call and record whether it streams, whether it retries, and where its prompt text
+lives. Find whether framework types already cross into business logic — a service
+function taking a message object, a repository returning a document type — because
+each one is a place the next major version will reach. Find how prompts are
+versioned today, if at all. Then audit §11 item by item, each marked <em>already
+true</em>, <em>partly true</em> or <em>absent</em>, with the file that decides it, reported before
+anything is proposed.</p>
+<p>Assume the project is right until it demonstrably is not; code satisfying an item
+stays even where its shape differs from §4; replacing something that works needs a
+one-line reason; never delete a working path to make room for the blueprint's
+version. The same holds for language — §4 is illustrative, its idioms get
+translated into the project's language, and §11 is what has to become true rather
+than the syntax.</p>
+<p><strong>Step 3 — Write a plan for the gap only, and get it approved</strong>, including a
+<code>## Proposed stack</code> section and the boundary: which module is allowed to import
+the framework. Do not ask open framework questions — propose, and ask for
+confirmation once. Say what you are adding, what you are leaving alone, and what
+you propose to change, and touch nothing else.</p>
+<p><strong>Step 4 — Build in the order in §7.</strong> <strong>Step 5 — §11 is the definition of done.</strong></p>
+<hr />
+<h2>1. What composition buys, and what it costs</h2>
+<p>The hand-written version formats a prompt, calls the client, and parses the reply.
+It is obvious, and it is fine until the second caller.</p>
+<table>
+<thead>
+<tr>
+<th>A call written per site</th>
+<th>A composed chain</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Streaming is added where someone needed it, and the other three sites do not have it</td>
+<td>Streaming, batching and async come from the composition itself</td>
+</tr>
+<tr>
+<td>A retry is a <code>try</code> block someone remembered; the next site forgot</td>
+<td>Fallback is part of the object, so every caller has it</td>
+</tr>
+<tr>
+<td>Four prompt strings drift apart and nobody can diff them</td>
+<td>One template, one place, versionable</td>
+</tr>
+<tr>
+<td>Parsing is <code>json.loads</code> plus hope</td>
+<td>The parser is part of the chain and its failure is a typed failure</td>
+</tr>
+</tbody>
+</table>
+<p>That is the case for it. Here is the cost, which the framework's own documentation
+will not press on you: <strong>a framework of this size moves.</strong> Its last major release
+kept the composition primitives but relocated a great deal of older surface into a
+compatibility package, and most public examples predate that split. That is not an
+argument against using it. It is an argument for exactly one boundary — <strong>the
+framework's types stop at one module</strong> — so that the next major version is a day's
+work in one directory instead of a search across the codebase.</p>
+<p>The clearest way to think about the chain is that it is a <em>declared</em> pipeline
+rather than an executed one. You build the object once; calling it one way runs it
+whole, another way streams it, another runs a hundred inputs concurrently. Nothing
+in the pipeline knows which, which is precisely why it can be reused — and why
+putting business logic inside it is a mistake: that logic then only exists in a
+form the framework can run.</p>
+<h2>2. Architecture</h2>
+<pre class="mermaid">%% GENERATED - do not edit by hand.
+%% Edit the source header in architecture.mmd, then rebuild.
+%% One chain, several call styles
+
+flowchart TB
+    subgraph boundary[&quot;The only module importing the framework&quot;]
+        direction TB
+        template[&quot;Prompt template, versioned&quot;]
+        model[&quot;Model, with a fallback&quot;]
+        parser[&quot;Output parser&quot;]
+        chain[&quot;The composed chain&quot;]
+    end
+
+    caller([&quot;Application code&quot;])
+    adapter[&quot;Adapter, framework types in and plain types out&quot;]
+    trace[&quot;Tracing callback&quot;]
+    provider{{&quot;Primary provider&quot;}}
+    backup{{&quot;Fallback provider&quot;}}
+    prompts[(&quot;Prompt versions&quot;)]
+
+    caller --&gt;|&quot;plain arguments&quot;| adapter
+    adapter --&gt; chain
+    template --- prompts
+    chain --- template
+    chain --- model
+    chain --- parser
+    model --&gt;|&quot;primary&quot;| provider
+    model -.-&gt;|&quot;on failure or overload&quot;| backup
+    chain --- trace
+    parser --&gt;|&quot;structured result&quot;| adapter
+    adapter --&gt;|&quot;plain types only&quot;| caller
+
+    classDef service fill:#eff6ff,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b;
+    classDef datastore fill:#e9faf3,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b;
+    classDef external fill:#fff4ed,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b;
+    classDef actor fill:#f0eefc,stroke:#4a3aa7,stroke-width:1.5px,color:#0b0b0b;
+    class template,model,parser,chain,adapter,trace service;
+    class prompts datastore;
+    class provider,backup external;
+    class caller actor;</pre>
+<p>The rule the diagram encodes: <strong>no arrow crosses out of the boundary group
+carrying a framework type.</strong> The adapter is the whole defence. Everything inside
+may change with the next major release; everything outside does not have to know
+that it did.</p>
+<h2>3. Project structure</h2>
+<div class="hl"><pre><span></span><code>app/llm/
+├── chains/
+│   ├── summarise.py     one chain per task, each independently testable
+│   └── classify.py
+├── prompts/
+│   └── summarise.v3.md  prompt text as a file, versioned in the name
+├── models.py            provider configuration and the fallback order
+└── adapters.py          the boundary: framework types in, plain types out
+</code></pre></div>
+
+<p><strong>One rule: <code>langchain</code> is imported only under <code>app/llm/</code>.</strong> Enforce it with a
+lint rule or a grep in CI. This is the single decision that makes a major upgrade
+survivable, and it is worth more than anything else in this document — it is also
+the one that erodes fastest, because importing a message type "just here" is
+always the smaller change in the moment.</p>
+<h2>4. Reference implementation</h2>
+<div class="hl"><pre><span></span><code><span class="c1"># app/llm/models.py</span>
+<span class="kn">from</span> <span class="nn">langchain_anthropic</span> <span class="kn">import</span> <span class="n">ChatAnthropic</span>
+<span class="kn">from</span> <span class="nn">langchain_openai</span> <span class="kn">import</span> <span class="n">ChatOpenAI</span>
+
+<span class="n">primary</span> <span class="o">=</span> <span class="n">ChatAnthropic</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">primary_model</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span> <span class="n">max_retries</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+<span class="c1"># max_retries=0 on purpose: the framework&#39;s own retry and the fallback below would</span>
+<span class="c1"># otherwise compound, so a provider outage costs several minutes of retries before</span>
+<span class="c1"># the fallback is ever reached.</span>
+
+<span class="c1"># A different provider, not a smaller model from the same one. A provider outage</span>
+<span class="c1"># takes all of its models with it, so a same-vendor fallback fails together with</span>
+<span class="c1"># what it was meant to rescue.</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">primary</span><span class="o">.</span><span class="n">with_fallbacks</span><span class="p">([</span><span class="n">ChatOpenAI</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">fallback_model</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">30</span><span class="p">)])</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/llm/chains/summarise.py</span>
+<span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span> <span class="nn">langchain_core.prompts</span> <span class="kn">import</span> <span class="n">ChatPromptTemplate</span>
+<span class="kn">from</span> <span class="nn">langchain_core.output_parsers</span> <span class="kn">import</span> <span class="n">PydanticOutputParser</span>
+<span class="kn">from</span> <span class="nn">pydantic</span> <span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">Field</span>
+
+
+<span class="k">class</span> <span class="nc">Summary</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">headline</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">max_length</span><span class="o">=</span><span class="mi">120</span><span class="p">)</span>
+    <span class="n">points</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">min_length</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">max_length</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span>
+    <span class="c1"># Constraints in the type, not in the prompt. &quot;Give me at most five points&quot; is</span>
+    <span class="c1"># a request; a validator is a guarantee, and the difference shows up on the</span>
+    <span class="c1"># inputs nobody tested.</span>
+
+
+<span class="c1"># The prompt is a file, and its version is in the filename. Inline prompt strings</span>
+<span class="c1"># cannot be diffed usefully, cannot be reviewed by someone who does not read</span>
+<span class="c1"># Python, and cannot be rolled back without a deploy.</span>
+<span class="n">TEMPLATE</span> <span class="o">=</span> <span class="n">ChatPromptTemplate</span><span class="o">.</span><span class="n">from_messages</span><span class="p">([</span>
+    <span class="p">(</span><span class="s2">&quot;system&quot;</span><span class="p">,</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;app/llm/prompts/summarise.v3.md&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">read_text</span><span class="p">()),</span>
+    <span class="p">(</span><span class="s2">&quot;human&quot;</span><span class="p">,</span> <span class="s2">&quot;</span><span class="si">{document}</span><span class="s2">&quot;</span><span class="p">),</span>
+<span class="p">])</span>
+
+<span class="n">parser</span> <span class="o">=</span> <span class="n">PydanticOutputParser</span><span class="p">(</span><span class="n">pydantic_object</span><span class="o">=</span><span class="n">Summary</span><span class="p">)</span>
+
+<span class="c1"># The composition. This object is declared, not executed: the same chain runs</span>
+<span class="c1"># whole, streams, or processes a hundred inputs concurrently depending only on how</span>
+<span class="c1"># it is called. That is the reason to build one — and the reason not to put</span>
+<span class="c1"># business logic inside it, because logic in here exists only in a form the</span>
+<span class="c1"># framework can run.</span>
+<span class="n">summarise_chain</span> <span class="o">=</span> <span class="n">TEMPLATE</span> <span class="o">|</span> <span class="n">model</span> <span class="o">|</span> <span class="n">parser</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/llm/adapters.py</span>
+<span class="kn">from</span> <span class="nn">app.llm.chains.summarise</span> <span class="kn">import</span> <span class="n">summarise_chain</span><span class="p">,</span> <span class="n">Summary</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">summarise</span><span class="p">(</span><span class="n">document</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Summary</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;The boundary. Framework types go in; a plain model comes out.</span>
+
+<span class="sd">    Every caller in the application goes through a function like this. When the</span>
+<span class="sd">    framework&#39;s next major release renames something, the change stops at this</span>
+<span class="sd">    file rather than appearing in forty call sites.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="k">await</span> <span class="n">summarise_chain</span><span class="o">.</span><span class="n">ainvoke</span><span class="p">({</span><span class="s2">&quot;document&quot;</span><span class="p">:</span> <span class="n">document</span><span class="p">})</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">summarise_many</span><span class="p">(</span><span class="n">documents</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Summary</span><span class="p">]:</span>
+    <span class="c1"># Batching comes from the composition, not from a loop. Concurrency is bounded</span>
+    <span class="c1"># here rather than by whatever the provider&#39;s rate limiter decides — an</span>
+    <span class="c1"># unbounded batch is a 429 storm that looks like a provider problem.</span>
+    <span class="k">return</span> <span class="k">await</span> <span class="n">summarise_chain</span><span class="o">.</span><span class="n">abatch</span><span class="p">(</span>
+        <span class="p">[{</span><span class="s2">&quot;document&quot;</span><span class="p">:</span> <span class="n">d</span><span class="p">}</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">documents</span><span class="p">],</span>
+        <span class="n">config</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;max_concurrency&quot;</span><span class="p">:</span> <span class="mi">5</span><span class="p">},</span>
+    <span class="p">)</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">summarise_streaming</span><span class="p">(</span><span class="n">document</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+    <span class="c1"># The same chain. Nothing was written twice to get this.</span>
+    <span class="k">async</span> <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="n">summarise_chain</span><span class="o">.</span><span class="n">astream</span><span class="p">({</span><span class="s2">&quot;document&quot;</span><span class="p">:</span> <span class="n">document</span><span class="p">}):</span>
+        <span class="k">yield</span> <span class="n">chunk</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># tests/test_summarise.py</span>
+<span class="kn">from</span> <span class="nn">langchain_core.language_models.fake_chat_models</span> <span class="kn">import</span> <span class="n">FakeListChatModel</span>
+
+
+<span class="k">def</span> <span class="nf">test_chain_parses_a_valid_response</span><span class="p">():</span>
+    <span class="c1"># The chain is composable, so the model is replaceable. Testing the prompt and</span>
+    <span class="c1"># the parser without a network call is the main practical payoff of building</span>
+    <span class="c1"># it this way, and it is why chains stay small.</span>
+    <span class="n">chain</span> <span class="o">=</span> <span class="n">TEMPLATE</span> <span class="o">|</span> <span class="n">FakeListChatModel</span><span class="p">(</span><span class="n">responses</span><span class="o">=</span><span class="p">[</span><span class="n">VALID_JSON</span><span class="p">])</span> <span class="o">|</span> <span class="n">parser</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">chain</span><span class="o">.</span><span class="n">invoke</span><span class="p">({</span><span class="s2">&quot;document&quot;</span><span class="p">:</span> <span class="s2">&quot;...&quot;</span><span class="p">})</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">points</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">5</span>
+</code></pre></div>
+
+<h2>5. Golden-standard rules</h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Forbidden:</strong> importing the framework outside its own module</td>
+<td>It is the one decision that makes a major upgrade a day in one directory instead of a search across the codebase. It also erodes fastest, so enforce it in CI.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> business logic inside a chain</td>
+<td>Logic there exists only in a form the framework can run, and it cannot be tested or reused without it.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> a fallback to another model from the same provider</td>
+<td>An outage takes the provider's models with it, so the rescue fails alongside what it was rescuing.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> provider retries and framework fallbacks both enabled</td>
+<td>They compound: an outage costs minutes of retries before the fallback is reached.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> prompt text inline in code</td>
+<td>It cannot be diffed, reviewed by a non-programmer, or rolled back without a deploy.</td>
+</tr>
+<tr>
+<td>Constraints live in the output type, not in the prompt</td>
+<td>A prompt asks; a validator guarantees. The difference appears on inputs nobody tested.</td>
+</tr>
+<tr>
+<td>The version is in the prompt's filename</td>
+<td>It is what lets an evaluation name which prompt it scored.</td>
+</tr>
+<tr>
+<td>Batching declares a concurrency limit</td>
+<td>Unbounded batches produce a rate-limit storm that reads as a provider fault.</td>
+</tr>
+<tr>
+<td>One chain per task, small enough to test with a fake model</td>
+<td>The ability to test the prompt and the parser without a network call is the main practical payoff.</td>
+</tr>
+<tr>
+<td>Every chain is traced</td>
+<td>Composition hides the call sites; without tracing, a failure inside a pipe is a stack trace with no inputs.</td>
+</tr>
+<tr>
+<td>Examples are checked against the installed version, not trusted</td>
+<td>A large amount of surface moved packages in the last major release, and most public examples predate it.</td>
+</tr>
+<tr>
+<td>Timeouts are set explicitly on the model</td>
+<td>A default that is generous or absent turns one slow call into a held worker.</td>
+</tr>
+</tbody>
+</table>
+<h2>6. Data contracts</h2>
+<div class="hl"><pre><span></span><code>in    plain application types — a string, a dataclass, a domain object
+out   a validated model with its constraints in the type
+</code></pre></div>
+
+<p>The contract is that neither side of the adapter sees the other's types. Callers
+never receive a framework message object; the chain never receives a database row.
+It costs a few lines of mapping and it is what makes the framework replaceable —
+which, given how much of its surface moved in one release, is not a theoretical
+benefit.</p>
+<p>A chain is also a <em>declared</em> pipeline: the same object invoked, streamed or
+batched. If a chain only works one of those ways, something inside it is doing
+work that belongs outside.</p>
+<h2>7. Build order</h2>
+<ol>
+<li><strong>One chain, one task, tested against a fake model.</strong> No network. This proves
+   the prompt and the parser before any provider is involved.</li>
+<li><strong>The adapter</strong>, and the CI check that the framework is imported nowhere else —
+   added now, while there is one import to keep honest.</li>
+<li><strong>The real model with an explicit timeout</strong>, and a cross-provider fallback with
+   a test that forces the primary to fail.</li>
+<li><strong>Structured output with constraints in the type</strong>, and a test with a response
+   that violates one.</li>
+<li><strong>Streaming and batching from the same chain</strong>, with a concurrency limit.</li>
+<li><strong>Tracing</strong>, with the prompt version recorded on every run.</li>
+<li><strong>The second chain</strong>, which is where you find out whether the boundary held.</li>
+</ol>
+<p>Step 2 early because the import boundary is the thing that decays. Enforced when
+there is one import, it stays; introduced after twenty, it is a refactor nobody
+schedules.</p>
+<h2>8. Blocks to pull in</h2>
+<p>Nothing here is a prerequisite. These are adjacent problems, by name only —
+resolve them separately if they apply.</p>
+<ul>
+<li>LangChain retrieval chains — the same composition with a retriever in front</li>
+<li>Structured LLM output with JSON Schema — getting parseable output without a framework</li>
+<li>Prompt structure and system prompts — what goes in the template file</li>
+<li>LLM observability and tracing — where the traces land</li>
+<li>LangGraph agent as a state graph — the shape to use when the next step is decided at runtime</li>
+</ul>
+<h2>9. Metrics</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Modules importing the framework</td>
+<td>1 directory, enforced in CI</td>
+</tr>
+<tr>
+<td>Chains testable without a network call</td>
+<td>100%</td>
+</tr>
+<tr>
+<td>Parse failures reaching the caller</td>
+<td>&lt; 0.5% after fallbacks</td>
+</tr>
+<tr>
+<td>Provider-outage requests served by the fallback</td>
+<td>&gt; 95%</td>
+</tr>
+<tr>
+<td>Added latency from composition versus a direct call</td>
+<td>&lt; 10 ms</td>
+</tr>
+<tr>
+<td>Prompts whose version is not recorded in traces</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Time to migrate after a framework major release</td>
+<td>≤ 1 day</td>
+</tr>
+</tbody>
+</table>
+<h2>10. Failure modes</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A framework upgrade breaks code in dozens of files</td>
+<td>Framework types crossed into business logic</td>
+<td>The adapter boundary, enforced in CI</td>
+</tr>
+<tr>
+<td>An example from the documentation does not import</td>
+<td>It predates the package split of the last major release</td>
+<td>Verify against the installed version; check the compatibility package</td>
+</tr>
+<tr>
+<td>A provider outage takes minutes to fail over</td>
+<td>Provider retries and framework fallbacks compound</td>
+<td>Disable the provider's own retries when a fallback is configured</td>
+</tr>
+<tr>
+<td>The fallback fails alongside the primary</td>
+<td>Both are models from the same provider</td>
+<td>Fall back across providers</td>
+</tr>
+<tr>
+<td>A batch job triggers rate limits and looks like a provider fault</td>
+<td>Batching with no concurrency limit</td>
+<td>Set one explicitly</td>
+</tr>
+<tr>
+<td>Output occasionally violates a documented constraint</td>
+<td>The constraint was in the prompt rather than the type</td>
+<td>Move it into the output model as a validator</td>
+</tr>
+<tr>
+<td>Nobody can say which prompt produced a bad answer</td>
+<td>The prompt is inline and unversioned</td>
+<td>Prompt files with the version in the name, recorded in traces</td>
+</tr>
+<tr>
+<td>A failure inside a chain gives a stack trace with no inputs</td>
+<td>The chain is not traced</td>
+<td>Attach tracing at the composition</td>
+</tr>
+<tr>
+<td>A chain cannot be streamed although the model supports it</td>
+<td>Something inside collects the whole output — usually logic that belongs outside</td>
+<td>Move it out; keep chains to prompt, model, parser</td>
+</tr>
+<tr>
+<td>Latency is fine per call and terrible in aggregate</td>
+<td>Calls are sequential where the chain could batch</td>
+<td>Use the batching path with a bound</td>
+</tr>
+<tr>
+<td>A slow provider holds workers until something else times out</td>
+<td>No explicit timeout on the model</td>
+<td>Set one</td>
+</tr>
+</tbody>
+</table>
+<h2>11. Definition of done</h2>
+<ul>
+<li class="task">The framework is imported only under the LLM directory, checked by grep in CI</li>
+<li class="task">No function outside that directory accepts or returns a framework type, verified by inspecting the adapter signatures</li>
+<li class="task">Every chain has a test that runs it against a fake model with no network access</li>
+<li class="task">Forcing the primary provider to fail produces an answer from a different provider, covered by a test</li>
+<li class="task">Provider-level retries are disabled where a fallback is configured, verified by reading the model configuration</li>
+<li class="task">Every model has an explicit timeout</li>
+<li class="task">Output constraints are expressed in the output type, and a response violating one is rejected — covered by a test</li>
+<li class="task">Prompt text lives in versioned files; no prompt string appears inline, checked by grep in CI</li>
+<li class="task">The prompt version appears in every trace, verified on a real run</li>
+<li class="task">The same chain object serves the invoke, stream and batch paths, covered by one test per path</li>
+<li class="task">Batch calls declare a concurrency limit</li>
+<li class="task">Composition adds under 10 ms compared with a direct provider call, measured once and recorded</li>
+</ul>
+  </article>
+
+  <aside class="tailpiece">
+    <h2>Use this blueprint</h2>
+    <p>
+      Copy the file into your project and point your agent at it. It works with Claude Code,
+      Cursor, Copilot, ChatGPT and anything else that reads a file — there is nothing to install.
+    </p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/langchain-lcel" target="_blank" rel="noopener">Open on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Browse all blueprints</a>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p><a href="/">Awesome Blueprints</a> — same request, same architecture, every time.</p>
+    <p class="dim">MIT · awesomeblueprints.com</p>
+  </div>
+</footer>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'neutral' });
+</script>
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const now = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', now);
+    try { localStorage.setItem('ab-theme', now); } catch (e) {}
+    location.reload();   // the diagram is themed at render time
+  });
+</script>
+
+</body>
+</html>

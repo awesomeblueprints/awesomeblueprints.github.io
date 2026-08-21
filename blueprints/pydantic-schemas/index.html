@@ -1,0 +1,568 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Pydantic Request and Response Schemas — Blueprint for AI Coding Agents | Awesome Blueprints</title>
+<meta name="description" content="Pydantic request and response schemas for FastAPI: separating what you accept from what you expose, with validation and safe response models." />
+<link rel="canonical" href="https://awesomeblueprints.com/blueprints/pydantic-schemas/" />
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="Awesome Blueprints" />
+<meta property="og:url" content="https://awesomeblueprints.com/blueprints/pydantic-schemas/" />
+<meta property="og:title" content="Pydantic Request and Response Schemas — Architecture Blueprint" />
+<meta property="og:description" content="Pydantic request and response schemas for FastAPI: separating what you accept from what you expose, with validation and safe response models." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Pydantic Request and Response Schemas — Architecture Blueprint" />
+<meta name="twitter:description" content="Pydantic request and response schemas for FastAPI: separating what you accept from what you expose, with validation and safe response models." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/page.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "Pydantic Request and Response Schemas", "description": "Pydantic request and response schemas for FastAPI: separating what you accept from what you expose, with validation and safe response models.", "url": "https://awesomeblueprints.com/blueprints/pydantic-schemas/", "dateModified": "2026-08-19", "keywords": "API, Python", "isAccessibleForFree": true, "license": "https://opensource.org/licenses/MIT", "publisher": {"@type": "Organization", "name": "Awesome Blueprints", "url": "https://awesomeblueprints.com"}}</script>
+<script>
+  (function () {
+    var t;
+    try { t = localStorage.getItem('ab-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">Awesome Blueprints</a>
+    <div class="nav-right">
+      <a class="nav-link" href="/#blueprints">Catalogue</a>
+      <a class="nav-link" href="/#faq">FAQ</a>
+      <a class="nav-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/pydantic-schemas" target="_blank" rel="noopener">GitHub ↗</a>
+      <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Switch theme">◑</button>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/">Home</a> <span>/</span> <a href="/#blueprints">Blueprints</a> <span>/</span>
+    <span>Pydantic Request and Response Schemas</span>
+  </nav>
+
+  <header class="page-head">
+    <p class="eyebrow">pydantic-schemas</p>
+    <h1>Pydantic Request and Response Schemas</h1>
+    <p class="lede">Pydantic request and response schemas for FastAPI: separating what you accept from what you expose, with validation and safe response models.</p>
+    <div class="facts"><span>low</span><span>1–2 days</span><span>Verified 2026-08-19</span></div>
+    <div class="tags"><span class="tag">API</span><span class="tag">Python</span></div>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/pydantic-schemas" target="_blank" rel="noopener">Read it on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Back to the catalogue</a>
+    </div>
+  </header>
+
+  <article class="doc">
+<blockquote>
+<p>Separate typed models for what a client may send and what it may see, so the
+shape of a database row can never become the shape of a public response — and
+a rejected request comes back naming the field rather than as a wall of
+generated noise.</p>
+</blockquote>
+<p><strong>Complexity:</strong> low · <strong>Typical build:</strong> 1–2 days · <strong>Verified:</strong> 2026-08-19 (re-check after ~90 days)</p>
+<p><strong>Examples in:</strong> Python, with Pydantic and FastAPI. The architecture is language-agnostic: sections 5, 10 and 11 hold wherever you build this. Section 4 is illustrative — if your project is in another language, your agent translates the idioms rather than importing them, and nothing is lost. The equivalents are Zod schemas with <code>.parse()</code> in TypeScript, <code>Ecto.Changeset</code> with separate cast sets in Elixir, struct tags plus a validator in Go, and ActiveModel::Serializer with strong parameters in Rails.</p>
+<p><strong>Use when:</strong> an HTTP API accepts JSON bodies or returns objects built from database rows, and you want the accepted shape and the exposed shape to be two decisions rather than one accident.</p>
+<p><strong>Not for:</strong> an internal function boundary inside one process — types and a dataclass are enough there, and a validation layer between your own modules is cost with no attacker on the other side. Also not for the configuration your app reads at startup: that is validated once at boot, not per request, and the two get conflated constantly.</p>
+<hr />
+<h2>⚙️ INSTRUCTIONS FOR THE AI — READ BEFORE WRITING ANY CODE</h2>
+<p><strong>Do not start coding.</strong></p>
+<p><strong>Step 1 — Refresh.</strong> Verify the installed Pydantic major version. This blueprint
+is written for v2: <code>model_config = ConfigDict(...)</code> rather than an inner
+<code>class Config</code>, <code>model_validate</code> rather than <code>parse_obj</code>, <code>field_validator</code> and
+<code>model_validator</code> rather than <code>validator</code> and <code>root_validator</code>, and
+<code>from_attributes</code> rather than <code>orm_mode</code>. Pydantic v3 was announced as a cleanup
+release that removes the v1 compatibility shims — check whether it has shipped and
+whether anything used here was on the removal list. Verify the FastAPI version and
+whether <code>separate_input_output_schemas</code> still defaults to true, because it changes
+the generated client SDK. Report what you verified and what turned out wrong.</p>
+<p><strong>Step 2 — Read the project, then audit what already exists.</strong> Find every route
+handler and record three things per route: whether it declares a response model,
+what its return type annotation is, and whether the object it returns is a
+database model. Find any existing schema module and note which models are used on
+both the request and the response side — those are the leak candidates. Find where
+validation errors are currently rendered. Then audit §11 item by item, each marked
+<em>already true</em>, <em>partly true</em> or <em>absent</em>, with the file that decides it, reported
+before anything is proposed.</p>
+<p>Assume the project is right until it demonstrably is not; code satisfying an item
+stays even where its shape differs from §4; replacing something that works needs a
+one-line reason; never delete a working path to make room for the blueprint's
+version. The same holds for language — §4 is illustrative, its idioms get
+translated into the project's language, and §11 is what has to become true rather
+than the syntax.</p>
+<p><strong>Step 3 — Write a plan for the gap only, and get it approved</strong>, including a
+<code>## Proposed stack</code> section naming the validation library and the version verified
+in Step 1, with a one-line reason. Do not ask open framework questions — propose,
+and ask for confirmation once. Say what you are adding, what you are leaving
+alone, and what you propose to change, and touch nothing else. If schemas already
+exist, the plan is to split the ones used on both sides, not to rewrite the layer.</p>
+<p><strong>Step 4 — Build in the order in §7.</strong> <strong>Step 5 — §11 is the definition of done.</strong></p>
+<hr />
+<h2>1. Why one model per entity leaks</h2>
+<p>The obvious version is one <code>Order</code> model, used for the request body, the response
+and the database row. It is less code and it is wrong in four independent ways.</p>
+<table>
+<thead>
+<tr>
+<th>One model per entity</th>
+<th>A model per direction</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A column added to the table appears in the public response the moment it is added to the model — nobody reviews a migration for disclosure</td>
+<td>Adding a column changes nothing a client can see until someone edits the read model</td>
+</tr>
+<tr>
+<td>The client can send <code>id</code>, <code>created_at</code>, <code>total_cents</code> — anything the model has a field for</td>
+<td>The create model has only the fields a client is allowed to decide</td>
+</tr>
+<tr>
+<td>Required on write and always-present on read are the same declaration, so one of them is a lie</td>
+<td>Each direction states its own truth</td>
+</tr>
+<tr>
+<td>The generated OpenAPI schema describes a shape that is neither the request nor the response</td>
+<td>Two schemas that each match what actually crosses the wire</td>
+</tr>
+</tbody>
+</table>
+<p>The second row is the expensive one, and it does not look like a security bug. It
+looks like a field that happens to be settable. Assigning <code>total_cents</code> in a
+request body is not an exploit against a parser — it is the API doing exactly what
+it was told, because nobody wrote down that the total is computed rather than
+supplied.</p>
+<p>FastAPI's own documentation makes the disclosure case explicitly, with a <code>Danger</code>
+callout, and it is worth stating why the framework cannot simply solve it: the
+response model filters by <em>validating into the declared shape</em>, so the protection
+is only as good as the declared shape. Point it at the database model and there is
+nothing left to filter.</p>
+<h2>2. Architecture</h2>
+<pre class="mermaid">%% GENERATED - do not edit by hand.
+%% Edit the source header in architecture.mmd, then rebuild.
+%% Schemas per direction
+
+flowchart TB
+    subgraph request[&quot;Request side&quot;]
+        direction TB
+        route[&quot;Route handler&quot;]
+        createmodel[&quot;Create model, client supplied fields only&quot;]
+        patchmodel[&quot;Update model, all fields optional&quot;]
+    end
+    subgraph core[&quot;Application&quot;]
+        direction TB
+        service[&quot;Service layer&quot;]
+        store[(&quot;Database row&quot;)]
+    end
+    subgraph response[&quot;Response side&quot;]
+        direction TB
+        readmodel[&quot;Read model, exposed fields only&quot;]
+        serialize[&quot;Field serializers&quot;]
+    end
+
+    client([&quot;API client&quot;])
+    errors[&quot;Validation error handler&quot;]
+    rejected([&quot;422 naming the field and the rule&quot;])
+
+    client --&gt;|&quot;JSON body&quot;| route
+    route --&gt;|&quot;POST&quot;| createmodel
+    route --&gt;|&quot;PATCH&quot;| patchmodel
+    createmodel -.-&gt;|&quot;invalid&quot;| errors
+    patchmodel -.-&gt;|&quot;invalid&quot;| errors
+    errors -.-&gt; rejected
+    createmodel --&gt;|&quot;a typed object, never a loose dict&quot;| service
+    patchmodel --&gt;|&quot;only the fields actually sent&quot;| service
+    service --&gt;|&quot;write&quot;| store
+    store --&gt;|&quot;validated from attributes&quot;| readmodel
+    readmodel --&gt; serialize
+    serialize --&gt;|&quot;only declared fields&quot;| client
+
+    classDef service fill:#eff6ff,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b;
+    classDef datastore fill:#e9faf3,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b;
+    classDef external fill:#fff4ed,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b;
+    classDef actor fill:#f0eefc,stroke:#4a3aa7,stroke-width:1.5px,color:#0b0b0b;
+    class route,createmodel,patchmodel,service,readmodel,serialize,errors service;
+    class store datastore;
+    class client,rejected actor;</pre>
+<p>The rule the diagram encodes: <strong>there is no arrow from the store to the client.</strong>
+Every path out passes through a read model, and that is the only reason adding a
+column is not a disclosure decision.</p>
+<h2>3. Project structure</h2>
+<div class="hl"><pre><span></span><code>app/
+├── schemas/
+│   ├── order.py        OrderCreate, OrderUpdate, OrderRead — one file per resource
+│   └── common.py       shared base classes and reusable field types
+├── models/
+│   └── order.py        the database model — imported by schemas/, never the reverse
+├── routers/
+│   └── orders.py       declares a response model on every route
+└── errors.py           the validation error handler
+</code></pre></div>
+
+<p><strong>One rule: <code>schemas/</code> may import from <code>models/</code>, and <code>models/</code> may never import
+from <code>schemas/</code>.</strong> The direction is what keeps the database free to change. The
+moment a model imports a schema, a column rename becomes an API change and the
+two layers are one layer with extra files.</p>
+<h2>4. Reference implementation</h2>
+<div class="hl"><pre><span></span><code><span class="c1"># app/schemas/order.py</span>
+<span class="kn">from</span> <span class="nn">datetime</span> <span class="kn">import</span> <span class="n">datetime</span>
+<span class="kn">from</span> <span class="nn">decimal</span> <span class="kn">import</span> <span class="n">Decimal</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Annotated</span><span class="p">,</span> <span class="n">Literal</span>
+<span class="kn">from</span> <span class="nn">pydantic</span> <span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">ConfigDict</span><span class="p">,</span> <span class="n">Field</span><span class="p">,</span> <span class="n">field_serializer</span><span class="p">,</span> <span class="n">model_validator</span>
+
+<span class="n">OrderStatus</span> <span class="o">=</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;pending&quot;</span><span class="p">,</span> <span class="s2">&quot;paid&quot;</span><span class="p">,</span> <span class="s2">&quot;shipped&quot;</span><span class="p">,</span> <span class="s2">&quot;cancelled&quot;</span><span class="p">]</span>
+
+
+<span class="k">class</span> <span class="nc">OrderCreate</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="c1"># extra=&quot;forbid&quot; turns a misspelled or over-eager field into a 422 instead of a</span>
+    <span class="c1"># silent no-op. A client sending &quot;total_cents&quot; deserves to be told it is ignored;</span>
+    <span class="c1"># the default behaviour tells them nothing and they ship believing it worked.</span>
+    <span class="n">model_config</span> <span class="o">=</span> <span class="n">ConfigDict</span><span class="p">(</span><span class="n">extra</span><span class="o">=</span><span class="s2">&quot;forbid&quot;</span><span class="p">)</span>
+
+    <span class="n">product_id</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">quantity</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Field</span><span class="p">(</span><span class="n">gt</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">le</span><span class="o">=</span><span class="mi">1000</span><span class="p">)]</span>
+    <span class="n">note</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Field</span><span class="p">(</span><span class="n">max_length</span><span class="o">=</span><span class="mi">500</span><span class="p">)]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="c1"># No id, no status, no total, no created_at. Not because they are secret, but</span>
+    <span class="c1"># because the client does not get to decide them.</span>
+
+
+<span class="k">class</span> <span class="nc">OrderUpdate</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">model_config</span> <span class="o">=</span> <span class="n">ConfigDict</span><span class="p">(</span><span class="n">extra</span><span class="o">=</span><span class="s2">&quot;forbid&quot;</span><span class="p">)</span>
+
+    <span class="n">quantity</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Field</span><span class="p">(</span><span class="n">gt</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">le</span><span class="o">=</span><span class="mi">1000</span><span class="p">)]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">note</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Field</span><span class="p">(</span><span class="n">max_length</span><span class="o">=</span><span class="mi">500</span><span class="p">)]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span> <span class="nf">changes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+        <span class="c1"># The whole point of PATCH: &quot;field absent&quot; and &quot;field set to null&quot; are</span>
+        <span class="c1"># different instructions. `None` alone cannot tell them apart — model_fields_set</span>
+        <span class="c1"># can, because it records what the client actually sent. Using exclude_unset</span>
+        <span class="c1"># here is equivalent; using `if value is not None` is the bug.</span>
+        <span class="k">return</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">k</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_fields_set</span><span class="p">}</span>
+
+    <span class="nd">@model_validator</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;after&quot;</span><span class="p">)</span>
+    <span class="k">def</span> <span class="nf">not_empty</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;OrderUpdate&quot;</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_fields_set</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;no fields to update&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+
+<span class="k">class</span> <span class="nc">OrderRead</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="c1"># from_attributes lets this be built straight from an ORM row object rather than</span>
+    <span class="c1"># a dict. It reads attributes off whatever it is given — so it cannot pick up a</span>
+    <span class="c1"># column this class does not declare.</span>
+    <span class="n">model_config</span> <span class="o">=</span> <span class="n">ConfigDict</span><span class="p">(</span><span class="n">from_attributes</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="nb">id</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">product_id</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">quantity</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">status</span><span class="p">:</span> <span class="n">OrderStatus</span>
+    <span class="n">total</span><span class="p">:</span> <span class="n">Decimal</span>
+    <span class="n">created_at</span><span class="p">:</span> <span class="n">datetime</span>
+
+    <span class="nd">@field_serializer</span><span class="p">(</span><span class="s2">&quot;total&quot;</span><span class="p">)</span>
+    <span class="k">def</span> <span class="nf">money_as_string</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">Decimal</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="c1"># Decimal to float loses cents at the edges and JSON has no decimal type.</span>
+        <span class="c1"># A string is the only representation every client parses without surprise.</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">value</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">&quot;</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/routers/orders.py</span>
+<span class="kn">from</span> <span class="nn">fastapi</span> <span class="kn">import</span> <span class="n">APIRouter</span><span class="p">,</span> <span class="n">HTTPException</span><span class="p">,</span> <span class="n">status</span>
+<span class="kn">from</span> <span class="nn">app.schemas.order</span> <span class="kn">import</span> <span class="n">OrderCreate</span><span class="p">,</span> <span class="n">OrderRead</span><span class="p">,</span> <span class="n">OrderUpdate</span>
+
+<span class="n">router</span> <span class="o">=</span> <span class="n">APIRouter</span><span class="p">(</span><span class="n">prefix</span><span class="o">=</span><span class="s2">&quot;/orders&quot;</span><span class="p">,</span> <span class="n">tags</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;orders&quot;</span><span class="p">])</span>
+
+
+<span class="c1"># Both the decorator argument and the return annotation are declared. FastAPI will</span>
+<span class="c1"># infer the response model from the annotation if the argument is omitted — so</span>
+<span class="c1"># annotating `-&gt; Order` with the database model quietly reinstates the leak, and</span>
+<span class="c1"># `-&gt; Any` disables filtering altogether. Say it twice and neither can drift.</span>
+<span class="nd">@router</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">response_model</span><span class="o">=</span><span class="n">OrderRead</span><span class="p">,</span> <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_201_CREATED</span><span class="p">)</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">create_order</span><span class="p">(</span><span class="n">payload</span><span class="p">:</span> <span class="n">OrderCreate</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OrderRead</span><span class="p">:</span>
+    <span class="n">row</span> <span class="o">=</span> <span class="k">await</span> <span class="n">service</span><span class="o">.</span><span class="n">create_order</span><span class="p">(</span><span class="n">payload</span><span class="p">)</span>      <span class="c1"># a typed object goes in</span>
+    <span class="k">return</span> <span class="n">OrderRead</span><span class="o">.</span><span class="n">model_validate</span><span class="p">(</span><span class="n">row</span><span class="p">)</span>           <span class="c1"># a declared shape comes out</span>
+
+
+<span class="nd">@router</span><span class="o">.</span><span class="n">patch</span><span class="p">(</span><span class="s2">&quot;/</span><span class="si">{order_id}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">response_model</span><span class="o">=</span><span class="n">OrderRead</span><span class="p">)</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">update_order</span><span class="p">(</span><span class="n">order_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">payload</span><span class="p">:</span> <span class="n">OrderUpdate</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OrderRead</span><span class="p">:</span>
+    <span class="n">row</span> <span class="o">=</span> <span class="k">await</span> <span class="n">service</span><span class="o">.</span><span class="n">update_order</span><span class="p">(</span><span class="n">order_id</span><span class="p">,</span> <span class="n">payload</span><span class="o">.</span><span class="n">changes</span><span class="p">())</span>
+    <span class="k">if</span> <span class="n">row</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_404_NOT_FOUND</span><span class="p">,</span> <span class="s2">&quot;order not found&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">OrderRead</span><span class="o">.</span><span class="n">model_validate</span><span class="p">(</span><span class="n">row</span><span class="p">)</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/errors.py</span>
+<span class="kn">from</span> <span class="nn">fastapi</span> <span class="kn">import</span> <span class="n">Request</span><span class="p">,</span> <span class="n">status</span>
+<span class="kn">from</span> <span class="nn">fastapi.exceptions</span> <span class="kn">import</span> <span class="n">RequestValidationError</span>
+<span class="kn">from</span> <span class="nn">fastapi.responses</span> <span class="kn">import</span> <span class="n">JSONResponse</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">validation_error_handler</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">,</span> <span class="n">exc</span><span class="p">:</span> <span class="n">RequestValidationError</span><span class="p">):</span>
+    <span class="c1"># The default 422 body nests the location as an array and includes the raw input,</span>
+    <span class="c1"># which echoes whatever the client sent back at them — including, on a login route,</span>
+    <span class="c1"># the password they just posted. Flatten it and drop the input.</span>
+    <span class="k">return</span> <span class="n">JSONResponse</span><span class="p">(</span>
+        <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_422_UNPROCESSABLE_ENTITY</span><span class="p">,</span>
+        <span class="n">content</span><span class="o">=</span><span class="p">{</span>
+            <span class="s2">&quot;error&quot;</span><span class="p">:</span> <span class="s2">&quot;validation_failed&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;fields&quot;</span><span class="p">:</span> <span class="p">[</span>
+                <span class="p">{</span>
+                    <span class="s2">&quot;field&quot;</span><span class="p">:</span> <span class="s2">&quot;.&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">err</span><span class="p">[</span><span class="s2">&quot;loc&quot;</span><span class="p">][</span><span class="mi">1</span><span class="p">:])</span> <span class="ow">or</span> <span class="s2">&quot;body&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;message&quot;</span><span class="p">:</span> <span class="n">err</span><span class="p">[</span><span class="s2">&quot;msg&quot;</span><span class="p">],</span>
+                <span class="p">}</span>
+                <span class="k">for</span> <span class="n">err</span> <span class="ow">in</span> <span class="n">exc</span><span class="o">.</span><span class="n">errors</span><span class="p">()</span>
+            <span class="p">],</span>
+        <span class="p">},</span>
+    <span class="p">)</span>
+</code></pre></div>
+
+<h2>5. Golden-standard rules</h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Forbidden:</strong> using one model for both a request body and a response</td>
+<td>It is the entire failure this blueprint exists for. Every column added later becomes public without anyone deciding it should be.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> returning a database row or ORM object from a handler</td>
+<td>Filtering only happens if the declared response shape is narrower than the row. Return the read model explicitly.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> annotating a handler <code>-&gt; Any</code> or <code>-&gt; &lt;database model&gt;</code></td>
+<td>FastAPI infers the response model from the return annotation. Both of these silently disable the protection while looking deliberate.</td>
+</tr>
+<tr>
+<td>Declare the response model in the decorator <em>and</em> the return annotation</td>
+<td>Two statements of the same fact that the type checker keeps in agreement. One alone drifts on the next refactor.</td>
+</tr>
+<tr>
+<td><code>extra="forbid"</code> on every request model</td>
+<td>A field the client thought mattered and the server ignored is a bug report six weeks later. Reject it now, at the boundary, where the message can name it.</td>
+</tr>
+<tr>
+<td>A create model contains only fields the client decides</td>
+<td>Ids, timestamps, totals, statuses and ownership are computed. A field present on the model is a field a client may set, whatever the documentation says.</td>
+</tr>
+<tr>
+<td>PATCH uses what was sent, not what is non-null</td>
+<td><code>None</code> cannot distinguish "leave it alone" from "clear it". <code>model_fields_set</code> or <code>exclude_unset</code> can. Treating them as the same makes it impossible to clear a nullable field.</td>
+</tr>
+<tr>
+<td>Money is a decimal in, a string out</td>
+<td>Binary floats cannot represent cents exactly and JSON has no decimal type. Serialising through float loses money at the boundaries and nothing raises.</td>
+</tr>
+<tr>
+<td>Validation errors never echo the submitted value</td>
+<td>The default handler includes the input. On an authentication route that is the password, on a payments route the card details — travelling to whatever collects your logs.</td>
+</tr>
+<tr>
+<td>Enumerations are a closed type, not <code>str</code></td>
+<td>A status field typed <code>str</code> accepts <code>"shiped"</code> and stores it. The set is known; write it down.</td>
+</tr>
+<tr>
+<td>One schema file per resource, importing models, never imported by them</td>
+<td>The import direction is what lets the table change without changing the API.</td>
+</tr>
+</tbody>
+</table>
+<h2>6. Data contracts</h2>
+<div class="hl"><pre><span></span><code><span class="k">class</span> <span class="nc">OrderCreate</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">quantity</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Field</span><span class="p">(</span><span class="n">gt</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">le</span><span class="o">=</span><span class="mi">1000</span><span class="p">)]</span>
+    <span class="c1"># not int — 0 and -5 are valid ints and neither is a valid order</span>
+
+<span class="k">class</span> <span class="nc">OrderRead</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">status</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;pending&quot;</span><span class="p">,</span> <span class="s2">&quot;paid&quot;</span><span class="p">,</span> <span class="s2">&quot;shipped&quot;</span><span class="p">,</span> <span class="s2">&quot;cancelled&quot;</span><span class="p">]</span>
+    <span class="c1"># not str — the set is closed, and a typo must fail rather than persist</span>
+    <span class="n">total</span><span class="p">:</span> <span class="n">Decimal</span>
+    <span class="c1"># not float — cents do not survive binary floating point</span>
+</code></pre></div>
+
+<p>Pydantic coerces by default: the string <code>"123"</code> arriving in an <code>int</code> field becomes
+<code>123</code>, and <code>"2000-01-01"</code> becomes a date. That is usually what you want from a
+query string, where everything is a string anyway. It is usually not what you want
+from a JSON body, where the client had a real integer available and sent a string
+instead — which means their serialiser is doing something you should know about.
+Turn on strict mode per field where the distinction matters rather than globally,
+because global strictness breaks path and query parameters first.</p>
+<h2>7. Build order</h2>
+<ol>
+<li><strong>Split the most exposed resource into three models</strong> — create, update, read —
+   and prove the split with a test asserting a known internal field is absent from
+   the serialised response. One resource, end to end, before touching the rest.</li>
+<li><strong>Declare the response model on every route</strong> in the decorator and the return
+   annotation, and add the check from §11 that fails if a route has neither.</li>
+<li><strong>Add <code>extra="forbid"</code></strong> to request models and confirm an unknown field is a
+   422 rather than silence.</li>
+<li><strong>Fix PATCH</strong> to apply only what was sent, with a test that clears a nullable
+   field to null and another that omits it and leaves it unchanged.</li>
+<li><strong>Replace the validation error handler</strong> and assert the submitted value is
+   absent from the response body.</li>
+<li><strong>Tighten the types</strong> — closed enumerations, bounded numbers, decimals for
+   money, serialisers where the wire format differs from the internal one.</li>
+<li><strong>Roll the split across the remaining resources.</strong></li>
+</ol>
+<p>Step 1 first because the leak is the risk. Everything after it is refinement of a
+boundary that already exists, and refinements are cheap to postpone.</p>
+<h2>8. Blocks to pull in</h2>
+<p>Nothing here is a prerequisite. These are adjacent problems, by name only —
+resolve them separately if they apply.</p>
+<ul>
+<li>Input validation at the API boundary — the general principle, for inputs that are not HTTP bodies</li>
+<li>Error envelope — one response shape for every failure, not only validation</li>
+<li>Typed config and settings — validation at startup rather than per request</li>
+<li>FastAPI routing — where these schemas get attached to versioned routes</li>
+<li>SQLAlchemy ORM layer — the models these read schemas are built from</li>
+</ul>
+<h2>9. Metrics</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Routes returning a response object with no declared model</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Models used on both the request and the response side</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Internal fields reachable in any documented response</td>
+<td>0, asserted by a test per resource</td>
+</tr>
+<tr>
+<td>Validation error responses containing the submitted value</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Added latency from validation on a typical body</td>
+<td>&lt; 1 ms</td>
+</tr>
+</tbody>
+</table>
+<h2>10. Failure modes</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A field nobody meant to publish appears in an API response after a migration</td>
+<td>One model shared between the table and the response; the column joined the public shape when it joined the model</td>
+<td>Split into a read model that lists exposed fields explicitly</td>
+</tr>
+<tr>
+<td>A client sets a field that should be computed — a price, a status, an owner — and the server accepts it</td>
+<td>The create model has a field for it. Documentation saying it is read-only is not enforcement</td>
+<td>Remove the field from the create model; assign it in the service</td>
+</tr>
+<tr>
+<td>The response model is declared and a private field still comes through</td>
+<td>The handler is annotated <code>-&gt; Any</code> or <code>-&gt; &lt;database model&gt;</code>, and the annotation wins</td>
+<td>Annotate the read model, and add the §11 check so it cannot regress</td>
+</tr>
+<tr>
+<td>Clearing an optional field to null is impossible through PATCH</td>
+<td>The handler applies <code>if value is not None</code>, which cannot see the difference between absent and null</td>
+<td>Apply <code>model_fields_set</code> or <code>model_dump(exclude_unset=True)</code></td>
+</tr>
+<tr>
+<td>A PATCH with an empty body succeeds and updates nothing, returning 200</td>
+<td>No model validator rejecting an update with no fields set</td>
+<td>Reject it — a no-op that reports success hides a client bug for months</td>
+</tr>
+<tr>
+<td>A generated client SDK disagrees with the server about which response fields are optional</td>
+<td>Input and output schemas are generated separately, and a defaulted field is optional on input but always present on output — sharing one model makes the two contradict</td>
+<td>Separate the models; if SDK stability forces one schema, set the framework flag deliberately and write down why</td>
+</tr>
+<tr>
+<td>Money is off by a cent, occasionally, on large orders</td>
+<td><code>Decimal</code> serialised through <code>float</code> on the way out</td>
+<td>Serialise money as a string, and keep it decimal everywhere inside</td>
+</tr>
+<tr>
+<td>A password or card number appears in the log aggregator, attached to a 422</td>
+<td>The default validation error body echoes the submitted input</td>
+<td>Replace the handler and drop the input field</td>
+</tr>
+<tr>
+<td>A status column contains a typo like <code>"shiped"</code> for one row</td>
+<td>The field is typed <code>str</code>, so the value validated</td>
+<td>Close the type with <code>Literal</code> or an enum</td>
+</tr>
+</tbody>
+</table>
+<h2>11. Definition of done</h2>
+<ul>
+<li class="task">No model class is used both as a request body type and as a response model, verified by a test or a static check that names any that are</li>
+<li class="task">Every route declares a response model in the decorator and a matching return annotation; a route with neither fails a test that walks the app's routes</li>
+<li class="task">For each resource, a test asserts that a named internal field present on the database model is absent from the serialised response</li>
+<li class="task">Posting an unknown field to a create endpoint returns 422 and names the field</li>
+<li class="task">Posting a field the client must not decide — an id, a total, a status — returns 422 rather than being accepted or silently dropped</li>
+<li class="task">A PATCH that omits a nullable field leaves it unchanged, and a PATCH that sends it as null clears it; both covered by tests</li>
+<li class="task">A PATCH with an empty body is rejected rather than returning success</li>
+<li class="task">A validation error response contains the field path and the rule, and does not contain the submitted value, asserted by a test that posts a recognisable secret</li>
+<li class="task">Every enumerated field is a closed type, and a value outside the set is rejected at the boundary</li>
+<li class="task">Monetary values are decimal internally and strings on the wire, with a test covering a value that is not exactly representable as a float</li>
+<li class="task"><code>models/</code> contains no import from <code>schemas/</code>, checked in CI</li>
+</ul>
+  </article>
+
+  <aside class="tailpiece">
+    <h2>Use this blueprint</h2>
+    <p>
+      Copy the file into your project and point your agent at it. It works with Claude Code,
+      Cursor, Copilot, ChatGPT and anything else that reads a file — there is nothing to install.
+    </p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/pydantic-schemas" target="_blank" rel="noopener">Open on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Browse all blueprints</a>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p><a href="/">Awesome Blueprints</a> — same request, same architecture, every time.</p>
+    <p class="dim">MIT · awesomeblueprints.com</p>
+  </div>
+</footer>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'neutral' });
+</script>
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const now = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', now);
+    try { localStorage.setItem('ab-theme', now); } catch (e) {}
+    location.reload();   // the diagram is themed at render time
+  });
+</script>
+
+</body>
+</html>

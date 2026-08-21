@@ -1,0 +1,539 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Pydantic Settings: Typed Configuration — Blueprint for AI Coding Agents | Awesome Blueprints</title>
+<meta name="description" content="Pydantic Settings for typed configuration: environment variables validated at startup, so a missing key is a failed deploy, not a 3am surprise." />
+<link rel="canonical" href="https://awesomeblueprints.com/blueprints/pydantic-settings/" />
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="Awesome Blueprints" />
+<meta property="og:url" content="https://awesomeblueprints.com/blueprints/pydantic-settings/" />
+<meta property="og:title" content="Pydantic Settings: Typed Configuration — Architecture Blueprint" />
+<meta property="og:description" content="Pydantic Settings for typed configuration: environment variables validated at startup, so a missing key is a failed deploy, not a 3am surprise." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Pydantic Settings: Typed Configuration — Architecture Blueprint" />
+<meta name="twitter:description" content="Pydantic Settings for typed configuration: environment variables validated at startup, so a missing key is a failed deploy, not a 3am surprise." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/page.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "Pydantic Settings: Typed Configuration", "description": "Pydantic Settings for typed configuration: environment variables validated at startup, so a missing key is a failed deploy, not a 3am surprise.", "url": "https://awesomeblueprints.com/blueprints/pydantic-settings/", "dateModified": "2026-08-19", "keywords": "Python", "isAccessibleForFree": true, "license": "https://opensource.org/licenses/MIT", "publisher": {"@type": "Organization", "name": "Awesome Blueprints", "url": "https://awesomeblueprints.com"}}</script>
+<script>
+  (function () {
+    var t;
+    try { t = localStorage.getItem('ab-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">Awesome Blueprints</a>
+    <div class="nav-right">
+      <a class="nav-link" href="/#blueprints">Catalogue</a>
+      <a class="nav-link" href="/#faq">FAQ</a>
+      <a class="nav-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/pydantic-settings" target="_blank" rel="noopener">GitHub ↗</a>
+      <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Switch theme">◑</button>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/">Home</a> <span>/</span> <a href="/#blueprints">Blueprints</a> <span>/</span>
+    <span>Pydantic Settings: Typed Configuration</span>
+  </nav>
+
+  <header class="page-head">
+    <p class="eyebrow">pydantic-settings</p>
+    <h1>Pydantic Settings: Typed Configuration</h1>
+    <p class="lede">Pydantic Settings for typed configuration: environment variables validated at startup, so a missing key is a failed deploy, not a 3am surprise.</p>
+    <div class="facts"><span>low</span><span>1 day</span><span>Verified 2026-08-19</span></div>
+    <div class="tags"><span class="tag">Python</span></div>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/pydantic-settings" target="_blank" rel="noopener">Read it on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Back to the catalogue</a>
+    </div>
+  </header>
+
+  <article class="doc">
+<blockquote>
+<p>Configuration read once, validated once, at startup — so a missing or malformed
+value stops the process before it serves a request, instead of surfacing two
+hours later as a 500 on whichever endpoint happens to touch it first.</p>
+</blockquote>
+<p><strong>Complexity:</strong> low · <strong>Typical build:</strong> 1 day · <strong>Verified:</strong> 2026-08-19 (re-check after ~90 days)</p>
+<p><strong>Examples in:</strong> Python, with <code>pydantic-settings</code> and FastAPI. The architecture is language-agnostic: sections 5, 10 and 11 hold wherever you build this. Section 4 is illustrative — if your project is in another language, your agent translates the idioms rather than importing them, and nothing is lost. The equivalents are Zod's <code>.parse(process.env)</code> in TypeScript, <code>envconfig</code> in Go, <code>Ecto.Changeset</code> over <code>System.get_env</code> in Elixir, and <code>config</code> + a validation callback in Rails.</p>
+<p><strong>Use when:</strong> anything about how the app behaves comes from outside the code — a database URL, an API key, a feature flag, a timeout, a bucket name — and you want it wrong-or-missing to be a failed deploy rather than a runtime surprise.</p>
+<p><strong>Not for:</strong> values that change while the process is running — feature flags flipped from a dashboard, per-tenant overrides, anything polled or pushed. Those are a runtime store with its own cache and invalidation, and freezing them into a settings object at startup is how a flag stops responding. Also not for validating user input; that arrives per request and belongs at the request boundary.</p>
+<hr />
+<h2>⚙️ INSTRUCTIONS FOR THE AI — READ BEFORE WRITING ANY CODE</h2>
+<p><strong>Do not start coding.</strong></p>
+<p><strong>Step 1 — Refresh.</strong> Verify the current <code>pydantic-settings</code> major version and its
+migration notes — <code>BaseSettings</code> moved out of <code>pydantic</code> core at v2 and the config
+mechanism changed from an inner <code>class Config</code> to <code>SettingsConfigDict</code>, so any
+example you have seen may be for the wrong major. Confirm that these still exist
+and behave as described here: <code>env_ignore_empty</code>, <code>env_nested_delimiter</code>,
+<code>secrets_dir</code>, <code>validate_default</code>, <code>settings_customise_sources</code>. Check whether the
+reported bug where <code>Field(validation_alias=...)</code> lets a <code>.env</code> value take
+precedence over a real environment variable is fixed in the version you install —
+if it is not, §5 forbids that combination for a reason. Report what you verified
+and what turned out to be wrong.</p>
+<p><strong>Step 2 — Read the project, then audit what already exists.</strong> Find every place
+the process reads its environment: <code>os.environ</code>, <code>os.getenv</code>, <code>load_dotenv</code>,
+<code>django.conf.settings</code>, a <code>config.py</code>, a <code>constants.py</code>, a bare <code>dict</code> of
+defaults. List them with file and line. Find any <code>.env</code>, <code>.env.example</code>,
+<code>docker-compose.yml</code>, Helm values or CI secret definition, and note which keys
+each supplies. Then audit §11 item by item, each marked <em>already true</em>, <em>partly
+true</em> or <em>absent</em>, with the file that decides it, reported before anything is
+proposed.</p>
+<p>Assume the project is right until it demonstrably is not; code satisfying an item
+stays even where its shape differs from §4; replacing something that works needs a
+one-line reason; never delete a working path to make room for the blueprint's
+version. The same holds for language — §4 is illustrative, its idioms get
+translated into the project's language, and §11 is what has to become true rather
+than the syntax.</p>
+<p><strong>Step 3 — Write a plan for the gap only, and get it approved</strong>, including a
+<code>## Proposed stack</code> section naming the settings library and the version verified
+in Step 1, with a one-line reason. Do not ask open framework questions — propose,
+and ask for confirmation once. Say what you are adding, what you are leaving
+alone, and what you propose to change, and touch nothing else. If the project
+already has a config module, the plan is to tighten it, not to replace it.</p>
+<p><strong>Step 4 — Build in the order in §7.</strong> <strong>Step 5 — §11 is the definition of done.</strong></p>
+<hr />
+<h2>1. Why reading the environment where you need it fails</h2>
+<p>The obvious version is <code>os.getenv("DATABASE_URL")</code> at the point of use. It works
+on the first day and fails in four specific ways afterwards.</p>
+<table>
+<thead>
+<tr>
+<th>Reading the environment at the point of use</th>
+<th>Parsing it once at startup</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A missing variable is discovered when the first request reaches that line — possibly hours after deploy, possibly only on the payment path</td>
+<td>A missing variable stops the process before it binds a port; the deploy fails and the old version keeps serving</td>
+</tr>
+<tr>
+<td>Every value is a string; <code>"0"</code>, <code>"false"</code> and <code>""</code> are all truthy</td>
+<td>Every value is the declared type, and a value that cannot be coerced is a startup error naming the field</td>
+</tr>
+<tr>
+<td>Nobody can list what the app needs — the answer is spread across forty files</td>
+<td>One class is the exhaustive list, and it is the thing you hand a new deployer</td>
+</tr>
+<tr>
+<td><code>getenv("TIMEOUT", 30)</code> in three files with three different defaults</td>
+<td>One default, in one place, with a type</td>
+</tr>
+</tbody>
+</table>
+<p>The fourth row is the one that costs the most and gets noticed the least. Two
+modules disagreeing about a default is not an error anywhere; it is a system that
+behaves differently depending on which code path you entered through.</p>
+<p>The property that makes this work is not the types. It is that <strong>the whole
+configuration is resolved before anything else runs.</strong> A settings object built
+lazily on first use has moved the failure later, which is the entire problem.</p>
+<h2>2. Architecture</h2>
+<pre class="mermaid">%% GENERATED - do not edit by hand.
+%% Edit the source header in architecture.mmd, then rebuild.
+%% Typed configuration resolved at startup
+
+flowchart TB
+    subgraph inputs[&quot;Configuration inputs&quot;]
+        direction TB
+        procenv{{&quot;Process environment&quot;}}
+        dotfile{{&quot;.env file, development only&quot;}}
+        secretfiles{{&quot;Mounted secret files&quot;}}
+    end
+    subgraph resolve[&quot;Resolved once, at import&quot;]
+        direction TB
+        sources[&quot;Source precedence&quot;]
+        settings[&quot;Settings class, typed fields&quot;]
+        checks[&quot;Field and cross field validation&quot;]
+        instance[&quot;One frozen instance&quot;]
+    end
+    subgraph consume[&quot;Application&quot;]
+        direction TB
+        startup[&quot;Startup and lifespan&quot;]
+        provider[&quot;Settings provider&quot;]
+        routes[&quot;Route handlers&quot;]
+        clients[&quot;Database and third party clients&quot;]
+    end
+
+    operator([&quot;Operator or deploy pipeline&quot;])
+    halt([&quot;Process exits non zero&quot;])
+
+    operator --- procenv
+    operator --- secretfiles
+    procenv --&gt;|&quot;highest priority&quot;| sources
+    dotfile --&gt;|&quot;lowest, never in production&quot;| sources
+    secretfiles --&gt;|&quot;one file per secret&quot;| sources
+    sources --&gt;|&quot;merged in a fixed order&quot;| settings
+    settings --&gt;|&quot;types, ranges, cross field rules&quot;| checks
+    checks -.-&gt;|&quot;missing or invalid, before the port is bound&quot;| halt
+    checks --&gt;|&quot;every field known good&quot;| instance
+    instance --- startup
+    startup --- clients
+    instance --- provider
+    provider --- routes
+
+    classDef service fill:#eff6ff,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b;
+    classDef datastore fill:#e9faf3,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b;
+    classDef external fill:#fff4ed,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b;
+    classDef actor fill:#f0eefc,stroke:#4a3aa7,stroke-width:1.5px,color:#0b0b0b;
+    class sources,settings,checks,instance,startup,provider,routes,clients service;
+    class procenv,dotfile,secretfiles external;
+    class operator,halt actor;</pre>
+<p>The rule the diagram encodes: there is exactly one arrow out of validation into
+the application, and one out of it into a dead process. Nothing downstream of
+<code>instance</code> can observe a half-valid configuration, because no such state is
+reachable.</p>
+<h2>3. Project structure</h2>
+<div class="hl"><pre><span></span><code>app/
+├── config.py          the Settings class and the provider — the only file that reads the environment
+├── main.py            imports settings at module level; startup fails here or not at all
+├── deps.py            the provider wired as a framework dependency
+└── ...
+.env.example           every key, with a safe placeholder value — committed
+.env                   local only — git-ignored
+</code></pre></div>
+
+<p><strong>One rule: <code>os.environ</code> and <code>os.getenv</code> appear in exactly one file.</strong> Enforce it
+with a lint rule or a grep in CI, not with discipline. The moment a second file
+reads the environment directly, the Settings class stops being the exhaustive
+list of what the app needs, and the <code>.env.example</code> you hand a new deployer is
+quietly wrong.</p>
+<h2>4. Reference implementation</h2>
+<div class="hl"><pre><span></span><code><span class="c1"># app/config.py</span>
+<span class="kn">from</span> <span class="nn">functools</span> <span class="kn">import</span> <span class="n">lru_cache</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Literal</span>
+<span class="kn">from</span> <span class="nn">pydantic</span> <span class="kn">import</span> <span class="n">Field</span><span class="p">,</span> <span class="n">PostgresDsn</span><span class="p">,</span> <span class="n">SecretStr</span><span class="p">,</span> <span class="n">field_validator</span><span class="p">,</span> <span class="n">model_validator</span>
+<span class="kn">from</span> <span class="nn">pydantic_settings</span> <span class="kn">import</span> <span class="n">BaseSettings</span><span class="p">,</span> <span class="n">SettingsConfigDict</span>
+
+
+<span class="k">class</span> <span class="nc">Settings</span><span class="p">(</span><span class="n">BaseSettings</span><span class="p">):</span>
+    <span class="n">model_config</span> <span class="o">=</span> <span class="n">SettingsConfigDict</span><span class="p">(</span>
+        <span class="n">env_file</span><span class="o">=</span><span class="s2">&quot;.env&quot;</span><span class="p">,</span>              <span class="c1"># development convenience; absent in production</span>
+        <span class="n">env_file_encoding</span><span class="o">=</span><span class="s2">&quot;utf-8&quot;</span><span class="p">,</span>
+        <span class="n">env_nested_delimiter</span><span class="o">=</span><span class="s2">&quot;__&quot;</span><span class="p">,</span>    <span class="c1"># NOT &quot;_&quot;: a single underscore mis-assigns any</span>
+                                      <span class="c1"># field whose own name contains one, and collides</span>
+                                      <span class="c1"># with ordinary variables like USER</span>
+        <span class="n">env_ignore_empty</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>        <span class="c1"># FOO= means &quot;unset&quot;, not &quot;empty string&quot; — without</span>
+                                      <span class="c1"># this, one blank line in a compose file overrides</span>
+                                      <span class="c1"># the default with &quot;&quot;</span>
+        <span class="n">case_sensitive</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">extra</span><span class="o">=</span><span class="s2">&quot;forbid&quot;</span><span class="p">,</span>               <span class="c1"># an unknown ORDERS_* key is a typo, and a typo in a</span>
+                                      <span class="c1"># config key is silently the default value forever</span>
+        <span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>                  <span class="c1"># nothing mutates settings at runtime; if something</span>
+                                      <span class="c1"># needs to, it is not configuration (see Not for)</span>
+    <span class="p">)</span>
+
+    <span class="c1"># No default: this is what makes a missing value a failed startup rather than a</span>
+    <span class="c1"># connection to nowhere. Give a default only where the default is genuinely correct</span>
+    <span class="c1"># in production, not merely convenient in development.</span>
+    <span class="n">database_url</span><span class="p">:</span> <span class="n">PostgresDsn</span>
+    <span class="n">payment_api_key</span><span class="p">:</span> <span class="n">SecretStr</span>        <span class="c1"># __repr__ prints &#39;**********&#39;, so an accidental</span>
+                                      <span class="c1"># log of the settings object cannot leak it</span>
+    <span class="n">environment</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;development&quot;</span>
+    <span class="n">request_timeout_seconds</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="mf">5.0</span><span class="p">,</span> <span class="n">gt</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">le</span><span class="o">=</span><span class="mi">60</span><span class="p">)</span>
+    <span class="n">allowed_origins</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">list</span><span class="p">)</span>
+
+    <span class="nd">@field_validator</span><span class="p">(</span><span class="s2">&quot;environment&quot;</span><span class="p">)</span>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">known_environment</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">v</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">v</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&quot;development&quot;</span><span class="p">,</span> <span class="s2">&quot;staging&quot;</span><span class="p">,</span> <span class="s2">&quot;production&quot;</span><span class="p">}:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;unknown environment </span><span class="si">{</span><span class="n">v</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">v</span>
+
+    <span class="nd">@model_validator</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;after&quot;</span><span class="p">)</span>
+    <span class="k">def</span> <span class="nf">production_is_locked_down</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;Settings&quot;</span><span class="p">:</span>
+        <span class="c1"># Cross-field rules are the ones a per-field type cannot express, and they are</span>
+        <span class="c1"># where the expensive mistakes live. This one turns &quot;we shipped the dev CORS</span>
+        <span class="c1"># config to production&quot; from an incident into a failed deploy.</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">environment</span> <span class="o">==</span> <span class="s2">&quot;production&quot;</span> <span class="ow">and</span> <span class="s2">&quot;*&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">allowed_origins</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;allowed_origins cannot contain &#39;*&#39; in production&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+
+<span class="nd">@lru_cache</span>
+<span class="k">def</span> <span class="nf">get_settings</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">Settings</span><span class="p">:</span>
+    <span class="c1"># Cached because constructing it re-reads .env from disk. The cache is also what</span>
+    <span class="c1"># lets tests swap the whole object: clear it, or override the dependency.</span>
+    <span class="k">return</span> <span class="n">Settings</span><span class="p">()</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/main.py</span>
+<span class="kn">from</span> <span class="nn">fastapi</span> <span class="kn">import</span> <span class="n">FastAPI</span>
+<span class="kn">from</span> <span class="nn">app.config</span> <span class="kn">import</span> <span class="n">get_settings</span>
+
+<span class="c1"># Module level, deliberately. Import fails -&gt; the process never binds a port -&gt; the</span>
+<span class="c1"># orchestrator sees a crash-looping container and keeps the previous version serving.</span>
+<span class="c1"># Deferring this into a startup hook means the port is already open when it fails.</span>
+<span class="n">settings</span> <span class="o">=</span> <span class="n">get_settings</span><span class="p">()</span>
+
+<span class="n">app</span> <span class="o">=</span> <span class="n">FastAPI</span><span class="p">()</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># tests/conftest.py</span>
+<span class="kn">import</span> <span class="nn">pytest</span>
+<span class="kn">from</span> <span class="nn">app.config</span> <span class="kn">import</span> <span class="n">get_settings</span>
+<span class="kn">from</span> <span class="nn">app.main</span> <span class="kn">import</span> <span class="n">app</span>
+
+
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span>
+<span class="k">def</span> <span class="nf">override_settings</span><span class="p">():</span>
+    <span class="k">def</span> <span class="nf">_override</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="c1"># lru_cache is a global; a test that constructs Settings without clearing it</span>
+        <span class="c1"># gets whichever object the first test happened to build. Clear, then override.</span>
+        <span class="n">get_settings</span><span class="o">.</span><span class="n">cache_clear</span><span class="p">()</span>
+        <span class="n">app</span><span class="o">.</span><span class="n">dependency_overrides</span><span class="p">[</span><span class="n">get_settings</span><span class="p">]</span> <span class="o">=</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">Settings</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+    <span class="k">yield</span> <span class="n">_override</span>
+    <span class="n">app</span><span class="o">.</span><span class="n">dependency_overrides</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+    <span class="n">get_settings</span><span class="o">.</span><span class="n">cache_clear</span><span class="p">()</span>
+</code></pre></div>
+
+<h2>5. Golden-standard rules</h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Exactly one module reads the environment</td>
+<td>It is the only way the Settings class stays the exhaustive list of what the app needs. Enforce in CI, not by review.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> a default on any value that has no safe production value</td>
+<td>A default on <code>DATABASE_URL</code> or an API key converts a failed deploy into a running app pointed at the wrong thing, or at nothing. That is strictly worse than crashing.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> reading <code>.env</code> in production</td>
+<td>Precedence between file and environment has had real bugs, and a file that exists on one host and not another produces environment-specific behaviour nobody can reproduce. Ship real environment variables or mounted secret files.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> a single underscore as the nested delimiter</td>
+<td>It mis-assigns any field whose own name contains an underscore, and tries to JSON-parse ordinary variables like <code>USER</code>. Use <code>__</code>.</td>
+</tr>
+<tr>
+<td>Empty means unset</td>
+<td><code>FOO=</code> is one blank line in a compose file or a CI variable never filled in. Treated as a value it overrides your default with <code>""</code>, and <code>""</code> is truthy in every string check you will write.</td>
+</tr>
+<tr>
+<td>Unknown keys are an error</td>
+<td><code>extra="forbid"</code>. A misspelled key is not a missing feature, it is a value silently stuck at its default, and nothing will ever tell you.</td>
+</tr>
+<tr>
+<td>Secrets are a secret type, not <code>str</code></td>
+<td>Repr masking is what stops a settings object reaching a log aggregator intact. It is not encryption and does not pretend to be.</td>
+</tr>
+<tr>
+<td>Settings are frozen</td>
+<td>A mutable settings object invites request-scoped mutation, which makes behaviour depend on request order. If a value must change at runtime it is not configuration.</td>
+</tr>
+<tr>
+<td>Cross-field rules go in a model validator</td>
+<td>"Production may not use <code>*</code> origins" cannot be expressed as a field type, and rules of that shape are where the costly misconfigurations are.</td>
+</tr>
+<tr>
+<td>Every key appears in a committed <code>.env.example</code></td>
+<td>It is the only artefact that tells a new deployer what to supply. Generate it from the Settings class in CI so it cannot drift.</td>
+</tr>
+<tr>
+<td>Fail before binding the port</td>
+<td>Validating in a startup hook means the health check may pass, the load balancer may route, and only then does it fail. Import-time is earlier than every one of those.</td>
+</tr>
+</tbody>
+</table>
+<h2>6. Data contracts</h2>
+<div class="hl"><pre><span></span><code><span class="k">class</span> <span class="nc">Settings</span><span class="p">(</span><span class="n">BaseSettings</span><span class="p">):</span>
+    <span class="n">database_url</span><span class="p">:</span> <span class="n">PostgresDsn</span>                  <span class="c1"># not str — a malformed URL fails here,</span>
+                                               <span class="c1"># not on first connection</span>
+    <span class="n">payment_api_key</span><span class="p">:</span> <span class="n">SecretStr</span>                 <span class="c1"># not str — repr is masked</span>
+    <span class="n">request_timeout_seconds</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">gt</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">le</span><span class="o">=</span><span class="mi">60</span><span class="p">)</span>
+                                               <span class="c1"># not float — float() happily accepts</span>
+                                               <span class="c1"># &quot;0&quot; and &quot;-1&quot;, and a zero timeout</span>
+                                               <span class="c1"># means every request fails at once</span>
+    <span class="n">environment</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;development&quot;</span><span class="p">,</span> <span class="s2">&quot;staging&quot;</span><span class="p">,</span> <span class="s2">&quot;production&quot;</span><span class="p">]</span>
+                                               <span class="c1"># not str — the set is closed and known</span>
+</code></pre></div>
+
+<p>The constraint belongs in the type, not in a comment and not in a check at the
+call site. A <code>float</code> with <code>gt=0</code> cannot reach the HTTP client as zero; a <code>float</code>
+documented as "must be positive" reaches it as zero the first time someone sets
+<code>REQUEST_TIMEOUT_SECONDS=0</code> to "disable the timeout for debugging" — and
+every outbound call then fails instantly, which reads as the third party
+being down.</p>
+<h2>7. Build order</h2>
+<ol>
+<li><strong>One <code>Settings</code> class with the two or three values that have no safe default.</strong>
+   Import it in <code>main.py</code> at module level. Run with the variables unset and
+   confirm the process exits non-zero and names every missing field at once.</li>
+<li><strong>Add <code>.env</code> for development and <code>.env.example</code> committed.</strong> Confirm a real
+   environment variable beats the file.</li>
+<li><strong>Tighten the types</strong> — DSN, <code>SecretStr</code>, <code>Literal</code>, bounded numbers — and
+   confirm each rejects a bad value at startup rather than at use.</li>
+<li><strong>Add the cross-field validators.</strong> Set <code>ENVIRONMENT=production</code> with a
+   development-shaped config and confirm it refuses to start.</li>
+<li><strong>Wire the provider as a framework dependency</strong> and the test override. Prove a
+   test can run against different settings without touching the environment.</li>
+<li><strong>Add the CI check</strong> that <code>os.environ</code> appears in one file only, and that
+   <code>.env.example</code> lists every field.</li>
+</ol>
+<p>Step 1 before step 3 on purpose: the failure this blueprint exists to prevent is
+"it started without the value", and that has to be demonstrated failing and then
+passing before any effort goes into type refinement.</p>
+<h2>8. Blocks to pull in</h2>
+<p>Nothing here is a prerequisite. These are adjacent problems, by name only —
+resolve them separately if they apply.</p>
+<ul>
+<li>Input validation at the API boundary — the same discipline for data arriving per request</li>
+<li>Error envelope — how a configuration error is reported if it must be surfaced over HTTP</li>
+<li>Docker Compose dev environment — where <code>.env</code> and service environment blocks interact</li>
+<li>GitHub Actions CD — where the production values actually come from</li>
+<li>Postgres integration — the first consumer of a validated DSN</li>
+</ul>
+<h2>9. Metrics</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Time from process start to configuration failure</td>
+<td>&lt; 1s, and before the port is bound</td>
+</tr>
+<tr>
+<td>Missing variables reported per failed start</td>
+<td>All of them, in one error — not the first</td>
+</tr>
+<tr>
+<td>Files reading the environment directly</td>
+<td>1</td>
+</tr>
+<tr>
+<td>Config keys in the Settings class but absent from <code>.env.example</code></td>
+<td>0, checked in CI</td>
+</tr>
+<tr>
+<td>Production deploys rolled back for a missing or malformed config value</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<h2>10. Failure modes</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>App runs for two hours, then one endpoint 500s with a connection error to <code>None</code></td>
+<td>A default of <code>None</code> or <code>""</code> on a value with no safe default; the app started happily and failed on first use</td>
+<td>Remove the default. A required field with no default is the whole mechanism.</td>
+</tr>
+<tr>
+<td>A config value is mysteriously <code>""</code> in one environment and correct elsewhere</td>
+<td>The variable is declared but empty — a blank compose line, or a CI secret that was never filled in. Empty is a value, not an absence</td>
+<td><code>env_ignore_empty=True</code>, and assert non-empty in the type where blank is never valid</td>
+</tr>
+<tr>
+<td>A nested setting silently keeps its default no matter what you export</td>
+<td>Single-underscore nested delimiter, and the field name contains an underscore — the variable is being assigned to a different field</td>
+<td>Use <code>__</code> as the delimiter</td>
+</tr>
+<tr>
+<td>Startup crashes with a JSON parse error naming a variable you never set, like <code>USER</code></td>
+<td>Single-underscore delimiter made pydantic treat an ordinary shell variable as a nested submodel and try to parse it as JSON</td>
+<td>Use <code>__</code>, and set <code>env_prefix</code> so only your own variables are considered</td>
+</tr>
+<tr>
+<td>A value from <code>.env</code> wins over the real environment variable in production</td>
+<td>An <code>.env</code> file present on the host, combined with <code>Field(validation_alias=...)</code> where the documented precedence has been reported to invert</td>
+<td>Do not ship <code>.env</code> to production at all — that removes the whole class. Verify the alias behaviour in your installed version if you must use aliases.</td>
+</tr>
+<tr>
+<td>An API key appears in an error-tracking payload</td>
+<td>The settings object was logged, or included in an exception context, as a plain <code>str</code></td>
+<td><code>SecretStr</code>, and never log the settings object even so</td>
+</tr>
+<tr>
+<td>Tests pass alone and fail together, or the second test sees the first test's config</td>
+<td><code>lru_cache</code> on the provider is process-global and was never cleared between tests</td>
+<td><code>cache_clear()</code> in the fixture teardown, and override the dependency rather than mutating the environment</td>
+</tr>
+<tr>
+<td>A misspelled variable name has no effect and no error</td>
+<td>Extra keys ignored by default; the field kept its default value</td>
+<td><code>extra="forbid"</code></td>
+</tr>
+</tbody>
+</table>
+<h2>11. Definition of done</h2>
+<ul>
+<li class="task">Starting the process with a required variable unset exits non-zero, before any port is bound, and the error names the field</li>
+<li class="task">Starting with several required variables unset reports all of them in one error, not the first</li>
+<li class="task">A malformed value of a typed field — a non-URL DSN, a negative timeout, an unknown environment name — fails at startup with the field named</li>
+<li class="task">A cross-field rule is enforced: a production-marked config with a development-shaped value refuses to start, covered by a test</li>
+<li class="task"><code>grep -rn "os.environ\|os.getenv"</code> over the application source returns hits in exactly one file, and CI fails if that changes</li>
+<li class="task">An unknown or misspelled configuration key causes a startup error rather than being ignored</li>
+<li class="task">Every secret-typed field renders masked in <code>repr()</code>, verified by a test that asserts the raw value is absent from the formatted settings object</li>
+<li class="task"><code>.env.example</code> contains every field in the Settings class, verified by a test or a CI step rather than by review</li>
+<li class="task"><code>.env</code> is git-ignored, and no <code>.env</code> is present in the production image or host</li>
+<li class="task">A test can run the application against different settings without setting process environment variables</li>
+<li class="task">Running the full test suite in a random order produces the same results as running it in file order</li>
+</ul>
+  </article>
+
+  <aside class="tailpiece">
+    <h2>Use this blueprint</h2>
+    <p>
+      Copy the file into your project and point your agent at it. It works with Claude Code,
+      Cursor, Copilot, ChatGPT and anything else that reads a file — there is nothing to install.
+    </p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/pydantic-settings" target="_blank" rel="noopener">Open on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Browse all blueprints</a>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p><a href="/">Awesome Blueprints</a> — same request, same architecture, every time.</p>
+    <p class="dim">MIT · awesomeblueprints.com</p>
+  </div>
+</footer>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'neutral' });
+</script>
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const now = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', now);
+    try { localStorage.setItem('ab-theme', now); } catch (e) {}
+    location.reload();   // the diagram is themed at render time
+  });
+</script>
+
+</body>
+</html>

@@ -1,0 +1,574 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Hybrid Search: Keyword + Vector with RRF — Blueprint for AI Coding Agents | Awesome Blueprints</title>
+<meta name="description" content="Hybrid search combining keyword and vector retrieval with Reciprocal Rank Fusion: two branches, one ranked list, measurable recall gains." />
+<link rel="canonical" href="https://awesomeblueprints.com/blueprints/hybrid-search-rrf/" />
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="Awesome Blueprints" />
+<meta property="og:url" content="https://awesomeblueprints.com/blueprints/hybrid-search-rrf/" />
+<meta property="og:title" content="Hybrid Search: Keyword + Vector with RRF — Architecture Blueprint" />
+<meta property="og:description" content="Hybrid search combining keyword and vector retrieval with Reciprocal Rank Fusion: two branches, one ranked list, measurable recall gains." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Hybrid Search: Keyword + Vector with RRF — Architecture Blueprint" />
+<meta name="twitter:description" content="Hybrid search combining keyword and vector retrieval with Reciprocal Rank Fusion: two branches, one ranked list, measurable recall gains." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/page.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "Hybrid Search: Keyword + Vector with RRF", "description": "Hybrid search combining keyword and vector retrieval with Reciprocal Rank Fusion: two branches, one ranked list, measurable recall gains.", "url": "https://awesomeblueprints.com/blueprints/hybrid-search-rrf/", "dateModified": "2026-08-19", "keywords": "Vector search, Retrieval", "isAccessibleForFree": true, "license": "https://opensource.org/licenses/MIT", "publisher": {"@type": "Organization", "name": "Awesome Blueprints", "url": "https://awesomeblueprints.com"}}</script>
+<script>
+  (function () {
+    var t;
+    try { t = localStorage.getItem('ab-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">Awesome Blueprints</a>
+    <div class="nav-right">
+      <a class="nav-link" href="/#blueprints">Catalogue</a>
+      <a class="nav-link" href="/#faq">FAQ</a>
+      <a class="nav-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/hybrid-search-rrf" target="_blank" rel="noopener">GitHub ↗</a>
+      <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Switch theme">◑</button>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/">Home</a> <span>/</span> <a href="/#blueprints">Blueprints</a> <span>/</span>
+    <span>Hybrid Search: Keyword + Vector with RRF</span>
+  </nav>
+
+  <header class="page-head">
+    <p class="eyebrow">hybrid-search-rrf</p>
+    <h1>Hybrid Search: Keyword + Vector with RRF</h1>
+    <p class="lede">Hybrid search combining keyword and vector retrieval with Reciprocal Rank Fusion: two branches, one ranked list, measurable recall gains.</p>
+    <div class="facts"><span>medium</span><span>3–5 days</span><span>Verified 2026-08-19</span></div>
+    <div class="tags"><span class="tag">Vector search</span><span class="tag">Retrieval</span></div>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/hybrid-search-rrf" target="_blank" rel="noopener">Read it on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Back to the catalogue</a>
+    </div>
+  </header>
+
+  <article class="doc">
+<blockquote>
+<p>Running lexical and dense retrieval side by side and merging the two ranked
+lists by rank position rather than by score — the cheapest large recall gain
+available to a retrieval system.</p>
+</blockquote>
+<p><strong>Complexity:</strong> medium · <strong>Typical build:</strong> 3–5 days · <strong>Verified:</strong> 2026-08-19 (re-check after ~90 days)</p>
+<p><strong>Examples in:</strong> Python and SQL. Only §4 and §6 are language-specific — the rules, failure modes and definition of done hold anywhere, and your agent translates the code.</p>
+<p><strong>Use when:</strong> queries contain identifiers, error codes, SKUs, function names, proper nouns or exact phrases; or recall is short of target with embeddings alone.</p>
+<p><strong>Not for:</strong> a corpus of purely conceptual prose where you have <em>measured</em> that lexical search adds nothing. That case is rarer than teams assume — measure the two branches separately before deciding you do not need one.</p>
+<hr />
+<h2>⚙️ INSTRUCTIONS FOR THE AI — READ BEFORE WRITING ANY CODE</h2>
+<p><strong>Do not start coding.</strong></p>
+<p><strong>Step 1 — Refresh.</strong> Search the web and verify: whether the datastore already in
+use provides both a lexical and a vector index, since a second system is a real
+operational cost and often avoidable; the current state of learned-sparse
+retrieval as an alternative to classic lexical scoring in that store; the current
+embedding models and whether the one in use expects a query prefix. Report what
+you verified and where your assumptions were wrong.</p>
+<p><strong>Step 2 — Read the project, then audit what exists.</strong> Find the existing
+retrieval path, the analyzer or tokenizer configuration if there is a lexical
+index, and any evaluation set. Then look at real query logs and answer one
+question in writing: what fraction of queries contain an identifier, a code, or
+an exact phrase. That number decides how much this is worth.</p>
+<p><strong>Then audit what exists.</strong> Walk §11 item by item, marking each <em>already true</em>,
+<em>partly true</em> or <em>absent</em> with the file that decides it. Report that before
+proposing anything.</p>
+<p>Assume the project is right until it demonstrably is not. Code that satisfies an
+item stays, whatever its shape — §4 is illustrative, and its idioms translate
+into this project's language. Replacing something that works needs a one-line
+reason. Never delete a working path to make room for the version written here.
+If nothing relevant exists, say so and use §3.</p>
+<p>The same applies to language. §4 is illustrative: translate its idioms into this
+project's language and libraries rather than importing its shape. §11 is what has
+to become true — not the syntax it happens to be written in.</p>
+<p><strong>Step 3 — Write a plan for the gap only, and get it approved.</strong> List: where the
+lexical index lives, the analyzer configuration and why, the candidate depth, and
+the evaluation slice that proves the identifier case is fixed.</p>
+<p><strong>In that plan, include a <code>## Proposed stack</code> section.</strong> Do not ask an open
+question. <em>Propose</em> single-store or two-store — with a one-line reason, the
+versions verified in Step 1, and what would change the decision. Ask the user to
+confirm once.</p>
+<p>Name what you are adding, leaving alone, and changing. Touch nothing else.</p>
+<hr />
+<h2>1. Two retrieval methods with mirror-image blind spots</h2>
+<p>Dense embeddings encode meaning and are systematically bad at rare literal
+tokens. <code>ERR_4021</code>, <code>pnpm-lock.yaml</code> and <code>Regulation 2016/679</code> are close to noise
+in embedding space — the model never saw them often enough to place them
+anywhere meaningful — so a query for <code>ERR_4021</code> returns passages about errors in
+general.</p>
+<p>Lexical scoring has the mirror weakness. "How do I stop the app crashing on
+start?" shares no terms at all with "Resolving boot-time segmentation faults".</p>
+<table>
+<thead>
+<tr>
+<th>Query</th>
+<th>Lexical</th>
+<th>Dense</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ERR_4021</code></td>
+<td>Exactly right</td>
+<td>Passages about errors</td>
+</tr>
+<tr>
+<td><code>getUserById</code></td>
+<td>Exactly right</td>
+<td>Passages about users</td>
+</tr>
+<tr>
+<td>"app crashes on start"</td>
+<td>Misses the paraphrase</td>
+<td>Exactly right</td>
+</tr>
+<tr>
+<td>"cancel my subscription"</td>
+<td>Partial</td>
+<td>Exactly right</td>
+</tr>
+<tr>
+<td>"Regulation 2016/679"</td>
+<td>Exactly right</td>
+<td>Something about data protection, maybe</td>
+</tr>
+</tbody>
+</table>
+<p>Neither is fixable by tuning the other, and real query logs contain both kinds.
+So run both.</p>
+<p><strong>Why fuse by rank rather than by score.</strong> Lexical scores are unbounded and
+corpus-dependent; cosine similarities live in a narrow band. Making them
+comparable requires a calibration that drifts as the corpus and the query mix
+change, so a weighted blend that was tuned in March is quietly wrong by June.
+Rank position is scale-free. Reciprocal rank fusion needs no calibration at all,
+which is why a fifteen-line function beats a tuned blend in practice.</p>
+<h2>2. Architecture</h2>
+<pre class="mermaid">%% GENERATED - do not edit by hand.
+%% Edit the source header in architecture.mmd, then rebuild.
+%% Two Branches, One Fused List
+
+flowchart TB
+    subgraph branches[&quot;Retrieved Concurrently&quot;]
+        direction TB
+        lex[&quot;Lexical Search - exact terms&quot;]
+        dense[&quot;Dense Search - approximate nearest neighbour&quot;]
+    end
+
+    user([&quot;Query&quot;])
+    lexidx[(&quot;Inverted Index - analyzer matched to the corpus&quot;)]
+    vecidx[(&quot;Vector Index&quot;)]
+    filter[&quot;Metadata Filter - identical on both branches&quot;]
+    fuse[&quot;Rank Fusion - sum of one over k plus rank&quot;]
+    dedup[&quot;Deduplicate - by chunk id&quot;]
+    rerank[&quot;Reranker - optional, over the fused head&quot;]
+    out[&quot;Top-k to the Model&quot;]
+
+    user --&gt; filter
+    filter --&gt;|&quot;same filter&quot;| lex
+    filter --&gt;|&quot;same filter&quot;| dense
+    lex --&gt; lexidx
+    dense --&gt; vecidx
+    lexidx -.-&gt;|&quot;ranked candidates&quot;| fuse
+    vecidx -.-&gt;|&quot;ranked candidates&quot;| fuse
+    fuse --&gt; dedup
+    dedup --&gt; rerank
+    rerank --&gt; out
+
+    classDef service fill:#eff6ff,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b;
+    classDef datastore fill:#e9faf3,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b;
+    classDef external fill:#fff4ed,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b;
+    classDef actor fill:#f0eefc,stroke:#4a3aa7,stroke-width:1.5px,color:#0b0b0b;
+    class lex,dense,filter,fuse,dedup,rerank,out service;
+    class lexidx,vecidx datastore;
+    class user actor;</pre>
+<p><strong>The rule this diagram encodes:</strong> the metadata filter is applied identically to
+both branches, before fusion. A filter on one branch only is a correctness bug —
+in a multi-tenant system it is a data-leak bug — and fusing before filtering
+leaves you with fewer results than you asked for.</p>
+<h2>3. Project structure</h2>
+<div class="hl"><pre><span></span><code>retrieval/
+├── lexical.py     # analyzer config lives here, and it is corpus-specific
+├── dense.py       # embedding of the query; no stemming, ever
+├── fuse.py        # ~15 lines. Ranks in, fused list out. No score normalisation.
+├── search.py      # both branches concurrently, one shared filter
+└── evals/
+    └── slices/    # one slice per query type; identifiers get their own
+</code></pre></div>
+
+<p><strong>The rule that keeps this maintainable:</strong> per-branch recall is measured
+separately, and the per-branch ranks are kept on every fused result. When hybrid
+search underperforms, the answer is almost always visible in those two numbers,
+and invisible without them.</p>
+<h2>4. Reference implementation</h2>
+<p><strong>Fusion itself.</strong> Scores are discarded; only positions matter:</p>
+<div class="hl"><pre><span></span><code><span class="k">def</span> <span class="nf">rrf_fuse</span><span class="p">(</span><span class="n">lists</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="n">SearchHit</span><span class="p">]],</span> <span class="n">cfg</span><span class="p">:</span> <span class="n">FusionConfig</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">FusedHit</span><span class="p">]:</span>
+    <span class="n">scores</span><span class="p">,</span> <span class="n">ranks</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">float</span><span class="p">),</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">dict</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">source</span><span class="p">,</span> <span class="n">hits</span> <span class="ow">in</span> <span class="n">lists</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="n">w</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">.</span><span class="n">weights</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">hit</span> <span class="ow">in</span> <span class="n">hits</span><span class="p">:</span>                     <span class="c1"># sorted best-first; rank is 1-based</span>
+            <span class="n">scores</span><span class="p">[</span><span class="n">hit</span><span class="o">.</span><span class="n">chunk_id</span><span class="p">]</span> <span class="o">+=</span> <span class="n">w</span> <span class="o">/</span> <span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">k</span> <span class="o">+</span> <span class="n">hit</span><span class="o">.</span><span class="n">rank</span><span class="p">)</span>
+            <span class="n">ranks</span><span class="p">[</span><span class="n">hit</span><span class="o">.</span><span class="n">chunk_id</span><span class="p">][</span><span class="n">source</span><span class="p">]</span> <span class="o">=</span> <span class="n">hit</span><span class="o">.</span><span class="n">rank</span>
+    <span class="n">fused</span> <span class="o">=</span> <span class="p">[</span><span class="n">FusedHit</span><span class="p">(</span><span class="n">chunk_id</span><span class="o">=</span><span class="n">cid</span><span class="p">,</span> <span class="n">rrf_score</span><span class="o">=</span><span class="n">s</span><span class="p">,</span> <span class="n">ranks</span><span class="o">=</span><span class="n">ranks</span><span class="p">[</span><span class="n">cid</span><span class="p">])</span>
+             <span class="k">for</span> <span class="n">cid</span><span class="p">,</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">scores</span><span class="o">.</span><span class="n">items</span><span class="p">()]</span>
+    <span class="n">fused</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">h</span><span class="p">:</span> <span class="n">h</span><span class="o">.</span><span class="n">rrf_score</span><span class="p">,</span> <span class="n">reverse</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">fused</span><span class="p">[:</span><span class="n">cfg</span><span class="o">.</span><span class="n">n_output</span><span class="p">]</span>
+</code></pre></div>
+
+<p>A document found by only one branch still scores — just lower. That is the
+behaviour you want: a rare identifier found only lexically should surface, and
+usually near the top, because it will be at rank 1 there.</p>
+<p><strong>Both branches, concurrently, with one filter:</strong></p>
+<div class="hl"><pre><span></span><code><span class="k">async</span> <span class="k">def</span> <span class="nf">hybrid_search</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="n">tenant_id</span><span class="p">,</span> <span class="n">cfg</span><span class="p">,</span> <span class="n">lexical</span><span class="p">,</span> <span class="n">vectors</span><span class="p">,</span> <span class="n">embedder</span><span class="p">):</span>
+    <span class="n">flt</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;tenant_id&quot;</span><span class="p">:</span> <span class="n">tenant_id</span><span class="p">}</span>                 <span class="c1"># built once, passed to both</span>
+    <span class="n">lex_hits</span><span class="p">,</span> <span class="n">dense_hits</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span>
+        <span class="n">lexical</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="n">top_k</span><span class="o">=</span><span class="n">cfg</span><span class="o">.</span><span class="n">n_candidates</span><span class="p">,</span> <span class="nb">filter</span><span class="o">=</span><span class="n">flt</span><span class="p">),</span>
+        <span class="n">vectors</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">embedder</span><span class="o">.</span><span class="n">embed_query</span><span class="p">(</span><span class="n">query</span><span class="p">),</span> <span class="n">top_k</span><span class="o">=</span><span class="n">cfg</span><span class="o">.</span><span class="n">n_candidates</span><span class="p">,</span> <span class="nb">filter</span><span class="o">=</span><span class="n">flt</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">rrf_fuse</span><span class="p">({</span><span class="s2">&quot;lexical&quot;</span><span class="p">:</span> <span class="n">_ranked</span><span class="p">(</span><span class="n">lex_hits</span><span class="p">,</span> <span class="s2">&quot;lexical&quot;</span><span class="p">),</span>
+                     <span class="s2">&quot;dense&quot;</span><span class="p">:</span> <span class="n">_ranked</span><span class="p">(</span><span class="n">dense_hits</span><span class="p">,</span> <span class="s2">&quot;dense&quot;</span><span class="p">)},</span> <span class="n">cfg</span><span class="p">)</span>
+</code></pre></div>
+
+<p><strong>One store, if you already run Postgres</strong> — no second system to operate, and the
+fusion is a join:</p>
+<div class="hl"><pre><span></span><code><span class="k">WITH</span><span class="w"> </span><span class="n">lex</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="p">(</span><span class="w"></span>
+<span class="w">  </span><span class="k">SELECT</span><span class="w"> </span><span class="n">id</span><span class="p">,</span><span class="w"> </span><span class="n">ROW_NUMBER</span><span class="p">()</span><span class="w"> </span><span class="n">OVER</span><span class="w"> </span><span class="p">(</span><span class="w"></span>
+<span class="w">           </span><span class="k">ORDER</span><span class="w"> </span><span class="k">BY</span><span class="w"> </span><span class="n">ts_rank_cd</span><span class="p">(</span><span class="n">tsv</span><span class="p">,</span><span class="w"> </span><span class="n">plainto_tsquery</span><span class="p">(</span><span class="s1">&#39;english&#39;</span><span class="p">,</span><span class="w"> </span><span class="err">$</span><span class="mi">1</span><span class="p">))</span><span class="w"> </span><span class="k">DESC</span><span class="p">)</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="n">rank</span><span class="w"></span>
+<span class="w">  </span><span class="k">FROM</span><span class="w"> </span><span class="n">chunks</span><span class="w"></span>
+<span class="w">  </span><span class="k">WHERE</span><span class="w"> </span><span class="n">tenant_id</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="err">$</span><span class="mi">2</span><span class="w"> </span><span class="k">AND</span><span class="w"> </span><span class="n">tsv</span><span class="w"> </span><span class="o">@@</span><span class="w"> </span><span class="n">plainto_tsquery</span><span class="p">(</span><span class="s1">&#39;english&#39;</span><span class="p">,</span><span class="w"> </span><span class="err">$</span><span class="mi">1</span><span class="p">)</span><span class="w"></span>
+<span class="w">  </span><span class="k">LIMIT</span><span class="w"> </span><span class="mi">50</span><span class="w"></span>
+<span class="p">),</span><span class="w"></span>
+<span class="n">dense</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="p">(</span><span class="w"></span>
+<span class="w">  </span><span class="k">SELECT</span><span class="w"> </span><span class="n">id</span><span class="p">,</span><span class="w"> </span><span class="n">ROW_NUMBER</span><span class="p">()</span><span class="w"> </span><span class="n">OVER</span><span class="w"> </span><span class="p">(</span><span class="k">ORDER</span><span class="w"> </span><span class="k">BY</span><span class="w"> </span><span class="n">embedding</span><span class="w"> </span><span class="o">&lt;=&gt;</span><span class="w"> </span><span class="err">$</span><span class="mi">3</span><span class="p">)</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="n">rank</span><span class="w"></span>
+<span class="w">  </span><span class="k">FROM</span><span class="w"> </span><span class="n">chunks</span><span class="w"></span>
+<span class="w">  </span><span class="k">WHERE</span><span class="w"> </span><span class="n">tenant_id</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="err">$</span><span class="mi">2</span><span class="w"></span>
+<span class="w">  </span><span class="k">ORDER</span><span class="w"> </span><span class="k">BY</span><span class="w"> </span><span class="n">embedding</span><span class="w"> </span><span class="o">&lt;=&gt;</span><span class="w"> </span><span class="err">$</span><span class="mi">3</span><span class="w"></span>
+<span class="w">  </span><span class="k">LIMIT</span><span class="w"> </span><span class="mi">50</span><span class="w"></span>
+<span class="p">)</span><span class="w"></span>
+<span class="k">SELECT</span><span class="w"> </span><span class="k">COALESCE</span><span class="p">(</span><span class="n">l</span><span class="p">.</span><span class="n">id</span><span class="p">,</span><span class="w"> </span><span class="n">d</span><span class="p">.</span><span class="n">id</span><span class="p">)</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="n">id</span><span class="p">,</span><span class="w"></span>
+<span class="w">       </span><span class="k">COALESCE</span><span class="p">(</span><span class="mi">1</span><span class="p">.</span><span class="mi">0</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="p">(</span><span class="mi">60</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">l</span><span class="p">.</span><span class="n">rank</span><span class="p">),</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="k">COALESCE</span><span class="p">(</span><span class="mi">1</span><span class="p">.</span><span class="mi">0</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="p">(</span><span class="mi">60</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">d</span><span class="p">.</span><span class="n">rank</span><span class="p">),</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="n">rrf</span><span class="w"></span>
+<span class="k">FROM</span><span class="w"> </span><span class="n">lex</span><span class="w"> </span><span class="n">l</span><span class="w"> </span><span class="k">FULL</span><span class="w"> </span><span class="k">OUTER</span><span class="w"> </span><span class="k">JOIN</span><span class="w"> </span><span class="n">dense</span><span class="w"> </span><span class="n">d</span><span class="w"> </span><span class="k">USING</span><span class="w"> </span><span class="p">(</span><span class="n">id</span><span class="p">)</span><span class="w"></span>
+<span class="k">ORDER</span><span class="w"> </span><span class="k">BY</span><span class="w"> </span><span class="n">rrf</span><span class="w"> </span><span class="k">DESC</span><span class="w"></span>
+<span class="k">LIMIT</span><span class="w"> </span><span class="mi">20</span><span class="p">;</span><span class="w"></span>
+</code></pre></div>
+
+<p><strong>The analyzer is where identifier queries are won or lost.</strong> A default analyzer
+splits <code>ERR_4021</code> into <code>err</code> and <code>4021</code>, and the exact-match property you added
+the lexical branch for is gone. Configure it against your corpus, and keep a
+keyword sub-field for identifiers.</p>
+<h2>5. Golden-standard rules</h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Fuse by rank, never by normalised score</td>
+<td>Score calibration drifts with corpus and query mix; rank position does not</td>
+</tr>
+<tr>
+<td>The fusion constant is 60 unless measurement says otherwise</td>
+<td>It is the published default and it works; tuning it is almost never where the gain is</td>
+</tr>
+<tr>
+<td>Both branches receive an identical metadata filter</td>
+<td>A filter on one branch is a correctness bug, and in multi-tenant systems a leak</td>
+</tr>
+<tr>
+<td>Filter before fusing, never after</td>
+<td>Fusing then filtering returns fewer results than requested</td>
+</tr>
+<tr>
+<td>Both branches run concurrently</td>
+<td>They are independent; running them serially doubles latency for nothing</td>
+</tr>
+<tr>
+<td>Candidate depth is well above the final k — about 50 for a k of 5 to 10</td>
+<td>Fusion needs headroom; retrieving k per branch defeats it</td>
+</tr>
+<tr>
+<td>Deduplication is keyed strictly on chunk id</td>
+<td>Anything else lets the same passage occupy several slots</td>
+</tr>
+<tr>
+<td>The lexical analyzer preserves identifiers</td>
+<td>Splitting <code>ERR_4021</code> removes the exact property the branch exists for</td>
+</tr>
+<tr>
+<td>The analyzer matches the corpus: never stem a code corpus</td>
+<td>Stemming <code>getUserById</code> is actively harmful</td>
+</tr>
+<tr>
+<td>The dense query is never stemmed or analyzed</td>
+<td>The embedding model expects natural text</td>
+</tr>
+<tr>
+<td>Per-branch recall is measured separately, not only fused recall</td>
+<td>Otherwise a broken branch hides behind a healthy one</td>
+</tr>
+<tr>
+<td>Weights are only changed after measuring per-branch recall on your own set</td>
+<td>You cannot tune what you have not measured</td>
+</tr>
+<tr>
+<td>A weak branch is weighted down, not disabled</td>
+<td>It still contributes the cases the other one systematically misses</td>
+</tr>
+<tr>
+<td>Per-branch ranks are retained on every result</td>
+<td>It is the entire debugging story in one field</td>
+</tr>
+<tr>
+<td>The evaluation set has an identifier slice built from real query logs</td>
+<td>The whole point is a query type the aggregate metric hides</td>
+</tr>
+</tbody>
+</table>
+<h2>6. Data contracts</h2>
+<div class="hl"><pre><span></span><code><span class="k">class</span> <span class="nc">SearchHit</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">chunk_id</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">score</span><span class="p">:</span> <span class="nb">float</span>          <span class="c1"># branch-native. Debugging only - fusion never reads it.</span>
+    <span class="n">rank</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">ge</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">source</span><span class="p">:</span> <span class="nb">str</span>           <span class="c1"># &quot;lexical&quot; | &quot;dense&quot;</span>
+
+<span class="k">class</span> <span class="nc">FusionConfig</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">60</span>           <span class="c1"># lower lets top ranks dominate; higher flattens</span>
+    <span class="n">weights</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;lexical&quot;</span><span class="p">:</span> <span class="mf">1.0</span><span class="p">,</span> <span class="s2">&quot;dense&quot;</span><span class="p">:</span> <span class="mf">1.0</span><span class="p">}</span>
+    <span class="n">n_candidates</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">50</span>    <span class="c1"># per branch, before fusion</span>
+    <span class="n">n_output</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">20</span>        <span class="c1"># after fusion; hand to the reranker</span>
+
+<span class="k">class</span> <span class="nc">FusedHit</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">chunk_id</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">rrf_score</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">ranks</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span>     <span class="c1"># {&quot;lexical&quot;: 3, &quot;dense&quot;: 17} - keep this</span>
+</code></pre></div>
+
+<table>
+<thead>
+<tr>
+<th>Knob</th>
+<th>Default</th>
+<th>Change it when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Fusion constant <code>k</code></td>
+<td>60</td>
+<td>Rarely. Lower to 20 to let the top of each list dominate</td>
+</tr>
+<tr>
+<td>Candidates per branch</td>
+<td>50</td>
+<td>Raise to 100 if recall at 50 is under 0.9; it costs latency</td>
+</tr>
+<tr>
+<td>Branch weights</td>
+<td>1.0 and 1.0</td>
+<td>Only after per-branch recall is measured on your own eval set</td>
+</tr>
+<tr>
+<td>Lexical length normalisation</td>
+<td>Default</td>
+<td>Lower it when document lengths vary wildly</td>
+</tr>
+<tr>
+<td>Stemming</td>
+<td>On for prose, off for code</td>
+<td>Match the corpus, not the default</td>
+</tr>
+</tbody>
+</table>
+<h2>7. Build order</h2>
+<ol>
+<li><strong>Measure the baseline</strong>: dense-only recall, and specifically on an identifier
+   slice taken from real query logs. Without both numbers there is nothing to
+   compare against.</li>
+<li><strong>The lexical index</strong>, with an analyzer configured for the corpus and a
+   keyword sub-field for identifiers.</li>
+<li><strong>Verify the analyzer directly</strong> — query the lexical index for <code>ERR_4021</code> and
+   confirm it is not being split. This is the step people skip and then spend a
+   week on.</li>
+<li><strong>Both branches concurrently</strong>, sharing one filter object.</li>
+<li><strong>Rank fusion at k=60</strong>, equal weights, deduplicated by chunk id.</li>
+<li><strong>Measure again</strong>: fused recall, per-branch recall, and the identifier slice.</li>
+<li><strong>A reranker over the fused head</strong>, once recall is good and precision is the
+   remaining problem.</li>
+<li><strong>Only then consider weights</strong>, and only where per-branch measurement supports
+   the change.</li>
+</ol>
+<h2>8. Related reading</h2>
+<p>Every blueprint here stands on its own: nothing below is a prerequisite, and
+nothing above needs any of it to be implemented. These are adjacent problems you
+will meet next, listed so you know they have been thought about.</p>
+<ul>
+<li><strong>AI RAG Pipeline in Production</strong> — the system this is a component of.</li>
+<li><strong>Eval Harness Design</strong> — the slices that make per-branch measurement possible.</li>
+<li><strong>Cursor Pagination</strong> — the same rank-stability question, for result pages.</li>
+<li><strong>Observability and Tracing</strong> — where the real query distribution comes from.</li>
+</ul>
+<h2>9. Metrics</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Fused recall at 50</td>
+<td>≥ 0.95</td>
+</tr>
+<tr>
+<td>Per-branch recall at 50</td>
+<td>Each ≥ 0.60; below 0.40 that branch is broken, not weak</td>
+</tr>
+<tr>
+<td>Fusion lift over the better single branch</td>
+<td>≥ +5 points; +1 or less means something is misconfigured</td>
+</tr>
+<tr>
+<td>Overlap between the two lists</td>
+<td>20–50%; above 80% the branches are redundant and one is wasted</td>
+</tr>
+<tr>
+<td>Latency at p95 for both branches plus fusion</td>
+<td>&lt; 250 ms</td>
+</tr>
+<tr>
+<td>Recall on the identifier slice</td>
+<td>≥ 0.95. This is the number the whole exercise is for</td>
+</tr>
+</tbody>
+</table>
+<h2>10. Failure modes</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Identifiers still not found</td>
+<td>The analyzer splits <code>ERR_4021</code> into two terms</td>
+<td>Preserve alphanumerics; add a keyword sub-field</td>
+</tr>
+<tr>
+<td>Hybrid is worse than dense alone</td>
+<td>The lexical branch returns noise that outranks good dense hits</td>
+<td>Fix the analyzer; weight it down only if its recall is genuinely low</td>
+</tr>
+<tr>
+<td>Duplicates fill the top of the list</td>
+<td>Deduplication keyed on the object, not the chunk id</td>
+<td>Key on chunk id</td>
+</tr>
+<tr>
+<td>One tenant sees another's documents</td>
+<td>The filter was applied to one branch only</td>
+<td>Build the filter once and pass it to both; test with two tenants</td>
+</tr>
+<tr>
+<td>Latency doubled</td>
+<td>The branches run serially</td>
+<td>Run them concurrently; they are independent</td>
+</tr>
+<tr>
+<td>Fewer results than requested</td>
+<td>Filtering happens after fusion</td>
+<td>Filter inside each branch, before fusing</td>
+</tr>
+<tr>
+<td>It helps offline but not in production</td>
+<td>The eval queries are not like real ones</td>
+<td>Build the set from production query logs</td>
+</tr>
+<tr>
+<td>Recall is poor in one language</td>
+<td>A single default analyzer for a multilingual corpus</td>
+<td>Per-language analyzer, or per-language index</td>
+</tr>
+<tr>
+<td>Fusion barely moves the number</td>
+<td>Candidate depth equals the final k</td>
+<td>Retrieve about 50 per branch, fuse, then cut</td>
+</tr>
+<tr>
+<td>Nobody can explain a bad result</td>
+<td>The per-branch ranks were discarded</td>
+<td>Keep them on the fused hit</td>
+</tr>
+</tbody>
+</table>
+<h2>11. Definition of done</h2>
+<ul>
+<li class="task">Both branches receive an identical metadata pre-filter, applied before fusion.</li>
+<li class="task">Both branches run concurrently.</li>
+<li class="task">Fusion is over ranks with k=60, never over normalised scores.</li>
+<li class="task">Deduplication is keyed strictly on chunk id.</li>
+<li class="task">The lexical analyzer preserves identifiers, verified by querying the index directly.</li>
+<li class="task">The analyzer matches the corpus language, and code corpora are not stemmed.</li>
+<li class="task">The dense query is passed unstemmed and unanalyzed.</li>
+<li class="task">Candidate depth per branch is well above the final k.</li>
+<li class="task">Per-branch recall is measured separately, not only the fused number.</li>
+<li class="task">The eval set contains an identifier slice built from real query logs.</li>
+<li class="task">Per-branch ranks are retained on every fused result for debugging.</li>
+<li class="task">Branch weights, if changed at all, were changed on the basis of measured per-branch recall.</li>
+</ul>
+  </article>
+
+  <aside class="tailpiece">
+    <h2>Use this blueprint</h2>
+    <p>
+      Copy the file into your project and point your agent at it. It works with Claude Code,
+      Cursor, Copilot, ChatGPT and anything else that reads a file — there is nothing to install.
+    </p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/hybrid-search-rrf" target="_blank" rel="noopener">Open on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Browse all blueprints</a>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p><a href="/">Awesome Blueprints</a> — same request, same architecture, every time.</p>
+    <p class="dim">MIT · awesomeblueprints.com</p>
+  </div>
+</footer>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'neutral' });
+</script>
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const now = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', now);
+    try { localStorage.setItem('ab-theme', now); } catch (e) {}
+    location.reload();   // the diagram is themed at render time
+  });
+</script>
+
+</body>
+</html>

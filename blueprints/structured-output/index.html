@@ -1,0 +1,576 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Structured LLM Output with JSON Schema — Blueprint for AI Coding Agents | Awesome Blueprints</title>
+<meta name="description" content="Structured LLM output with JSON Schema: constrained decoding, validation, retries on malformed output and types that make constraints real." />
+<link rel="canonical" href="https://awesomeblueprints.com/blueprints/structured-output/" />
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="Awesome Blueprints" />
+<meta property="og:url" content="https://awesomeblueprints.com/blueprints/structured-output/" />
+<meta property="og:title" content="Structured LLM Output with JSON Schema — Architecture Blueprint" />
+<meta property="og:description" content="Structured LLM output with JSON Schema: constrained decoding, validation, retries on malformed output and types that make constraints real." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Structured LLM Output with JSON Schema — Architecture Blueprint" />
+<meta name="twitter:description" content="Structured LLM output with JSON Schema: constrained decoding, validation, retries on malformed output and types that make constraints real." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/page.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "Structured LLM Output with JSON Schema", "description": "Structured LLM output with JSON Schema: constrained decoding, validation, retries on malformed output and types that make constraints real.", "url": "https://awesomeblueprints.com/blueprints/structured-output/", "dateModified": "2026-08-19", "keywords": "Prompting", "isAccessibleForFree": true, "license": "https://opensource.org/licenses/MIT", "publisher": {"@type": "Organization", "name": "Awesome Blueprints", "url": "https://awesomeblueprints.com"}}</script>
+<script>
+  (function () {
+    var t;
+    try { t = localStorage.getItem('ab-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">Awesome Blueprints</a>
+    <div class="nav-right">
+      <a class="nav-link" href="/#blueprints">Catalogue</a>
+      <a class="nav-link" href="/#faq">FAQ</a>
+      <a class="nav-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/structured-output" target="_blank" rel="noopener">GitHub ↗</a>
+      <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Switch theme">◑</button>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/">Home</a> <span>/</span> <a href="/#blueprints">Blueprints</a> <span>/</span>
+    <span>Structured LLM Output with JSON Schema</span>
+  </nav>
+
+  <header class="page-head">
+    <p class="eyebrow">structured-output</p>
+    <h1>Structured LLM Output with JSON Schema</h1>
+    <p class="lede">Structured LLM output with JSON Schema: constrained decoding, validation, retries on malformed output and types that make constraints real.</p>
+    <div class="facts"><span>low</span><span>2–3 days</span><span>Verified 2026-08-19</span></div>
+    <div class="tags"><span class="tag">Prompting</span></div>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/structured-output" target="_blank" rel="noopener">Read it on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Back to the catalogue</a>
+    </div>
+  </header>
+
+  <article class="doc">
+<blockquote>
+<p>Getting a model to emit data your code can parse every time — by constrained
+decoding, by a tool-call schema, or by prompt-parse-repair — and handling the
+case where the shape is right and the values are still wrong.</p>
+</blockquote>
+<p><strong>Complexity:</strong> low · <strong>Typical build:</strong> 2–3 days · <strong>Verified:</strong> 2026-08-19 (re-check after ~90 days)</p>
+<p><strong>Examples in:</strong> Python with Pydantic. Only §4 and §6 are language-specific — the rules, failure modes and definition of done hold anywhere, and your agent translates the code.</p>
+<p><strong>Use when:</strong> the model's output feeds code rather than a person — extraction, classification, filling a form, producing arguments for something downstream — and a parse failure is an incident rather than a nuisance.</p>
+<p><strong>Not for:</strong> prose a human will read. Forcing JSON onto a task that wants prose measurably degrades the prose, and you gain nothing your code can use.</p>
+<hr />
+<h2>⚙️ INSTRUCTIONS FOR THE AI — READ BEFORE WRITING ANY CODE</h2>
+<p><strong>Do not start coding.</strong></p>
+<p><strong>Step 1 — Refresh.</strong> Search the web and verify: whether the provider being used
+offers strict schema adherence or constrained decoding today, what subset of JSON
+Schema it enforces, and what it silently ignores — support for <code>oneOf</code>, <code>$ref</code>,
+<code>pattern</code> and nested optionals is the part that moves; the field name for the
+finish or stop reason and its value on truncation; whether forcing a specific
+tool is still supported and how it is spelled. Report what you verified and where
+your assumptions were wrong.</p>
+<p><strong>Step 2 — Read the project, then audit what exists.</strong> Find every place a model
+response is parsed. Look specifically for a bare <code>json.loads</code>, a <code>find("{")</code>, a
+<code>try/except</code> that swallows the raw response, and any schema written twice — once
+as a type and once as a string in a prompt.</p>
+<p><strong>Then audit what exists.</strong> Walk §11 item by item, marking each <em>already true</em>,
+<em>partly true</em> or <em>absent</em> with the file that decides it. Report that before
+proposing anything.</p>
+<p>Assume the project is right until it demonstrably is not. Code that satisfies an
+item stays, whatever its shape — §4 is illustrative, and its idioms translate
+into this project's language. Replacing something that works needs a one-line
+reason. Never delete a working path to make room for the version written here.
+If nothing relevant exists, say so and use §3.</p>
+<p>The same applies to language. §4 is illustrative: translate its idioms into this
+project's language and libraries rather than importing its shape. §11 is what has
+to become true — not the syntax it happens to be written in.</p>
+<p><strong>Step 3 — Write a plan for the gap only, and get it approved.</strong> List: which
+mechanism each call site moves to, which schemas need flattening, which fields
+need a stated null case, and which business rules belong in semantic validation
+rather than in the schema.</p>
+<p><strong>In that plan, include a <code>## Proposed stack</code> section.</strong> Do not ask an open
+question. <em>Propose</em> the mechanism per call site and the validation library —
+with a one-line reason, the versions verified in Step 1, and what would change
+the decision. Ask the user to confirm once.</p>
+<p>Name what you are adding, leaving alone, and changing. Touch nothing else.</p>
+<hr />
+<h2>1. Three mechanisms, and why the weakest one is the default</h2>
+<p><code>json.loads(response)</code> fails in production in a small, boring set of ways:
+markdown fences, a preamble, a trailing comma, an unescaped quote, or an object
+cut in half because the token limit was reached. Prompting harder does not remove
+any of them; it lowers their rate.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Constrained decoding</th>
+<th>Tool-call schema</th>
+<th>Prompt, parse, repair</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>How it works</td>
+<td>The sampler cannot emit a violating token</td>
+<td>The provider validates the call</td>
+<td>You validate afterwards</td>
+</tr>
+<tr>
+<td>Syntactic failure</td>
+<td>Impossible</td>
+<td>Rare</td>
+<td>The rate you measure</td>
+</tr>
+<tr>
+<td>Cost of a failure</td>
+<td>—</td>
+<td>A rejected call</td>
+<td>An extra round trip</td>
+</tr>
+<tr>
+<td>Availability</td>
+<td>Provider and model dependent</td>
+<td>Wherever tools exist</td>
+<td>Everywhere</td>
+</tr>
+<tr>
+<td>Enforces meaning</td>
+<td>No</td>
+<td>No</td>
+<td>No</td>
+</tr>
+</tbody>
+</table>
+<p>Use the strongest one the provider supports, per call site. The common mistake is
+choosing the third because it was the first one that worked in a notebook.</p>
+<p>None of the three make the <em>values</em> correct. A schema-valid object can contain an
+order id that does not exist. Parsing and validation are two layers, and the
+second one is the one teams skip.</p>
+<h2>2. Architecture</h2>
+<pre class="mermaid">%% GENERATED - do not edit by hand.
+%% Edit the source header in architecture.mmd, then rebuild.
+%% Structured Output Path
+
+flowchart TB
+    subgraph emit[&quot;Emission&quot;]
+        direction TB
+        constrained[&quot;Constrained Decoding&quot;]
+        toolcall[&quot;Tool-Call Schema&quot;]
+        prompted[&quot;Prompt and Parse&quot;]
+    end
+
+    schema[&quot;Schema - defined once in code&quot;]
+    provider{{&quot;Model Provider&quot;}}
+    finish[&quot;Finish-Reason Check&quot;]
+    extract[&quot;Robust Extractor&quot;]
+    syntax[&quot;Syntactic Validation&quot;]
+    repair[&quot;Repair - error as instruction, capped&quot;]
+    semantic[&quot;Semantic Validation - ranges, cross-field, ids exist&quot;]
+    log[(&quot;Raw Response Log&quot;)]
+    caller([&quot;Calling Code&quot;])
+
+    schema --&gt;|&quot;generated&quot;| constrained
+    schema --&gt;|&quot;generated&quot;| toolcall
+    schema --&gt;|&quot;generated&quot;| prompted
+    constrained --&gt;|&quot;request&quot;| provider
+    toolcall --&gt;|&quot;request&quot;| provider
+    prompted --&gt;|&quot;request&quot;| provider
+    provider -.-&gt;|&quot;response&quot;| finish
+    finish --&gt;|&quot;complete&quot;| extract
+    finish -.-&gt;|&quot;truncated - not a parse bug&quot;| log
+    extract --&gt;|&quot;candidate json&quot;| syntax
+    syntax -.-&gt;|&quot;invalid&quot;| repair
+    syntax --&gt;|&quot;typed object&quot;| semantic
+    repair --&gt;|&quot;retry with the error&quot;| provider
+    repair -.-&gt;|&quot;gave up&quot;| log
+    semantic --&gt;|&quot;trusted data&quot;| caller
+    semantic -.-&gt;|&quot;shape right, values wrong&quot;| log
+
+    classDef service fill:#eff6ff,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b;
+    classDef datastore fill:#e9faf3,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b;
+    classDef external fill:#fff4ed,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b;
+    classDef actor fill:#f0eefc,stroke:#4a3aa7,stroke-width:1.5px,color:#0b0b0b;
+    class schema,constrained,toolcall,prompted,finish,extract,syntax,repair,semantic service;
+    class log datastore;
+    class provider external;
+    class caller actor;</pre>
+<p><strong>The rule this diagram encodes:</strong> the finish-reason check comes <em>before</em> the
+parser. A truncated response is not a JSON problem, and retrying it with the same
+token limit fails identically forever.</p>
+<h2>3. Project structure</h2>
+<div class="hl"><pre><span></span><code>extraction/
+├── models.py       # the schema, defined once. JSON Schema is generated from it.
+├── emit.py         # mechanism selection: constrained &gt; tool-call &gt; prompted
+├── extract.py      # pull a JSON value out of mixed text, brace-aware
+├── repair.py       # one retry loop, capped, error text passed verbatim
+├── rules.py        # semantic validation: ranges, cross-field, referential
+└── audit.py        # raw responses on every failure, with the schema version
+</code></pre></div>
+
+<p><strong>The rule that keeps this maintainable:</strong> the schema exists in exactly one
+place, and the string sent to the model is generated from it. A schema pasted
+into a prompt and also declared as a type will diverge, and the failure looks
+like a model problem for as long as it takes someone to compare the two.</p>
+<h2>4. Reference implementation</h2>
+<p><strong>Extraction that survives real responses.</strong> <code>text.find("{")</code> to <code>text.rfind("}")</code>
+breaks on nested objects and on prose containing braces:</p>
+<div class="hl"><pre><span></span><code><span class="n">FENCED</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;```(?:json)?\s*(\{.*?\}|\[.*?\])\s*```&quot;</span><span class="p">,</span> <span class="n">re</span><span class="o">.</span><span class="n">S</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">extract_json</span><span class="p">(</span><span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">m</span> <span class="o">:=</span> <span class="n">FENCED</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">text</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">m</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">start</span> <span class="o">=</span> <span class="nb">min</span><span class="p">((</span><span class="n">i</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="p">(</span><span class="n">text</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s2">&quot;{&quot;</span><span class="p">),</span> <span class="n">text</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s2">&quot;[&quot;</span><span class="p">))</span> <span class="k">if</span> <span class="n">i</span> <span class="o">!=</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="n">default</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">start</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;no JSON value in the response&quot;</span><span class="p">)</span>
+    <span class="n">opener</span><span class="p">,</span> <span class="n">closer</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;{&quot;</span><span class="p">,</span> <span class="s2">&quot;}&quot;</span><span class="p">)</span> <span class="k">if</span> <span class="n">text</span><span class="p">[</span><span class="n">start</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;{&quot;</span> <span class="k">else</span> <span class="p">(</span><span class="s2">&quot;[&quot;</span><span class="p">,</span> <span class="s2">&quot;]&quot;</span><span class="p">)</span>
+    <span class="n">depth</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">in_str</span> <span class="o">=</span> <span class="kc">False</span><span class="p">;</span> <span class="n">esc</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">ch</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">text</span><span class="p">[</span><span class="n">start</span><span class="p">:],</span> <span class="n">start</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">in_str</span><span class="p">:</span>
+            <span class="n">esc</span> <span class="o">=</span> <span class="p">(</span><span class="n">ch</span> <span class="o">==</span> <span class="s2">&quot;</span><span class="se">\\</span><span class="s2">&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">esc</span>
+            <span class="k">if</span> <span class="n">ch</span> <span class="o">==</span> <span class="s1">&#39;&quot;&#39;</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">esc</span><span class="p">:</span> <span class="n">in_str</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">elif</span> <span class="n">ch</span> <span class="o">==</span> <span class="s1">&#39;&quot;&#39;</span><span class="p">:</span> <span class="n">in_str</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">elif</span> <span class="n">ch</span> <span class="o">==</span> <span class="n">opener</span><span class="p">:</span> <span class="n">depth</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="k">elif</span> <span class="n">ch</span> <span class="o">==</span> <span class="n">closer</span><span class="p">:</span>
+            <span class="n">depth</span> <span class="o">-=</span> <span class="mi">1</span>
+            <span class="k">if</span> <span class="n">depth</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span> <span class="k">return</span> <span class="n">text</span><span class="p">[</span><span class="n">start</span><span class="p">:</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span>
+    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;unterminated JSON - the response was truncated&quot;</span><span class="p">)</span>
+</code></pre></div>
+
+<p><strong>The call, with the diagnosis in the right order:</strong></p>
+<div class="hl"><pre><span></span><code><span class="k">def</span> <span class="nf">call_structured</span><span class="p">(</span><span class="n">system</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">user</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">model_cls</span><span class="p">,</span> <span class="n">max_repairs</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span><span class="p">):</span>
+    <span class="n">messages</span> <span class="o">=</span> <span class="p">[{</span><span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;user&quot;</span><span class="p">,</span> <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="n">user</span><span class="p">}]</span>
+    <span class="n">sys_prompt</span> <span class="o">=</span> <span class="n">system</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">Return JSON matching this schema and nothing else:</span><span class="se">\n</span><span class="s2">&quot;</span> \
+                 <span class="o">+</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">model_cls</span><span class="o">.</span><span class="n">model_json_schema</span><span class="p">())</span>
+
+    <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">max_repairs</span> <span class="o">+</span> <span class="mi">1</span><span class="p">):</span>
+        <span class="n">resp</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">MODEL</span><span class="p">,</span> <span class="n">max_tokens</span><span class="o">=</span><span class="mi">4096</span><span class="p">,</span> <span class="n">temperature</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+                             <span class="n">system</span><span class="o">=</span><span class="n">sys_prompt</span><span class="p">,</span> <span class="n">messages</span><span class="o">=</span><span class="n">messages</span><span class="p">)</span>
+        <span class="n">raw</span> <span class="o">=</span> <span class="n">resp</span><span class="o">.</span><span class="n">content</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">text</span>
+
+        <span class="c1"># Before blaming the JSON: a cut-off response is a budget problem.</span>
+        <span class="k">if</span> <span class="n">resp</span><span class="o">.</span><span class="n">stop_reason</span> <span class="o">==</span> <span class="s2">&quot;max_tokens&quot;</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">Truncated</span><span class="p">(</span><span class="s2">&quot;raise max_tokens or shrink the schema; a retry will not help&quot;</span><span class="p">)</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">model_cls</span><span class="o">.</span><span class="n">model_validate_json</span><span class="p">(</span><span class="n">extract_json</span><span class="p">(</span><span class="n">raw</span><span class="p">))</span>
+        <span class="k">except</span> <span class="p">(</span><span class="n">ValidationError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">)</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">audit</span><span class="o">.</span><span class="n">record</span><span class="p">(</span><span class="n">attempt</span><span class="p">,</span> <span class="n">e</span><span class="p">,</span> <span class="n">raw</span><span class="p">)</span>          <span class="c1"># the raw text is the only debuggable artefact</span>
+            <span class="k">if</span> <span class="n">attempt</span> <span class="o">==</span> <span class="n">max_repairs</span><span class="p">:</span>
+                <span class="k">raise</span>
+            <span class="n">messages</span> <span class="o">+=</span> <span class="p">[</span>
+                <span class="p">{</span><span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;assistant&quot;</span><span class="p">,</span> <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="n">raw</span><span class="p">},</span>
+                <span class="c1"># The validation error IS the instruction. Do not paraphrase it.</span>
+                <span class="p">{</span><span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;user&quot;</span><span class="p">,</span> <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;That output failed validation:</span><span class="se">\n</span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="se">\n\n</span><span class="s2">&quot;</span>
+                                            <span class="s2">&quot;Return only the corrected JSON. No prose, no fences.&quot;</span><span class="p">},</span>
+            <span class="p">]</span>
+</code></pre></div>
+
+<p><strong>Forcing a tool call</strong> is the strongest mechanism available almost everywhere:</p>
+<div class="hl"><pre><span></span><code><span class="n">resp</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="n">MODEL</span><span class="p">,</span> <span class="n">max_tokens</span><span class="o">=</span><span class="mi">2000</span><span class="p">,</span>
+    <span class="n">tools</span><span class="o">=</span><span class="p">[{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;record_extraction&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Record the extracted fields.&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;input_schema&quot;</span><span class="p">:</span> <span class="n">TicketExtraction</span><span class="o">.</span><span class="n">model_json_schema</span><span class="p">()}],</span>
+    <span class="n">tool_choice</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;tool&quot;</span><span class="p">,</span> <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;record_extraction&quot;</span><span class="p">},</span>   <span class="c1"># not optional</span>
+    <span class="n">messages</span><span class="o">=</span><span class="p">[{</span><span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;user&quot;</span><span class="p">,</span> <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="n">ticket</span><span class="p">}])</span>
+<span class="n">data</span> <span class="o">=</span> <span class="n">TicketExtraction</span><span class="o">.</span><span class="n">model_validate</span><span class="p">(</span>
+    <span class="nb">next</span><span class="p">(</span><span class="n">b</span><span class="o">.</span><span class="n">input</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">resp</span><span class="o">.</span><span class="n">content</span> <span class="k">if</span> <span class="n">b</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;tool_use&quot;</span><span class="p">))</span>
+</code></pre></div>
+
+<h2>5. Golden-standard rules</h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The schema is defined once in code; the model's copy is generated from it</td>
+<td>Two copies diverge, and the divergence reads as a model failure</td>
+</tr>
+<tr>
+<td>Use the strongest mechanism the provider supports at that call site</td>
+<td>Prompting when strict mode exists is choosing a failure rate you did not need</td>
+</tr>
+<tr>
+<td>Temperature 0 for extraction</td>
+<td>This is transcription, not writing</td>
+</tr>
+<tr>
+<td><code>additionalProperties: false</code> on every object</td>
+<td>Otherwise extra keys arrive and are silently dropped</td>
+</tr>
+<tr>
+<td>Schema depth ≤ 3, fields ≤ 15 per object</td>
+<td>Adherence falls off sharply with nesting; split the call instead</td>
+</tr>
+<tr>
+<td>Every optional field says when to return null, per field</td>
+<td>"Return null if not stated. Do not infer." is the difference between a null and a fabrication</td>
+</tr>
+<tr>
+<td>Check the finish reason before diagnosing a parse error</td>
+<td>Truncation retried at the same limit fails identically forever</td>
+</tr>
+<tr>
+<td>Extraction is brace-aware and fence-aware</td>
+<td>The naive scan breaks on the first nested object</td>
+</tr>
+<tr>
+<td>Repairs are capped at two and pass the validation error verbatim</td>
+<td>Beyond two the model is not going to get there; a paraphrased error is not actionable</td>
+</tr>
+<tr>
+<td>Semantic validation is a separate layer from parsing</td>
+<td>A schema-valid object can still contain a fabricated id</td>
+</tr>
+<tr>
+<td>Every failure logs the raw response and the schema version</td>
+<td>It is the only artefact that explains what happened</td>
+</tr>
+<tr>
+<td>Structure the envelope, leave prose fields free</td>
+<td>Forcing structure onto the prose degrades it and buys nothing</td>
+</tr>
+</tbody>
+</table>
+<h2>6. Data contracts</h2>
+<div class="hl"><pre><span></span><code><span class="k">class</span> <span class="nc">TicketExtraction</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">model_config</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;extra&quot;</span><span class="p">:</span> <span class="s2">&quot;forbid&quot;</span><span class="p">}</span>
+
+    <span class="n">issue</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">max_length</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s2">&quot;The primary problem, one sentence.&quot;</span><span class="p">)</span>
+    <span class="n">severity</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;critical&quot;</span><span class="p">,</span> <span class="s2">&quot;high&quot;</span><span class="p">,</span> <span class="s2">&quot;medium&quot;</span><span class="p">,</span> <span class="s2">&quot;low&quot;</span><span class="p">]</span>
+    <span class="n">severity_quote</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">&quot;The exact phrase that drove severity.&quot;</span><span class="p">)</span>
+    <span class="n">product_area</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s2">&quot;null if not stated. Do not infer.&quot;</span><span class="p">)</span>
+    <span class="n">affected_users</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">ge</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s2">&quot;null if not stated.&quot;</span><span class="p">)</span>
+
+    <span class="nd">@field_validator</span><span class="p">(</span><span class="s2">&quot;severity_quote&quot;</span><span class="p">)</span>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">must_be_a_quote</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">v</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="c1"># Semantic, not syntactic: 400 characters is a summary, not a quotation.</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">200</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;severity_quote must be a short verbatim phrase&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">v</span>
+</code></pre></div>
+
+<p>Semantic rules that do not belong in the schema, and where they go instead:</p>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Belongs in</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>severity</code> is one of four values</td>
+<td>The schema, as an enum</td>
+</tr>
+<tr>
+<td><code>affected_users</code> is not negative</td>
+<td>The schema, as a bound</td>
+</tr>
+<tr>
+<td><code>severity_quote</code> appears verbatim in the source text</td>
+<td><code>rules.py</code> — needs the input</td>
+</tr>
+<tr>
+<td>The referenced <code>order_id</code> exists</td>
+<td><code>rules.py</code> — needs the database</td>
+</tr>
+<tr>
+<td><code>critical</code> requires an outage phrase</td>
+<td><code>rules.py</code> — cross-field</td>
+</tr>
+</tbody>
+</table>
+<h2>7. Build order</h2>
+<ol>
+<li><strong>Define the schema once</strong>, and generate the model's copy from it. Delete any
+   second copy living in a prompt string.</li>
+<li><strong>Log the raw response on every failure</strong>, with the schema version. Do this
+   first: everything after it is easier to diagnose.</li>
+<li><strong>Check the finish reason</strong> before parsing, and raise a distinct error on
+   truncation.</li>
+<li><strong>Robust extraction</strong> — fences, preambles, nesting.</li>
+<li><strong>Syntactic validation</strong> against the schema.</li>
+<li><strong>The repair loop</strong>, capped at two, error text verbatim.</li>
+<li><strong>Move to the strongest mechanism</strong> the provider supports: forced tool call,
+   then constrained decoding if available.</li>
+<li><strong>The semantic layer</strong> — ranges, cross-field rules, referential checks.</li>
+<li><strong>A fixed set of at least fifty inputs with known correct output</strong>, run in CI,
+   reporting first-attempt parse rate and semantic failure rate separately.</li>
+</ol>
+<h2>8. Related reading</h2>
+<p>Every blueprint here stands on its own: nothing below is a prerequisite, and
+nothing above needs any of it to be implemented. These are adjacent problems you
+will meet next, listed so you know they have been thought about.</p>
+<ul>
+<li><strong>Prompt Structure</strong> — where the output contract sits in the prompt, and why.</li>
+<li><strong>Tool Design</strong> — the same schema discipline for tools the model calls.</li>
+<li><strong>Validation at the Boundary</strong> — the same argument for input arriving from anywhere.</li>
+<li><strong>Eval Harness Design</strong> — measuring a prompt or schema change instead of guessing.</li>
+</ul>
+<h2>9. Metrics</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>First-attempt parse rate</td>
+<td>≥ 99%; below 95% the mechanism is wrong, not the prompt</td>
+</tr>
+<tr>
+<td>Repair success rate</td>
+<td>≥ 80%; below 50% the error text is not reaching the model usefully</td>
+</tr>
+<tr>
+<td>Truncation rate</td>
+<td>&lt; 0.1%; above 1% the token budget is sized to the median, not the tail</td>
+</tr>
+<tr>
+<td>Semantic validation failures</td>
+<td>&lt; 2% — these are the ones that reach production as bad data</td>
+</tr>
+<tr>
+<td>Correct nulls where the value is absent</td>
+<td>≥ 95%; the rest are fabrications</td>
+</tr>
+<tr>
+<td>Repair tokens as a share of total</td>
+<td>&lt; 3%</td>
+</tr>
+</tbody>
+</table>
+<h2>10. Failure modes</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>JSON cut off mid-object</td>
+<td>Token limit reached</td>
+<td>Check the finish reason; raise the limit or shrink the schema. Retrying is useless</td>
+</tr>
+<tr>
+<td>Markdown fences around the JSON</td>
+<td>Default formatting</td>
+<td>Fence-aware extraction; say "no fences" in the prompt</td>
+</tr>
+<tr>
+<td>A sentence before the JSON</td>
+<td>The model narrating</td>
+<td>Move to a forced tool call or constrained decoding</td>
+</tr>
+<tr>
+<td>A plausible value where null belonged</td>
+<td>The null case was never described</td>
+<td>Per-field: "null if not stated. Do not infer."</td>
+</tr>
+<tr>
+<td>A value outside the enum</td>
+<td>Not using strict mode</td>
+<td>Constrained decoding, or a <code>Literal</code> type with validation</td>
+</tr>
+<tr>
+<td>Valid shape, wrong values</td>
+<td>No semantic layer</td>
+<td>Add one; the schema was never going to catch this</td>
+</tr>
+<tr>
+<td>The repair loop never converges</td>
+<td>The error was paraphrased, or the schema is impossible to satisfy</td>
+<td>Pass the error verbatim; re-read the schema yourself</td>
+</tr>
+<tr>
+<td>Reliability drops as the schema grows</td>
+<td>Depth and field count</td>
+<td>Flatten to three levels; split into two calls</td>
+</tr>
+<tr>
+<td>Parses fine, fails on one customer's data</td>
+<td>Extraction is naive about nesting or quotes</td>
+<td>Brace-aware scan with string-state tracking</td>
+</tr>
+<tr>
+<td>Nobody can reproduce yesterday's failure</td>
+<td>The raw response was discarded</td>
+<td>Log it on every failure</td>
+</tr>
+</tbody>
+</table>
+<h2>11. Definition of done</h2>
+<ul>
+<li class="task">The schema is defined once in code and the model's copy is generated from it.</li>
+<li class="task">The strongest mechanism the provider supports is in use at every call site.</li>
+<li class="task"><code>additionalProperties: false</code> on every object, required fields declared.</li>
+<li class="task">Schema depth is ≤ 3 and no object has more than ~15 fields.</li>
+<li class="task">Every optional field's description states when to return null.</li>
+<li class="task">Temperature is 0 for every extraction call.</li>
+<li class="task">The finish reason is checked before any parse failure is diagnosed.</li>
+<li class="task">Extraction handles fences, preambles and nested objects.</li>
+<li class="task">Repairs are capped at two and pass the validation error verbatim.</li>
+<li class="task">A semantic validation layer checks ranges, cross-field rules and referential integrity.</li>
+<li class="task">Every failure logs the raw response and the schema version.</li>
+<li class="task">A fixed input set runs in CI and reports parse rate and semantic failure rate separately.</li>
+</ul>
+  </article>
+
+  <aside class="tailpiece">
+    <h2>Use this blueprint</h2>
+    <p>
+      Copy the file into your project and point your agent at it. It works with Claude Code,
+      Cursor, Copilot, ChatGPT and anything else that reads a file — there is nothing to install.
+    </p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/structured-output" target="_blank" rel="noopener">Open on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Browse all blueprints</a>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p><a href="/">Awesome Blueprints</a> — same request, same architecture, every time.</p>
+    <p class="dim">MIT · awesomeblueprints.com</p>
+  </div>
+</footer>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'neutral' });
+</script>
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const now = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', now);
+    try { localStorage.setItem('ab-theme', now); } catch (e) {}
+    location.reload();   // the diagram is themed at render time
+  });
+</script>
+
+</body>
+</html>

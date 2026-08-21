@@ -1,0 +1,553 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Test Harness and Unit Tests — Blueprint for AI Coding Agents | Awesome Blueprints</title>
+<meta name="description" content="A test harness and unit tests: project layout, fixtures, fakes over mocks, coverage that means something and tests that fail for one reason." />
+<link rel="canonical" href="https://awesomeblueprints.com/blueprints/testing-setup/" />
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="Awesome Blueprints" />
+<meta property="og:url" content="https://awesomeblueprints.com/blueprints/testing-setup/" />
+<meta property="og:title" content="Test Harness and Unit Tests — Architecture Blueprint" />
+<meta property="og:description" content="A test harness and unit tests: project layout, fixtures, fakes over mocks, coverage that means something and tests that fail for one reason." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Test Harness and Unit Tests — Architecture Blueprint" />
+<meta name="twitter:description" content="A test harness and unit tests: project layout, fixtures, fakes over mocks, coverage that means something and tests that fail for one reason." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/page.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "Test Harness and Unit Tests", "description": "A test harness and unit tests: project layout, fixtures, fakes over mocks, coverage that means something and tests that fail for one reason.", "url": "https://awesomeblueprints.com/blueprints/testing-setup/", "dateModified": "2026-08-19", "keywords": "Testing", "isAccessibleForFree": true, "license": "https://opensource.org/licenses/MIT", "publisher": {"@type": "Organization", "name": "Awesome Blueprints", "url": "https://awesomeblueprints.com"}}</script>
+<script>
+  (function () {
+    var t;
+    try { t = localStorage.getItem('ab-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">Awesome Blueprints</a>
+    <div class="nav-right">
+      <a class="nav-link" href="/#blueprints">Catalogue</a>
+      <a class="nav-link" href="/#faq">FAQ</a>
+      <a class="nav-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/testing-setup" target="_blank" rel="noopener">GitHub ↗</a>
+      <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Switch theme">◑</button>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/">Home</a> <span>/</span> <a href="/#blueprints">Blueprints</a> <span>/</span>
+    <span>Test Harness and Unit Tests</span>
+  </nav>
+
+  <header class="page-head">
+    <p class="eyebrow">testing-setup</p>
+    <h1>Test Harness and Unit Tests</h1>
+    <p class="lede">A test harness and unit tests: project layout, fixtures, fakes over mocks, coverage that means something and tests that fail for one reason.</p>
+    <div class="facts"><span>low</span><span>1–2 days</span><span>Verified 2026-08-19</span></div>
+    <div class="tags"><span class="tag">Testing</span></div>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/testing-setup" target="_blank" rel="noopener">Read it on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Back to the catalogue</a>
+    </div>
+  </header>
+
+  <article class="doc">
+<blockquote>
+<p>Test infrastructure from nothing: a runner configured to fail on flakiness
+rather than tolerate it, fixtures scoped so tests cannot leak into each other,
+factories instead of shared sample data, and time and randomness pinned so a
+green suite means something.</p>
+</blockquote>
+<p><strong>Complexity:</strong> low · <strong>Typical build:</strong> 1–2 days · <strong>Verified:</strong> 2026-08-19 (re-check after ~90 days)</p>
+<p><strong>Examples in:</strong> Python, with pytest. The architecture is language-agnostic: sections 5, 10 and 11 hold wherever you build this. Section 4 is illustrative — if your project is in another language, your agent translates the idioms rather than importing them, and nothing is lost. The equivalents are Vitest or Jest with <code>--sequence.shuffle</code> in TypeScript, <code>go test -shuffle=on</code> in Go, and ExUnit with <code>async: true</code> in Elixir — where the ordering and determinism concerns are identical.</p>
+<p><strong>Use when:</strong> a project has no tests, or has tests that nobody trusts — they fail sometimes, they pass when the code is wrong, or they must be run in a particular order. Covers layout, fixtures, factories, mocking the outside world, and a coverage bar that is worth having.</p>
+<p><strong>Not for:</strong> tests that need a real database, a real queue or a real HTTP peer. Those are integration tests: different infrastructure, different isolation problem, different speed budget. Trying to serve both from one harness is how a unit suite becomes a four-minute one nobody runs before pushing.</p>
+<hr />
+<h2>⚙️ INSTRUCTIONS FOR THE AI — READ BEFORE WRITING ANY CODE</h2>
+<p><strong>Do not start coding.</strong></p>
+<p><strong>Step 1 — Refresh.</strong> Verify the test runner and its plugins. If the project is
+async, verify the async plugin's current major — its configuration has changed
+across versions, the <code>event_loop</code> fixture override that appears in most examples
+was removed, and loop scoping is now configured rather than monkey-patched.
+Confirm the current names for the ordering-shuffle plugin, the time-freezing
+library and the HTTP-mocking library. Report what you verified and what turned out
+wrong.</p>
+<p><strong>Step 2 — Read the project, then audit what already exists.</strong> Find every existing
+test and record: how long the suite takes, whether it passes with <code>-p randomly</code>
+or the equivalent shuffle enabled, and whether any test reaches the network or the
+clock. Run the suite twice in a row without cleaning — if the second run differs,
+something persists between runs and that is the first thing to fix. Find where
+sample data comes from today; a shared fixtures file that many tests mutate is the
+usual source of order dependence. Then audit §11 item by item, each marked
+<em>already true</em>, <em>partly true</em> or <em>absent</em>, with the file that decides it, reported
+before anything is proposed.</p>
+<p>Assume the project is right until it demonstrably is not; code satisfying an item
+stays even where its shape differs from §4; replacing something that works needs a
+one-line reason; never delete a working path to make room for the blueprint's
+version. The same holds for language — §4 is illustrative, its idioms get
+translated into the project's language, and §11 is what has to become true rather
+than the syntax.</p>
+<p><strong>Step 3 — Write a plan for the gap only, and get it approved</strong>, including a
+<code>## Proposed stack</code> section and the current suite runtime as the number to protect.
+Do not ask open framework questions — propose, and ask for confirmation once. Say
+what you are adding, what you are leaving alone, and what you propose to change,
+and touch nothing else.</p>
+<p><strong>Step 4 — Build in the order in §7.</strong> <strong>Step 5 — §11 is the definition of done.</strong></p>
+<hr />
+<h2>1. Why a green suite can mean nothing</h2>
+<p>A test suite has one job: when it is green, the code is probably right. Four
+common defaults break that.</p>
+<table>
+<thead>
+<tr>
+<th>The usual setup</th>
+<th>This one</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Tests run in file order, so one test's leftovers set up the next one</td>
+<td>Order is shuffled every run, so a dependency between tests fails immediately</td>
+</tr>
+<tr>
+<td><code>datetime.now()</code> and <code>random()</code> reach the real clock and the real generator</td>
+<td>Both are pinned, so a test that passes today passes in December and on a leap day</td>
+</tr>
+<tr>
+<td>A shared fixtures module holds sample objects that tests mutate</td>
+<td>Each test builds what it needs from a factory, and nothing is shared</td>
+</tr>
+<tr>
+<td>Coverage is a percentage on a dashboard</td>
+<td>Coverage is a floor in CI, and the number is chosen to be defensible</td>
+</tr>
+</tbody>
+</table>
+<p>The first row is the expensive one because the failure appears far from its cause.
+A test suite with an ordering dependency is green on the developer's machine and
+red in CI, or green all week and red when someone adds a test in the middle of the
+file. Every hour spent on that is spent on the harness, not on the bug — and the
+usual outcome is that someone pins the order and the rot is preserved.</p>
+<p><strong>Shuffling is not a nicety; it is the only way this class of defect is visible at
+all.</strong> Turn it on before there are enough tests for it to hurt.</p>
+<p>The fourth row deserves a warning of its own. Coverage measures which lines ran,
+not which behaviours are checked. A suite that executes every line and asserts
+nothing reports one hundred per cent. Use it as a floor that stops the number
+falling, never as evidence that the tests are good.</p>
+<h2>2. Architecture</h2>
+<pre class="mermaid">%% GENERATED - do not edit by hand.
+%% Edit the source header in architecture.mmd, then rebuild.
+%% Unit test harness
+
+flowchart TB
+    dev([&quot;Developer&quot;])
+    ci([&quot;CI run&quot;])
+    runner[&quot;Test runner with shuffle enabled&quot;]
+    conf[&quot;Root fixtures and configuration&quot;]
+    factories[&quot;Object factories&quot;]
+    clock[&quot;Frozen clock and seeded randomness&quot;]
+    fakes[&quot;Fakes for the outside world&quot;]
+    unit[&quot;Unit tests&quot;]
+    subject[&quot;Code under test&quot;]
+    cov[&quot;Coverage floor&quot;]
+
+    dev --&gt;|&quot;run before pushing&quot;| runner
+    ci --&gt;|&quot;run on every change&quot;| runner
+    runner --- conf
+    conf --- factories
+    conf --- clock
+    conf --- fakes
+    runner --&gt;|&quot;shuffled order&quot;| unit
+    unit --&gt;|&quot;build only what this test needs&quot;| factories
+    unit --&gt;|&quot;call&quot;| subject
+    subject --- clock
+    subject --- fakes
+    unit --&gt;|&quot;measured&quot;| cov
+    cov -.-&gt;|&quot;below the floor stops the run&quot;| ci
+
+    classDef service fill:#eff6ff,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b;
+    classDef datastore fill:#e9faf3,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b;
+    classDef external fill:#fff4ed,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b;
+    classDef actor fill:#f0eefc,stroke:#4a3aa7,stroke-width:1.5px,color:#0b0b0b;
+    class runner,conf,factories,clock,fakes,unit,subject,cov service;
+    class dev,ci actor;</pre>
+<p>The rule the diagram encodes: <strong>no arrow leaves this picture.</strong> Nothing reaches a
+network, a real clock or a real database. Everything a unit test touches is
+something the harness constructed, which is what makes the suite fast and what
+makes a failure mean something about the code rather than about the environment.</p>
+<h2>3. Project structure</h2>
+<div class="hl"><pre><span></span><code>tests/
+├── conftest.py         root fixtures — small, and shared by everything
+├── factories.py        one builder per domain object
+├── unit/
+│   ├── conftest.py     fixtures only these tests need
+│   └── test_orders.py
+pyproject.toml          runner configuration lives here, not in a separate ini
+</code></pre></div>
+
+<p><strong>One rule: a fixture lives at the narrowest scope that can hold it.</strong> A fixture
+in the root <code>conftest.py</code> is constructed for tests that never asked for it and
+becomes a dependency nobody can remove. Push it down until exactly the tests that
+use it can see it.</p>
+<h2>4. Reference implementation</h2>
+<div class="hl"><pre><span></span><code><span class="c1"># pyproject.toml</span><span class="w"></span>
+<span class="k">[tool.pytest.ini_options]</span><span class="w"></span>
+<span class="n">testpaths</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s">&quot;tests&quot;</span><span class="p">]</span><span class="w"></span>
+<span class="n">addopts</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">    </span><span class="s">&quot;--strict-markers&quot;</span><span class="p">,</span><span class="w">     </span><span class="c1"># a typo in a marker name is an error, not a silently</span><span class="w"></span>
+<span class="w">                            </span><span class="c1"># unmarked test that then runs in every selection</span><span class="w"></span>
+<span class="w">    </span><span class="s">&quot;--strict-config&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">    </span><span class="s">&quot;-ra&quot;</span><span class="p">,</span><span class="w">                  </span><span class="c1"># show why things were skipped; silent skips hide rot</span><span class="w"></span>
+<span class="w">    </span><span class="s">&quot;--cov=app&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">    </span><span class="s">&quot;--cov-report=term-missing&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">    </span><span class="s">&quot;--cov-fail-under=75&quot;</span><span class="p">,</span><span class="w">  </span><span class="c1"># a floor to stop the number falling, not a quality claim</span><span class="w"></span>
+<span class="p">]</span><span class="w"></span>
+<span class="c1"># The default when tests do not say otherwise. Explicit beats implicit here:</span><span class="w"></span>
+<span class="c1"># auto-detection makes a forgotten marker look like a passing synchronous test</span><span class="w"></span>
+<span class="c1"># that in fact never ran its body.</span><span class="w"></span>
+<span class="n">asyncio_mode</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;strict&quot;</span><span class="w"></span>
+<span class="n">asyncio_default_fixture_loop_scope</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;function&quot;</span><span class="w"></span>
+<span class="n">markers</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">    </span><span class="s">&quot;slow: takes more than a second — excluded from the default run&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="p">]</span><span class="w"></span>
+<span class="n">filterwarnings</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">    </span><span class="s">&quot;error&quot;</span><span class="p">,</span><span class="w">                </span><span class="c1"># a deprecation warning is a future breakage with a date</span><span class="w"></span>
+<span class="w">    </span><span class="s">&quot;ignore::DeprecationWarning:third_party_lib.*&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="p">]</span><span class="w"></span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># tests/conftest.py</span>
+<span class="kn">import</span> <span class="nn">random</span>
+<span class="kn">import</span> <span class="nn">pytest</span>
+<span class="kn">from</span> <span class="nn">time_machine</span> <span class="kn">import</span> <span class="n">travel</span>
+
+<span class="c1"># Chosen once, printed on failure. A test that depends on a particular random draw</span>
+<span class="c1"># must be reproducible; without a fixed seed, &quot;it failed once in CI&quot; is unfixable.</span>
+<span class="n">SEED</span> <span class="o">=</span> <span class="mi">20260819</span>
+
+
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span><span class="p">(</span><span class="n">autouse</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">deterministic</span><span class="p">(</span><span class="n">monkeypatch</span><span class="p">):</span>
+    <span class="c1"># autouse because determinism is not opt-in: the test that forgets to ask for it</span>
+    <span class="c1"># is exactly the one that fails on the last day of the month.</span>
+    <span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="n">SEED</span><span class="p">)</span>
+    <span class="k">with</span> <span class="n">travel</span><span class="p">(</span><span class="s2">&quot;2026-08-19T12:00:00+00:00&quot;</span><span class="p">,</span> <span class="n">tick</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="k">yield</span>
+
+
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span><span class="p">(</span><span class="n">autouse</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">no_network</span><span class="p">(</span><span class="n">monkeypatch</span><span class="p">):</span>
+    <span class="c1"># A unit test that reaches the network is an integration test wearing a</span>
+    <span class="c1"># disguise: slow, flaky, and green when the service it calls is broken.</span>
+    <span class="c1"># Blocking it at the socket makes that impossible rather than discouraged.</span>
+    <span class="kn">import</span> <span class="nn">socket</span>
+
+    <span class="k">def</span> <span class="nf">deny</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;network access in a unit test — mock it or move it to tests/integration&quot;</span><span class="p">)</span>
+
+    <span class="n">monkeypatch</span><span class="o">.</span><span class="n">setattr</span><span class="p">(</span><span class="n">socket</span><span class="p">,</span> <span class="s2">&quot;socket&quot;</span><span class="p">,</span> <span class="n">deny</span><span class="p">)</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># tests/factories.py</span>
+<span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span>
+<span class="kn">import</span> <span class="nn">itertools</span>
+<span class="kn">from</span> <span class="nn">decimal</span> <span class="kn">import</span> <span class="n">Decimal</span>
+<span class="kn">from</span> <span class="nn">app.models.order</span> <span class="kn">import</span> <span class="n">Order</span>
+
+<span class="n">_ids</span> <span class="o">=</span> <span class="n">itertools</span><span class="o">.</span><span class="n">count</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">an_order</span><span class="p">(</span><span class="o">**</span><span class="n">overrides</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Order</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Build a valid Order. Every field has a working default; a test overrides</span>
+<span class="sd">    only what it is about.</span>
+
+<span class="sd">    This is the point of a factory over a shared sample object. A test that says</span>
+<span class="sd">    `an_order(quantity=0)` states its own subject in one line — and it cannot</span>
+<span class="sd">    affect any other test, because it built its own object.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">defaults</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
+        <span class="nb">id</span><span class="o">=</span><span class="nb">next</span><span class="p">(</span><span class="n">_ids</span><span class="p">),</span>
+        <span class="n">customer_id</span><span class="o">=</span><span class="nb">next</span><span class="p">(</span><span class="n">_ids</span><span class="p">),</span>
+        <span class="n">quantity</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">total</span><span class="o">=</span><span class="n">Decimal</span><span class="p">(</span><span class="s2">&quot;10.00&quot;</span><span class="p">),</span>
+        <span class="n">status</span><span class="o">=</span><span class="s2">&quot;pending&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">Order</span><span class="p">(</span><span class="o">**</span><span class="p">{</span><span class="o">**</span><span class="n">defaults</span><span class="p">,</span> <span class="o">**</span><span class="n">overrides</span><span class="p">})</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># tests/unit/test_orders.py</span>
+<span class="kn">import</span> <span class="nn">pytest</span>
+<span class="kn">from</span> <span class="nn">app.services.orders</span> <span class="kn">import</span> <span class="n">price_order</span>
+<span class="kn">from</span> <span class="nn">tests.factories</span> <span class="kn">import</span> <span class="n">an_order</span>
+
+
+<span class="k">def</span> <span class="nf">test_bulk_discount_applies_from_ten_units</span><span class="p">():</span>
+    <span class="c1"># The name says the behaviour, so a failure in CI is legible without opening</span>
+    <span class="c1"># the file. &quot;test_price_1&quot; is a line number with extra steps.</span>
+    <span class="n">order</span> <span class="o">=</span> <span class="n">an_order</span><span class="p">(</span><span class="n">quantity</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">total</span><span class="o">=</span><span class="n">Decimal</span><span class="p">(</span><span class="s2">&quot;100.00&quot;</span><span class="p">))</span>
+    <span class="k">assert</span> <span class="n">price_order</span><span class="p">(</span><span class="n">order</span><span class="p">)</span> <span class="o">==</span> <span class="n">Decimal</span><span class="p">(</span><span class="s2">&quot;90.00&quot;</span><span class="p">)</span>
+
+
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">parametrize</span><span class="p">(</span><span class="s2">&quot;quantity&quot;</span><span class="p">,</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+<span class="k">def</span> <span class="nf">test_non_positive_quantity_is_rejected</span><span class="p">(</span><span class="n">quantity</span><span class="p">):</span>
+    <span class="k">with</span> <span class="n">pytest</span><span class="o">.</span><span class="n">raises</span><span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="n">match</span><span class="o">=</span><span class="s2">&quot;quantity&quot;</span><span class="p">):</span>
+        <span class="n">price_order</span><span class="p">(</span><span class="n">an_order</span><span class="p">(</span><span class="n">quantity</span><span class="o">=</span><span class="n">quantity</span><span class="p">))</span>
+        <span class="c1"># match= is not decoration: without it this passes when the code raises</span>
+        <span class="c1"># ValueError for a completely unrelated reason, which is how a test keeps</span>
+        <span class="c1"># passing after the behaviour it covered was deleted.</span>
+</code></pre></div>
+
+<h2>5. Golden-standard rules</h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Forbidden:</strong> tests that depend on execution order</td>
+<td>Shuffle every run. Without it the dependency is invisible until someone inserts a test, and then it is a day of work far from the cause.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> a unit test touching the network, the filesystem outside a temp directory, or a real database</td>
+<td>It is an integration test in disguise: slow, flaky, and green when its dependency is broken. Block it at the socket rather than asking people not to.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> reading the real clock or unseeded randomness</td>
+<td>Those tests pass today and fail on the last day of a month, across a daylight-saving boundary, or once in a hundred CI runs.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> shared mutable sample objects</td>
+<td>One test's mutation becomes another's precondition, and the suite becomes order-dependent without anyone writing an ordering.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> <code>pytest.raises</code> without matching the message</td>
+<td>It passes when the code raises the right type for the wrong reason, which outlives the behaviour it was meant to cover.</td>
+</tr>
+<tr>
+<td>Coverage is a floor, never a goal</td>
+<td>It measures lines executed, not behaviours checked. A suite that asserts nothing can reach one hundred per cent.</td>
+</tr>
+<tr>
+<td>Every fixture sits at the narrowest scope that works</td>
+<td>A root fixture is built for tests that never asked for it and becomes a dependency nobody can remove.</td>
+</tr>
+<tr>
+<td>Markers are declared and strict</td>
+<td>An unknown marker should be an error; otherwise a typo silently unmarks a test and it runs in every selection.</td>
+</tr>
+<tr>
+<td>Warnings are errors, with a short explicit ignore list</td>
+<td>A deprecation warning is a breakage with a date on it. Reading it in CI now is cheaper than debugging it after an upgrade.</td>
+</tr>
+<tr>
+<td>The default run excludes slow tests, and CI runs everything</td>
+<td>If running tests before pushing is inconvenient, they stop being run before pushing.</td>
+</tr>
+<tr>
+<td>Test names state the behaviour</td>
+<td>A CI failure should be legible from the name alone, without opening the file.</td>
+</tr>
+<tr>
+<td>Assertions are about behaviour, not about how it was implemented</td>
+<td>A test asserting that a private method was called breaks on every refactor and catches no bug.</td>
+</tr>
+</tbody>
+</table>
+<h2>6. Data contracts</h2>
+<p>The contract is what a test may assume, and it is deliberately small:</p>
+<div class="hl"><pre><span></span><code>time        frozen at a fixed instant; advancing it is explicit
+randomness  seeded from one constant, printed on failure
+network     unavailable; any attempt raises
+order       arbitrary — nothing may depend on what ran before
+state       nothing persists between tests
+</code></pre></div>
+
+<p>A test that needs any of these relaxed is telling you it belongs in another suite.
+That signal is worth more than the convenience of relaxing it, because it is the
+only automatic way a unit suite stays fast.</p>
+<h2>7. Build order</h2>
+<ol>
+<li><strong>Runner configuration, one trivial test, and shuffle enabled from the first
+   commit.</strong> Turning it on later means fixing every accumulated dependency at once.</li>
+<li><strong>Determinism</strong> — frozen clock, seeded randomness — as autouse fixtures, then
+   a test that asserts the clock is frozen.</li>
+<li><strong>Factories</strong> for the two or three objects tests need most.</li>
+<li><strong>The network block</strong>, then run the existing tests and see what fails. Whatever
+   does was never a unit test.</li>
+<li><strong>Real unit tests for the highest-risk logic</strong> — pricing, permissions, state
+   transitions.</li>
+<li><strong>Coverage floor</strong>, set just under the current number so it can only go up.</li>
+<li><strong>Slow marker and the split run.</strong></li>
+</ol>
+<p>Step 1 puts shuffle first because it is the only item on this list that gets
+harder every day it is postponed.</p>
+<h2>8. Blocks to pull in</h2>
+<p>Nothing here is a prerequisite. These are adjacent problems, by name only —
+resolve them separately if they apply.</p>
+<ul>
+<li>Integration tests with real dependencies — the suite this one deliberately excludes</li>
+<li>GitHub Actions CI — where this suite runs on every change</li>
+<li>Docker Compose dev environment — where the dependencies the unit suite avoids actually live</li>
+<li>Pydantic request and response schemas — the boundary these tests exercise most</li>
+</ul>
+<h2>9. Metrics</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Full unit suite runtime</td>
+<td>&lt; 10 s locally</td>
+</tr>
+<tr>
+<td>Tests that fail when the order is shuffled</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Flaky failures per hundred CI runs</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Unit tests reaching the network</td>
+<td>0, enforced rather than reviewed</td>
+</tr>
+<tr>
+<td>Coverage</td>
+<td>Above the floor, and the floor only ever rises</td>
+</tr>
+<tr>
+<td>Time from a failure name to knowing what broke</td>
+<td>Seconds, without opening the file</td>
+</tr>
+</tbody>
+</table>
+<h2>10. Failure modes</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Tests pass locally and fail in CI, or fail only when a new test is added</td>
+<td>An ordering dependency: one test leaves state another relies on</td>
+<td>Enable shuffle, fix what it finds, keep it on</td>
+</tr>
+<tr>
+<td>A test fails once a month and passes on retry</td>
+<td>It reads the real clock, or an unseeded random value</td>
+<td>Freeze time and seed randomness with autouse fixtures</td>
+</tr>
+<tr>
+<td>A test fails when a third-party service is down</td>
+<td>It was never a unit test</td>
+<td>Block the network in the harness; move the test to the integration suite</td>
+</tr>
+<tr>
+<td>Coverage is high and bugs still ship</td>
+<td>Coverage counts executed lines, not assertions</td>
+<td>Treat it as a floor; judge the suite by what it asserts</td>
+</tr>
+<tr>
+<td>A test keeps passing after the behaviour it covered was deleted</td>
+<td><code>pytest.raises</code> without a message match, or an assertion on a mock rather than on a result</td>
+<td>Match the message; assert on outcomes</td>
+</tr>
+<tr>
+<td>Every refactor breaks dozens of tests that found no bug</td>
+<td>Tests assert on internal calls rather than on behaviour</td>
+<td>Assert on what the caller observes</td>
+</tr>
+<tr>
+<td>Nobody runs the suite before pushing</td>
+<td>It takes minutes because slow tests are in the default run</td>
+<td>Mark them and exclude them by default; CI runs everything</td>
+</tr>
+<tr>
+<td>A new test mysteriously affects an old one</td>
+<td>Both mutate a shared sample object built once at module or session scope</td>
+<td>Factories, function scope, one object per test</td>
+</tr>
+<tr>
+<td>A test is skipped in CI for months and nobody notices</td>
+<td>Skips are silent by default</td>
+<td>Report skip reasons and review them</td>
+</tr>
+<tr>
+<td>An upgrade breaks the suite in a way nobody saw coming</td>
+<td>Deprecation warnings were never surfaced</td>
+<td>Turn warnings into errors with a narrow ignore list</td>
+</tr>
+</tbody>
+</table>
+<h2>11. Definition of done</h2>
+<ul>
+<li class="task">The suite passes with the order shuffled, run at least ten times in CI with different seeds</li>
+<li class="task">Running the suite twice in a row without cleaning produces identical results</li>
+<li class="task">A test asserts that the clock is frozen and that the seeded generator produces a known value</li>
+<li class="task">Attempting a network connection from a unit test raises, covered by a test that asserts the raise</li>
+<li class="task">Every domain object used by more than two tests has a factory, and no test mutates an object it did not build</li>
+<li class="task">The coverage floor is enforced in CI and is at or above the current level</li>
+<li class="task">Unknown markers cause an error, verified by adding a misspelled one and observing the failure</li>
+<li class="task">Warnings are errors, with an explicit ignore list containing only third-party entries and a reason for each</li>
+<li class="task">The default run excludes tests marked slow and finishes in under ten seconds</li>
+<li class="task">Every <code>pytest.raises</code> in the suite matches a message or an error attribute, checked by grep in CI</li>
+<li class="task">Test names describe behaviour, verified by reading the CI output of a deliberately failed run</li>
+</ul>
+  </article>
+
+  <aside class="tailpiece">
+    <h2>Use this blueprint</h2>
+    <p>
+      Copy the file into your project and point your agent at it. It works with Claude Code,
+      Cursor, Copilot, ChatGPT and anything else that reads a file — there is nothing to install.
+    </p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/testing-setup" target="_blank" rel="noopener">Open on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Browse all blueprints</a>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p><a href="/">Awesome Blueprints</a> — same request, same architecture, every time.</p>
+    <p class="dim">MIT · awesomeblueprints.com</p>
+  </div>
+</footer>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'neutral' });
+</script>
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const now = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', now);
+    try { localStorage.setItem('ab-theme', now); } catch (e) {}
+    location.reload();   // the diagram is themed at render time
+  });
+</script>
+
+</body>
+</html>

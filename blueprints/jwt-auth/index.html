@@ -1,0 +1,622 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>JWT Access Token Authentication — Blueprint for AI Coding Agents | Awesome Blueprints</title>
+<meta name="description" content="JWT authentication for an API: registration, login, token signing and verification, a current_user dependency, roles and scopes." />
+<link rel="canonical" href="https://awesomeblueprints.com/blueprints/jwt-auth/" />
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="Awesome Blueprints" />
+<meta property="og:url" content="https://awesomeblueprints.com/blueprints/jwt-auth/" />
+<meta property="og:title" content="JWT Access Token Authentication — Architecture Blueprint" />
+<meta property="og:description" content="JWT authentication for an API: registration, login, token signing and verification, a current_user dependency, roles and scopes." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="JWT Access Token Authentication — Architecture Blueprint" />
+<meta name="twitter:description" content="JWT authentication for an API: registration, login, token signing and verification, a current_user dependency, roles and scopes." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/page.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "JWT Access Token Authentication", "description": "JWT authentication for an API: registration, login, token signing and verification, a current_user dependency, roles and scopes.", "url": "https://awesomeblueprints.com/blueprints/jwt-auth/", "dateModified": "2026-08-19", "keywords": "Auth", "isAccessibleForFree": true, "license": "https://opensource.org/licenses/MIT", "publisher": {"@type": "Organization", "name": "Awesome Blueprints", "url": "https://awesomeblueprints.com"}}</script>
+<script>
+  (function () {
+    var t;
+    try { t = localStorage.getItem('ab-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">Awesome Blueprints</a>
+    <div class="nav-right">
+      <a class="nav-link" href="/#blueprints">Catalogue</a>
+      <a class="nav-link" href="/#faq">FAQ</a>
+      <a class="nav-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/jwt-auth" target="_blank" rel="noopener">GitHub ↗</a>
+      <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Switch theme">◑</button>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/">Home</a> <span>/</span> <a href="/#blueprints">Blueprints</a> <span>/</span>
+    <span>JWT Access Token Authentication</span>
+  </nav>
+
+  <header class="page-head">
+    <p class="eyebrow">jwt-auth</p>
+    <h1>JWT Access Token Authentication</h1>
+    <p class="lede">JWT authentication for an API: registration, login, token signing and verification, a current_user dependency, roles and scopes.</p>
+    <div class="facts"><span>medium</span><span>2–3 days</span><span>Verified 2026-08-19</span></div>
+    <div class="tags"><span class="tag">Auth</span></div>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/jwt-auth" target="_blank" rel="noopener">Read it on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Back to the catalogue</a>
+    </div>
+  </header>
+
+  <article class="doc">
+<blockquote>
+<p>Registration, login and protected endpoints with a short-lived access token —
+stopping deliberately at the access token, because that is enough for most
+systems and the verification step is where the exploitable mistakes are.</p>
+</blockquote>
+<p><strong>Complexity:</strong> medium · <strong>Typical build:</strong> 2–3 days · <strong>Verified:</strong> 2026-08-19 (re-check after ~90 days)</p>
+<p><strong>Examples in:</strong> Python, with PyJWT, Argon2 and FastAPI. The architecture is language-agnostic: sections 5, 10 and 11 hold wherever you build this. Section 4 is illustrative — if your project is in another language, your agent translates the idioms rather than importing them, and nothing is lost. The equivalents are <code>jose</code> or <code>jsonwebtoken</code> with an explicit <code>algorithms</code> option in Node, <code>golang-jwt</code> with <code>WithValidMethods</code> in Go, and Guardian in Elixir — where the algorithm-allowlist requirement is exactly the same.</p>
+<p><strong>Use when:</strong> an API needs to know who is calling, the callers are your own clients, and you control both sides. Covers registration, login, a <code>current_user</code> dependency, roles and scopes.</p>
+<p><strong>Not for:</strong> long-lived sessions you must be able to revoke, "log out from all devices", or immediately disabling a compromised account. A signed token is valid until it expires and nothing can withdraw it — that needs a server-side session and refresh rotation, which is a separate system with its own threat model. Also not for delegating access to third-party clients: that is OAuth 2, and rolling your own is a bad trade.</p>
+<hr />
+<h2>⚙️ INSTRUCTIONS FOR THE AI — READ BEFORE WRITING ANY CODE</h2>
+<p><strong>Do not start coding.</strong></p>
+<p><strong>Step 1 — Refresh.</strong> Verify the JWT library and its maintenance status —
+<code>python-jose</code> was recommended for years, went unmaintained, and FastAPI's own
+tutorial was changed away from it; do not reintroduce it because an old example
+uses it. Confirm the verification call's parameter for the algorithm allowlist,
+and that <code>exp</code>, <code>aud</code> and <code>iss</code> are validated by default or explicitly. Verify the
+password hashing library and the current OWASP parameters for the algorithm you
+choose. Check whether <code>passlib</code> is maintained and whether it works with the bcrypt
+version you would install — that pairing has broken before. Report what you
+verified and what turned out wrong.</p>
+<p><strong>Step 2 — Read the project, then audit what already exists.</strong> Find any existing
+user model, password field and login route. Record the hash algorithm and
+parameters of stored passwords — if any exist, this work has a rehash-on-login
+path, not a migration. Find every route and classify it as public or protected,
+because the audit's value is the list of routes that should be protected and are
+not. Find where the signing key comes from and whether it is committed. Then audit
+§11 item by item, each marked <em>already true</em>, <em>partly true</em> or <em>absent</em>, with the
+file that decides it, reported before anything is proposed.</p>
+<p>Assume the project is right until it demonstrably is not; code satisfying an item
+stays even where its shape differs from §4; replacing something that works needs a
+one-line reason; never delete a working path to make room for the blueprint's
+version. The same holds for language — §4 is illustrative, its idioms get
+translated into the project's language, and §11 is what has to become true rather
+than the syntax.</p>
+<p><strong>Step 3 — Write a plan for the gap only, and get it approved</strong>, including a
+<code>## Proposed stack</code> section naming the JWT library, the hashing algorithm with its
+parameters, and the token lifetime with a reason. Do not ask open framework
+questions — propose, and ask for confirmation once. Say what you are adding, what
+you are leaving alone, and what you propose to change, and touch nothing else.</p>
+<p><strong>Step 4 — Build in the order in §7.</strong> <strong>Step 5 — §11 is the definition of done.</strong></p>
+<hr />
+<h2>1. Why the naive version is exploitable rather than merely weak</h2>
+<p>Most authentication bugs are not subtle. They are one missing argument.</p>
+<table>
+<thead>
+<tr>
+<th>The obvious implementation</th>
+<th>This one</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>jwt.decode(token, key)</code> — the library reads the algorithm from the token's own header</td>
+<td>The algorithm is passed in as an allowlist; the token does not get a vote</td>
+</tr>
+<tr>
+<td>The password is hashed with whatever the tutorial used</td>
+<td>Argon2id at current OWASP parameters, with the work factor stored in the hash so it can be raised later</td>
+</tr>
+<tr>
+<td>A wrong password and an unknown user return different errors</td>
+<td>Both return the same response in the same time</td>
+</tr>
+<tr>
+<td>Expiry is a number someone picked</td>
+<td>Short, because nothing can revoke the token before it expires</td>
+</tr>
+</tbody>
+</table>
+<p>The first row is the one that ends in a breach report. If the verifier trusts the
+token's <code>alg</code> header, three attacks follow immediately: <code>alg: none</code> with the
+signature removed; an RS256 system fed an HS256 token signed with the public key —
+which is public, so the attacker has the "secret"; and <code>kid</code> pointed at a file or
+a SQL injection that yields a key the attacker chose. All three are prevented by
+the same thing: <strong>tell the library which algorithms you accept, rather than asking
+it to detect one.</strong></p>
+<p>The third row is quieter but real. If "no such user" returns faster than "wrong
+password", the endpoint is a user-enumeration oracle, and the attacker's next step
+is a credential-stuffing list narrowed to real accounts.</p>
+<h2>2. Architecture</h2>
+<pre class="mermaid">%% GENERATED - do not edit by hand.
+%% Edit the source header in architecture.mmd, then rebuild.
+%% Access token issue and verification
+
+flowchart TB
+    subgraph issue[&quot;Issuing&quot;]
+        direction TB
+        register[&quot;Register endpoint&quot;]
+        login[&quot;Login endpoint&quot;]
+        hasher[&quot;Password hasher&quot;]
+        signer[&quot;Token signer&quot;]
+    end
+    subgraph verify[&quot;Verifying&quot;]
+        direction TB
+        scheme[&quot;Bearer extraction&quot;]
+        decoder[&quot;Decode with an algorithm allowlist&quot;]
+        current[&quot;Current user dependency&quot;]
+        scopes[&quot;Scope and role check&quot;]
+    end
+
+    user([&quot;Client&quot;])
+    routes[&quot;Protected routes&quot;]
+    users[(&quot;User store&quot;)]
+    secrets{{&quot;Signing key from configuration&quot;}}
+
+    user --&gt;|&quot;credentials&quot;| register
+    register --&gt;|&quot;hash with a per user salt&quot;| hasher
+    hasher --&gt;|&quot;store the hash, never the password&quot;| users
+    user --&gt;|&quot;credentials&quot;| login
+    login --&gt;|&quot;verify in constant time&quot;| hasher
+    login --&gt;|&quot;claims and a short expiry&quot;| signer
+    signer --- secrets
+    signer -.-&gt;|&quot;access token&quot;| user
+    user --&gt;|&quot;bearer header&quot;| scheme
+    scheme --&gt; decoder
+    decoder --- secrets
+    decoder --&gt;|&quot;subject resolved&quot;| current
+    current --&gt;|&quot;load, check still active&quot;| users
+    current --&gt; scopes
+    scopes --&gt;|&quot;allowed&quot;| routes
+    scopes -.-&gt;|&quot;forbidden when authenticated but not permitted&quot;| user
+    decoder -.-&gt;|&quot;unauthorized when absent, malformed or expired&quot;| user
+
+    classDef service fill:#eff6ff,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b;
+    classDef datastore fill:#e9faf3,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b;
+    classDef external fill:#fff4ed,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b;
+    classDef actor fill:#f0eefc,stroke:#4a3aa7,stroke-width:1.5px,color:#0b0b0b;
+    class register,login,hasher,signer,scheme,decoder,current,scopes,routes service;
+    class users datastore;
+    class secrets external;
+    class user actor;</pre>
+<p>The rule the diagram encodes: <strong>there are two distinct rejection paths, and they
+mean different things.</strong> The decoder rejects with 401 — the credential is missing,
+malformed or expired, and retrying with a fresh token might work. The scope check
+rejects with 403 — the credential is fine and the answer will not change. Clients
+build their refresh logic on that distinction, so collapsing both into one status
+produces infinite refresh loops.</p>
+<h2>3. Project structure</h2>
+<div class="hl"><pre><span></span><code>app/
+├── auth/
+│   ├── passwords.py    hashing and verification, one algorithm, one place
+│   ├── tokens.py       encode and decode — the only module that calls the JWT library
+│   ├── deps.py         current_user, require_scopes
+│   └── routes.py       register, login, me
+└── models/user.py      the user, the hash, the active flag
+</code></pre></div>
+
+<p><strong>One rule: <code>tokens.py</code> is the only module that imports the JWT library.</strong>
+Verification has one correct call shape and several dangerous ones; keeping it to
+one function means the allowlist is written once and reviewed once, instead of
+being an argument someone might omit at a second call site.</p>
+<h2>4. Reference implementation</h2>
+<div class="hl"><pre><span></span><code><span class="c1"># app/auth/passwords.py</span>
+<span class="kn">from</span> <span class="nn">argon2</span> <span class="kn">import</span> <span class="n">PasswordHasher</span>
+<span class="kn">from</span> <span class="nn">argon2.exceptions</span> <span class="kn">import</span> <span class="n">VerifyMismatchError</span><span class="p">,</span> <span class="n">VerificationError</span><span class="p">,</span> <span class="n">InvalidHashError</span>
+
+<span class="c1"># OWASP&#39;s stated minimum at the time of writing: 19 MiB, 2 iterations, 1 lane.</span>
+<span class="c1"># Re-check the cheat sheet at the Verified date above — these numbers move upward</span>
+<span class="c1"># with hardware, and a fixed number in a blueprint is a floor, never a ceiling.</span>
+<span class="n">_hasher</span> <span class="o">=</span> <span class="n">PasswordHasher</span><span class="p">(</span><span class="n">memory_cost</span><span class="o">=</span><span class="mi">19456</span><span class="p">,</span> <span class="n">time_cost</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">parallelism</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+<span class="c1"># A dummy hash of a random value, computed once at import. Verifying against it</span>
+<span class="c1"># when the user does not exist makes the &quot;no such user&quot; path cost the same as the</span>
+<span class="c1"># &quot;wrong password&quot; path — otherwise the endpoint tells an attacker which emails</span>
+<span class="c1"># are registered, by timing alone.</span>
+<span class="n">_DUMMY</span> <span class="o">=</span> <span class="n">_hasher</span><span class="o">.</span><span class="n">hash</span><span class="p">(</span><span class="s2">&quot;not-a-real-password-only-for-timing&quot;</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">hash_password</span><span class="p">(</span><span class="n">password</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="c1"># Argon2 has no short input limit. bcrypt truncates at 72 bytes, which means</span>
+    <span class="c1"># two different long passwords sharing a prefix both authenticate — if you must</span>
+    <span class="c1"># use bcrypt, enforce a maximum length explicitly.</span>
+    <span class="k">return</span> <span class="n">_hasher</span><span class="o">.</span><span class="n">hash</span><span class="p">(</span><span class="n">password</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">verify_password</span><span class="p">(</span><span class="n">password</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">stored_hash</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">_hasher</span><span class="o">.</span><span class="n">verify</span><span class="p">(</span><span class="n">stored_hash</span> <span class="ow">or</span> <span class="n">_DUMMY</span><span class="p">,</span> <span class="n">password</span><span class="p">)</span>
+    <span class="k">except</span> <span class="p">(</span><span class="n">VerifyMismatchError</span><span class="p">,</span> <span class="n">VerificationError</span><span class="p">,</span> <span class="n">InvalidHashError</span><span class="p">):</span>
+        <span class="k">return</span> <span class="kc">False</span>
+    <span class="k">return</span> <span class="n">stored_hash</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+
+
+<span class="k">def</span> <span class="nf">needs_rehash</span><span class="p">(</span><span class="n">stored_hash</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+    <span class="c1"># The parameters are encoded in the hash string, so raising the work factor</span>
+    <span class="c1"># later is a rehash on next successful login rather than a password reset for</span>
+    <span class="c1"># everyone. This is the only migration path that does not annoy every user.</span>
+    <span class="k">return</span> <span class="n">_hasher</span><span class="o">.</span><span class="n">check_needs_rehash</span><span class="p">(</span><span class="n">stored_hash</span><span class="p">)</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/auth/tokens.py</span>
+<span class="kn">from</span> <span class="nn">datetime</span> <span class="kn">import</span> <span class="n">datetime</span><span class="p">,</span> <span class="n">timedelta</span><span class="p">,</span> <span class="n">timezone</span>
+<span class="kn">import</span> <span class="nn">jwt</span>                                   <span class="c1"># PyJWT — maintained; python-jose is not</span>
+<span class="kn">from</span> <span class="nn">app.config</span> <span class="kn">import</span> <span class="n">get_settings</span>
+
+<span class="n">settings</span> <span class="o">=</span> <span class="n">get_settings</span><span class="p">()</span>
+<span class="n">ALGORITHM</span> <span class="o">=</span> <span class="s2">&quot;HS256&quot;</span>                          <span class="c1"># one algorithm, named here, nowhere else</span>
+
+
+<span class="k">def</span> <span class="nf">create_access_token</span><span class="p">(</span><span class="n">subject</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">scopes</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="n">now</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">(</span><span class="n">timezone</span><span class="o">.</span><span class="n">utc</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">jwt</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span>
+        <span class="p">{</span>
+            <span class="s2">&quot;sub&quot;</span><span class="p">:</span> <span class="n">subject</span><span class="p">,</span>
+            <span class="s2">&quot;scopes&quot;</span><span class="p">:</span> <span class="n">scopes</span><span class="p">,</span>
+            <span class="s2">&quot;iat&quot;</span><span class="p">:</span> <span class="n">now</span><span class="p">,</span>
+            <span class="c1"># Short, because nothing can revoke this token before it expires. If a</span>
+            <span class="c1"># long session is needed, that is refresh rotation — a different system.</span>
+            <span class="s2">&quot;exp&quot;</span><span class="p">:</span> <span class="n">now</span> <span class="o">+</span> <span class="n">timedelta</span><span class="p">(</span><span class="n">minutes</span><span class="o">=</span><span class="mi">15</span><span class="p">),</span>
+            <span class="s2">&quot;iss&quot;</span><span class="p">:</span> <span class="n">settings</span><span class="o">.</span><span class="n">jwt_issuer</span><span class="p">,</span>
+            <span class="s2">&quot;aud&quot;</span><span class="p">:</span> <span class="n">settings</span><span class="o">.</span><span class="n">jwt_audience</span><span class="p">,</span>
+        <span class="p">},</span>
+        <span class="n">settings</span><span class="o">.</span><span class="n">jwt_secret</span><span class="o">.</span><span class="n">get_secret_value</span><span class="p">(),</span>
+        <span class="n">algorithm</span><span class="o">=</span><span class="n">ALGORITHM</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">decode_access_token</span><span class="p">(</span><span class="n">token</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+    <span class="k">return</span> <span class="n">jwt</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span>
+        <span class="n">token</span><span class="p">,</span>
+        <span class="n">settings</span><span class="o">.</span><span class="n">jwt_secret</span><span class="o">.</span><span class="n">get_secret_value</span><span class="p">(),</span>
+        <span class="c1"># The load-bearing argument in this file. Without it the library reads the</span>
+        <span class="c1"># algorithm out of the token&#39;s own header, which allows alg:none, and allows</span>
+        <span class="c1"># an RS256 deployment to be fed an HS256 token signed with the public key.</span>
+        <span class="c1"># The token does not get to choose how it is verified.</span>
+        <span class="n">algorithms</span><span class="o">=</span><span class="p">[</span><span class="n">ALGORITHM</span><span class="p">],</span>
+        <span class="c1"># Checked explicitly rather than trusted to a default: a token minted by</span>
+        <span class="c1"># another service of yours, or for a different audience, must not be</span>
+        <span class="c1"># accepted here just because it verifies.</span>
+        <span class="n">audience</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">jwt_audience</span><span class="p">,</span>
+        <span class="n">issuer</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">jwt_issuer</span><span class="p">,</span>
+        <span class="n">options</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;require&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;exp&quot;</span><span class="p">,</span> <span class="s2">&quot;iat&quot;</span><span class="p">,</span> <span class="s2">&quot;sub&quot;</span><span class="p">,</span> <span class="s2">&quot;aud&quot;</span><span class="p">,</span> <span class="s2">&quot;iss&quot;</span><span class="p">]},</span>
+        <span class="n">leeway</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>                           <span class="c1"># seconds, for clock skew between hosts</span>
+    <span class="p">)</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/auth/deps.py</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Annotated</span>
+<span class="kn">from</span> <span class="nn">fastapi</span> <span class="kn">import</span> <span class="n">Depends</span><span class="p">,</span> <span class="n">HTTPException</span><span class="p">,</span> <span class="n">status</span>
+<span class="kn">from</span> <span class="nn">fastapi.security</span> <span class="kn">import</span> <span class="n">OAuth2PasswordBearer</span>
+<span class="kn">import</span> <span class="nn">jwt</span>
+<span class="kn">from</span> <span class="nn">app.auth.tokens</span> <span class="kn">import</span> <span class="n">decode_access_token</span>
+
+<span class="n">oauth2</span> <span class="o">=</span> <span class="n">OAuth2PasswordBearer</span><span class="p">(</span><span class="n">tokenUrl</span><span class="o">=</span><span class="s2">&quot;/auth/login&quot;</span><span class="p">)</span>
+
+<span class="c1"># 401 says &quot;your credential is missing, malformed or expired — try again with a</span>
+<span class="c1"># new one&quot;. WWW-Authenticate is what tells a compliant client to do that.</span>
+<span class="n">UNAUTHORIZED</span> <span class="o">=</span> <span class="n">HTTPException</span><span class="p">(</span>
+    <span class="n">status</span><span class="o">.</span><span class="n">HTTP_401_UNAUTHORIZED</span><span class="p">,</span>
+    <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;Not authenticated&quot;</span><span class="p">,</span>
+    <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;WWW-Authenticate&quot;</span><span class="p">:</span> <span class="s2">&quot;Bearer&quot;</span><span class="p">},</span>
+<span class="p">)</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">current_user</span><span class="p">(</span><span class="n">token</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Depends</span><span class="p">(</span><span class="n">oauth2</span><span class="p">)],</span> <span class="n">session</span><span class="o">=</span><span class="n">Depends</span><span class="p">(</span><span class="n">get_session</span><span class="p">)):</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">claims</span> <span class="o">=</span> <span class="n">decode_access_token</span><span class="p">(</span><span class="n">token</span><span class="p">)</span>
+    <span class="k">except</span> <span class="n">jwt</span><span class="o">.</span><span class="n">PyJWTError</span><span class="p">:</span>
+        <span class="c1"># One message for every decode failure. Distinguishing &quot;expired&quot; from</span>
+        <span class="c1"># &quot;bad signature&quot; in the response tells an attacker which half of their</span>
+        <span class="c1"># forgery worked.</span>
+        <span class="k">raise</span> <span class="n">UNAUTHORIZED</span>
+
+    <span class="n">user</span> <span class="o">=</span> <span class="k">await</span> <span class="n">session</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">User</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">claims</span><span class="p">[</span><span class="s2">&quot;sub&quot;</span><span class="p">]))</span>
+    <span class="c1"># The database check is what makes deactivation take effect within the token&#39;s</span>
+    <span class="c1"># lifetime rather than at its expiry. It costs one indexed read per request and</span>
+    <span class="c1"># it is the difference between &quot;disabled&quot; and &quot;disabled in fifteen minutes&quot;.</span>
+    <span class="k">if</span> <span class="n">user</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">user</span><span class="o">.</span><span class="n">is_active</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">UNAUTHORIZED</span>
+    <span class="n">user</span><span class="o">.</span><span class="n">scopes</span> <span class="o">=</span> <span class="n">claims</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;scopes&quot;</span><span class="p">,</span> <span class="p">[])</span>
+    <span class="k">return</span> <span class="n">user</span>
+
+
+<span class="k">def</span> <span class="nf">require_scopes</span><span class="p">(</span><span class="o">*</span><span class="n">required</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">guard</span><span class="p">(</span><span class="n">user</span><span class="o">=</span><span class="n">Depends</span><span class="p">(</span><span class="n">current_user</span><span class="p">)):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">set</span><span class="p">(</span><span class="n">required</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="nb">set</span><span class="p">(</span><span class="n">user</span><span class="o">.</span><span class="n">scopes</span><span class="p">):</span>
+            <span class="c1"># 403, not 401: the credential is valid and refreshing will not help.</span>
+            <span class="c1"># Returning 401 here makes clients loop on refresh forever.</span>
+            <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_403_FORBIDDEN</span><span class="p">,</span> <span class="s2">&quot;Insufficient scope&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">user</span>
+    <span class="k">return</span> <span class="n">guard</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/auth/routes.py</span>
+<span class="nd">@router</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="s2">&quot;/login&quot;</span><span class="p">)</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">login</span><span class="p">(</span><span class="n">form</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span><span class="n">OAuth2PasswordRequestForm</span><span class="p">,</span> <span class="n">Depends</span><span class="p">()],</span> <span class="n">session</span><span class="o">=...</span><span class="p">):</span>
+    <span class="n">user</span> <span class="o">=</span> <span class="k">await</span> <span class="n">get_user_by_email</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="n">form</span><span class="o">.</span><span class="n">username</span><span class="p">)</span>
+    <span class="c1"># verify_password runs against a dummy hash when the user is absent, so both</span>
+    <span class="c1"># branches take the same time. Returning early here would undo that.</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">verify_password</span><span class="p">(</span><span class="n">form</span><span class="o">.</span><span class="n">password</span><span class="p">,</span> <span class="n">user</span><span class="o">.</span><span class="n">password_hash</span> <span class="k">if</span> <span class="n">user</span> <span class="k">else</span> <span class="kc">None</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_401_UNAUTHORIZED</span><span class="p">,</span> <span class="s2">&quot;Incorrect email or password&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">needs_rehash</span><span class="p">(</span><span class="n">user</span><span class="o">.</span><span class="n">password_hash</span><span class="p">):</span>
+        <span class="n">user</span><span class="o">.</span><span class="n">password_hash</span> <span class="o">=</span> <span class="n">hash_password</span><span class="p">(</span><span class="n">form</span><span class="o">.</span><span class="n">password</span><span class="p">)</span>   <span class="c1"># only place the plaintext exists</span>
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s2">&quot;access_token&quot;</span><span class="p">:</span> <span class="n">create_access_token</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">user</span><span class="o">.</span><span class="n">id</span><span class="p">),</span> <span class="n">user</span><span class="o">.</span><span class="n">scopes</span><span class="p">),</span>
+        <span class="s2">&quot;token_type&quot;</span><span class="p">:</span> <span class="s2">&quot;bearer&quot;</span><span class="p">,</span>
+    <span class="p">}</span>
+</code></pre></div>
+
+<h2>5. Golden-standard rules</h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Forbidden:</strong> decoding without an explicit algorithm allowlist</td>
+<td>The library otherwise reads the algorithm from the attacker-controlled header. This single argument prevents <code>alg:none</code>, RS256-to-HS256 confusion, and every variant of them.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> an unmaintained JWT or hashing library</td>
+<td>Cryptographic code that nobody is patching is a liability with a countdown. Check maintenance status, not just popularity.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> distinguishing "unknown user" from "wrong password", in the response or in the timing</td>
+<td>Either one turns login into an account-enumeration oracle. Verify against a dummy hash when the user is absent.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> the signing key in the repository, or a default value for it</td>
+<td>A default key is the key everyone has. It must come from configuration and fail startup when missing.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> putting anything secret or authoritative in the payload</td>
+<td>A JWT is signed, not encrypted; anyone can read it. Permissions in the token are a snapshot, and they are stale the moment they are minted.</td>
+</tr>
+<tr>
+<td>401 and 403 mean different things and must not be interchanged</td>
+<td>401 says retry with a new credential; 403 says the answer will not change. Collapsing them produces clients that refresh in an infinite loop.</td>
+</tr>
+<tr>
+<td>Access tokens are short-lived — minutes, not days</td>
+<td>Nothing can revoke a signed token before it expires. The expiry <em>is</em> the revocation mechanism, so its length is your worst-case exposure.</td>
+</tr>
+<tr>
+<td><code>aud</code> and <code>iss</code> are validated, not just present</td>
+<td>Otherwise a token minted by another of your services, for another audience, verifies here and is accepted.</td>
+</tr>
+<tr>
+<td>The user is loaded and checked on every request</td>
+<td>A token stays valid after the account is disabled. One indexed read is what makes deactivation immediate.</td>
+</tr>
+<tr>
+<td>Password hashing parameters live in the hash</td>
+<td>It makes raising the work factor a rehash-on-login instead of a password reset for every user.</td>
+</tr>
+<tr>
+<td>One module calls the JWT library</td>
+<td>Verification has one correct shape and several dangerous ones; a second call site is a second chance to omit the allowlist.</td>
+</tr>
+<tr>
+<td>Failed logins are rate-limited per account and per address</td>
+<td>Without it, correct hashing only means the attacker's guesses are slower, not fewer.</td>
+</tr>
+</tbody>
+</table>
+<h2>6. Data contracts</h2>
+<div class="hl"><pre><span></span><code><span class="p">{</span>
+  <span class="s2">&quot;sub&quot;</span><span class="p">:</span> <span class="s2">&quot;1042&quot;</span><span class="p">,</span>          <span class="c1"># the user id as a string — the spec requires a string</span>
+  <span class="s2">&quot;scopes&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;orders:read&quot;</span><span class="p">],</span>
+  <span class="s2">&quot;iat&quot;</span><span class="p">:</span> <span class="mi">1755600000</span><span class="p">,</span>
+  <span class="s2">&quot;exp&quot;</span><span class="p">:</span> <span class="mi">1755600900</span><span class="p">,</span>      <span class="c1"># 15 minutes — the worst-case window after a compromise</span>
+  <span class="s2">&quot;iss&quot;</span><span class="p">:</span> <span class="s2">&quot;orders-api&quot;</span><span class="p">,</span>    <span class="c1"># who minted it; validated on the way in</span>
+  <span class="s2">&quot;aud&quot;</span><span class="p">:</span> <span class="s2">&quot;orders-web&quot;</span><span class="p">,</span>    <span class="c1"># who it is for; validated on the way in</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>Everything in here is readable by anyone holding the token — base64 is not
+encryption. Include what is needed to route the request and nothing else: no email
+address, no name, no internal flags. Permissions in the payload are a snapshot at
+minting time, which is why the account's active state is re-read from the database
+rather than trusted from the token.</p>
+<h2>7. Build order</h2>
+<ol>
+<li><strong>Hashing first, with a test that the same password produces different hashes</strong>
+   and that verification succeeds — proving the salt is per-password.</li>
+<li><strong>Register and login</strong>, returning a token. No protected routes yet.</li>
+<li><strong>Decode with the allowlist</strong>, and immediately write the attack tests: a token
+   with <code>alg</code> changed to <code>none</code>, and one re-signed with a different algorithm. They
+   must fail before anything depends on this.</li>
+<li><strong><code>current_user</code></strong>, including the active check, with a test that disabling an
+   account makes an already-issued token stop working.</li>
+<li><strong>Scopes</strong>, with tests asserting 401 for a missing token and 403 for an
+   insufficient one.</li>
+<li><strong>Timing equalisation on login</strong>, with a test comparing the two paths.</li>
+<li><strong>Rate limiting</strong>, and rehash-on-login.</li>
+</ol>
+<p>Step 3 before step 4 deliberately: the attack tests are the point of this
+blueprint, and writing them before anything depends on the decoder means the
+guard is proven rather than assumed.</p>
+<h2>8. Blocks to pull in</h2>
+<p>Nothing here is a prerequisite. These are adjacent problems, by name only —
+resolve them separately if they apply.</p>
+<ul>
+<li>JWT refresh tokens and session revocation — long sessions and logging out everywhere</li>
+<li>Typed config and settings — where the signing key and lifetimes are validated at startup</li>
+<li>FastAPI routing — where the authentication dependency is attached to a whole router</li>
+<li>Error envelope — the shape these 401 and 403 responses take</li>
+<li>Redis rate limiting — bounding failed login attempts</li>
+</ul>
+<h2>9. Metrics</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Access token lifetime</td>
+<td>≤ 15 minutes</td>
+</tr>
+<tr>
+<td>Password verification time</td>
+<td>50–500 ms — slow enough to matter, fast enough to serve</td>
+</tr>
+<tr>
+<td>Timing difference between unknown-user and wrong-password</td>
+<td>Below measurement noise</td>
+</tr>
+<tr>
+<td>Routes that should be protected and are not</td>
+<td>0, asserted by a test over the route table</td>
+</tr>
+<tr>
+<td>Failed login attempts allowed per account per minute</td>
+<td>≤ 10</td>
+</tr>
+<tr>
+<td>Time from disabling an account to its tokens failing</td>
+<td>&lt; 1 request</td>
+</tr>
+</tbody>
+</table>
+<h2>10. Failure modes</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A forged token is accepted; its header says <code>alg: none</code> and it has no signature</td>
+<td>Decode was called without an algorithm allowlist, so the token chose its own verification</td>
+<td>Pass <code>algorithms=[...]</code> and add the forged-token test</td>
+</tr>
+<tr>
+<td>A forged token is accepted on an RS256 system, signed with HS256</td>
+<td>Same missing allowlist; the public key was used as an HMAC secret, and it is public</td>
+<td>Restrict the allowlist to the asymmetric algorithm</td>
+</tr>
+<tr>
+<td>Attackers know which email addresses are registered</td>
+<td>Login returns a different error, or answers faster, when the user does not exist</td>
+<td>Verify against a dummy hash and return one message</td>
+</tr>
+<tr>
+<td>A client refreshes in a loop and never succeeds</td>
+<td>An authorisation failure returned 401, so the client kept fetching new tokens for a problem no token solves</td>
+<td>403 when the credential is valid but insufficient</td>
+</tr>
+<tr>
+<td>A disabled account keeps working for a quarter of an hour</td>
+<td>The token is trusted without loading the user</td>
+<td>Load the user and check the active flag on every request</td>
+</tr>
+<tr>
+<td>Two long passwords that share a prefix both authenticate</td>
+<td>bcrypt silently truncates input at 72 bytes</td>
+<td>Use Argon2id, or enforce a maximum password length</td>
+</tr>
+<tr>
+<td>Every token in production becomes invalid after a deploy</td>
+<td>The signing key had a default value and was generated per process</td>
+<td>Require it from configuration and fail startup when absent</td>
+</tr>
+<tr>
+<td>Tokens issued by a different internal service are accepted</td>
+<td><code>aud</code> and <code>iss</code> are present but never validated</td>
+<td>Validate both explicitly</td>
+</tr>
+<tr>
+<td>Authentication fails intermittently across hosts, near expiry</td>
+<td>Clock skew between machines</td>
+<td>A small <code>leeway</code>, and time synchronisation</td>
+</tr>
+<tr>
+<td>Raising the hashing work factor would require resetting every password</td>
+<td>The parameters were not stored with the hash</td>
+<td>Use a hash format that encodes its parameters, and rehash on successful login</td>
+</tr>
+<tr>
+<td>A user's revoked permissions still work</td>
+<td>Scopes were read from the token, which was minted before the change</td>
+<td>Keep the lifetime short, and read authoritative permissions from the database for anything sensitive</td>
+</tr>
+</tbody>
+</table>
+<h2>11. Definition of done</h2>
+<ul>
+<li class="task">A token with its header altered to <code>alg: none</code> and its signature stripped is rejected, covered by a test</li>
+<li class="task">A token re-signed with a different algorithm from the allowlist is rejected, covered by a test</li>
+<li class="task">The same password hashed twice produces two different hashes, and both verify</li>
+<li class="task">Logging in with an unknown email and with a wrong password produce identical responses, and their timings are within noise, measured by a test</li>
+<li class="task">Every protected route returns 401 with no token and with an expired token, asserted by a test that walks the route table rather than a hand-written list</li>
+<li class="task">A valid token without the required scope returns 403, not 401</li>
+<li class="task">Disabling a user makes an already-issued token stop working on the next request</li>
+<li class="task">The signing key comes from configuration, has no default, and the application refuses to start without it</li>
+<li class="task">A token minted with a different <code>aud</code> or <code>iss</code> is rejected</li>
+<li class="task">The token payload contains no email, name or other personal data, asserted by decoding one in a test</li>
+<li class="task">Raising the hashing work factor causes a rehash on next login without invalidating existing passwords, covered by a test</li>
+<li class="task">Failed logins are rate-limited per account and per source address, covered by a test</li>
+<li class="task">No module outside <code>tokens.py</code> imports the JWT library, checked in CI</li>
+</ul>
+  </article>
+
+  <aside class="tailpiece">
+    <h2>Use this blueprint</h2>
+    <p>
+      Copy the file into your project and point your agent at it. It works with Claude Code,
+      Cursor, Copilot, ChatGPT and anything else that reads a file — there is nothing to install.
+    </p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/jwt-auth" target="_blank" rel="noopener">Open on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Browse all blueprints</a>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p><a href="/">Awesome Blueprints</a> — same request, same architecture, every time.</p>
+    <p class="dim">MIT · awesomeblueprints.com</p>
+  </div>
+</footer>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'neutral' });
+</script>
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const now = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', now);
+    try { localStorage.setItem('ab-theme', now); } catch (e) {}
+    location.reload();   // the diagram is themed at render time
+  });
+</script>
+
+</body>
+</html>

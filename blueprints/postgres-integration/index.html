@@ -1,0 +1,579 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PostgreSQL Connection Pool and Lifecycle — Blueprint for AI Coding Agents | Awesome Blueprints</title>
+<meta name="description" content="A PostgreSQL connection layer: pool sizing, startup and shutdown, health checks and running behind a connection pooler in production." />
+<link rel="canonical" href="https://awesomeblueprints.com/blueprints/postgres-integration/" />
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="Awesome Blueprints" />
+<meta property="og:url" content="https://awesomeblueprints.com/blueprints/postgres-integration/" />
+<meta property="og:title" content="PostgreSQL Connection Pool and Lifecycle — Architecture Blueprint" />
+<meta property="og:description" content="A PostgreSQL connection layer: pool sizing, startup and shutdown, health checks and running behind a connection pooler in production." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="PostgreSQL Connection Pool and Lifecycle — Architecture Blueprint" />
+<meta name="twitter:description" content="A PostgreSQL connection layer: pool sizing, startup and shutdown, health checks and running behind a connection pooler in production." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/page.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "PostgreSQL Connection Pool and Lifecycle", "description": "A PostgreSQL connection layer: pool sizing, startup and shutdown, health checks and running behind a connection pooler in production.", "url": "https://awesomeblueprints.com/blueprints/postgres-integration/", "dateModified": "2026-08-19", "keywords": "PostgreSQL", "isAccessibleForFree": true, "license": "https://opensource.org/licenses/MIT", "publisher": {"@type": "Organization", "name": "Awesome Blueprints", "url": "https://awesomeblueprints.com"}}</script>
+<script>
+  (function () {
+    var t;
+    try { t = localStorage.getItem('ab-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">Awesome Blueprints</a>
+    <div class="nav-right">
+      <a class="nav-link" href="/#blueprints">Catalogue</a>
+      <a class="nav-link" href="/#faq">FAQ</a>
+      <a class="nav-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/postgres-integration" target="_blank" rel="noopener">GitHub ↗</a>
+      <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Switch theme">◑</button>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/">Home</a> <span>/</span> <a href="/#blueprints">Blueprints</a> <span>/</span>
+    <span>PostgreSQL Connection Pool and Lifecycle</span>
+  </nav>
+
+  <header class="page-head">
+    <p class="eyebrow">postgres-integration</p>
+    <h1>PostgreSQL Connection Pool and Lifecycle</h1>
+    <p class="lede">A PostgreSQL connection layer: pool sizing, startup and shutdown, health checks and running behind a connection pooler in production.</p>
+    <div class="facts"><span>low</span><span>1–2 days</span><span>Verified 2026-08-19</span></div>
+    <div class="tags"><span class="tag">PostgreSQL</span></div>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/postgres-integration" target="_blank" rel="noopener">Read it on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Back to the catalogue</a>
+    </div>
+  </header>
+
+  <article class="doc">
+<blockquote>
+<p>A connection pool owned by the application's lifespan, a health check that
+actually reaches the database, and a shutdown that finishes in-flight work — the
+layer an ORM or hand-written SQL sits on, without choosing either.</p>
+</blockquote>
+<p><strong>Complexity:</strong> low · <strong>Typical build:</strong> 1–2 days · <strong>Verified:</strong> 2026-08-19 (re-check after ~90 days)</p>
+<p><strong>Examples in:</strong> Python, with asyncpg and FastAPI. The architecture is language-agnostic: sections 5, 10 and 11 hold wherever you build this. Section 4 is illustrative — if your project is in another language, your agent translates the idioms rather than importing them, and nothing is lost. The equivalents are <code>pg.Pool</code> in Node, <code>pgx.Pool</code> in Go, <code>Ecto.Repo</code> in Elixir, and HikariCP in the JVM.</p>
+<p><strong>Use when:</strong> a service needs Postgres and you want the connection lifecycle right before anything is built on top — pool sizing, startup, shutdown, health, and the pooler in front of it in production.</p>
+<p><strong>Not for:</strong> a short-lived script or a one-off job. A single connection opened and closed around the work is correct there, and a pool in a process that runs for four seconds is machinery with nothing to amortise. Also not the place to choose an ORM: this layer deliberately ends before that decision.</p>
+<hr />
+<h2>⚙️ INSTRUCTIONS FOR THE AI — READ BEFORE WRITING ANY CODE</h2>
+<p><strong>Do not start coding.</strong></p>
+<p><strong>Step 1 — Refresh.</strong> Verify the driver and its current version — <code>asyncpg</code> and
+<code>psycopg</code> are both current and differ in exactly the way that matters here, so
+name which one and why. Confirm the pool constructor's parameters:
+<code>min_size</code>/<code>max_size</code>, <code>command_timeout</code>, <code>statement_cache_size</code>, and the
+server-settings mechanism for <code>statement_timeout</code>. Find out whether a connection
+pooler (PgBouncer, pgcat, RDS Proxy, Supavisor) stands in front of the database in
+production <strong>and in which pooling mode</strong> — this changes the configuration, not
+just the tuning, and §10 has three failure modes that only appear when it is
+transaction mode. Verify the server's <code>max_connections</code>. Report what you verified
+and what turned out wrong.</p>
+<p><strong>Step 2 — Read the project, then audit what already exists.</strong> Find every place a
+connection or engine is created, and note whether it happens at import time or
+inside a startup hook — that distinction decides whether the pool survives a
+worker fork. Find the process model: how many workers, forked or spawned, and
+what the orchestrator's readiness and liveness probes currently call. Find any
+existing health endpoint and whether it touches the database or only returns 200.
+Then audit §11 item by item, each marked <em>already true</em>, <em>partly true</em> or
+<em>absent</em>, with the file that decides it, reported before anything is proposed.</p>
+<p>Assume the project is right until it demonstrably is not; code satisfying an item
+stays even where its shape differs from §4; replacing something that works needs a
+one-line reason; never delete a working path to make room for the blueprint's
+version. The same holds for language — §4 is illustrative, its idioms get
+translated into the project's language, and §11 is what has to become true rather
+than the syntax.</p>
+<p><strong>Step 3 — Write a plan for the gap only, and get it approved</strong>, including a
+<code>## Proposed stack</code> section naming the driver, the pool sizes with the arithmetic
+that produced them, and whether a pooler is assumed. Do not ask open framework
+questions — propose, and ask for confirmation once. Say what you are adding, what
+you are leaving alone, and what you propose to change, and touch nothing else.</p>
+<p><strong>Step 4 — Build in the order in §7.</strong> <strong>Step 5 — §11 is the definition of done.</strong></p>
+<hr />
+<h2>1. Why a connection where you need one fails</h2>
+<p>The obvious version is a module-level connection, or a new connection per request.
+Both work on a laptop and fail differently under load.</p>
+<table>
+<thead>
+<tr>
+<th>A connection made where it is needed</th>
+<th>A pool owned by the lifespan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Each request pays the TCP handshake, TLS negotiation and authentication round trip before its first query</td>
+<td>The connection is already open; the request pays an acquire</td>
+</tr>
+<tr>
+<td>Nothing bounds concurrency, so a traffic spike opens connections until the server refuses them — and the error surfaces as a failing health check, not as load</td>
+<td>The pool is the bound, and requests queue instead of overwhelming the server</td>
+</tr>
+<tr>
+<td>A pool created at import time is inherited by every forked worker, and several processes read and write the same sockets</td>
+<td>The pool is created after the fork, inside the lifespan, so each worker owns its own</td>
+</tr>
+<tr>
+<td>Shutdown drops whatever was in flight</td>
+<td>Shutdown stops accepting, drains, then closes</td>
+</tr>
+</tbody>
+</table>
+<p>The third row produces the strangest incident in this list. Symptoms are corrupted
+responses, protocol errors, and queries answering with another request's rows —
+because two processes really are interleaving bytes on one socket. It is not a
+race in your code and reading your code will not find it. <strong>The pool must be
+created after the fork, which means inside the lifespan, not at module import.</strong></p>
+<h2>2. Architecture</h2>
+<pre class="mermaid">%% GENERATED - do not edit by hand.
+%% Edit the source header in architecture.mmd, then rebuild.
+%% Pool owned by the application lifespan
+
+flowchart TB
+    client([&quot;API client&quot;])
+    operator([&quot;Orchestrator probes&quot;])
+    app[&quot;Application instance&quot;]
+    lifespan[&quot;Lifespan, startup and shutdown&quot;]
+    pool[&quot;Connection pool, one per process&quot;]
+    queries[&quot;Query functions&quot;]
+    health[&quot;Readiness endpoint&quot;]
+    pooler{{&quot;Connection pooler, transaction mode&quot;}}
+    store[(&quot;PostgreSQL&quot;)]
+
+    app --- lifespan
+    lifespan --&gt;|&quot;created after fork, drained on stop&quot;| pool
+    client --&gt;|&quot;request&quot;| app
+    app --&gt; queries
+    queries --&gt;|&quot;acquire, use, release&quot;| pool
+    pool --&gt;|&quot;when one is deployed&quot;| pooler
+    pooler --&gt; store
+    pool --&gt;|&quot;direct, no pooler&quot;| store
+    operator --&gt;|&quot;readiness probe&quot;| health
+    health --&gt;|&quot;acquire and run one statement&quot;| pool
+    health -.-&gt;|&quot;failure stops the rollout&quot;| operator
+
+    classDef service fill:#eff6ff,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b;
+    classDef datastore fill:#e9faf3,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b;
+    classDef external fill:#fff4ed,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b;
+    classDef actor fill:#f0eefc,stroke:#4a3aa7,stroke-width:1.5px,color:#0b0b0b;
+    class app,lifespan,pool,queries,health service;
+    class store datastore;
+    class pooler external;
+    class client,operator actor;</pre>
+<p>The rule the diagram encodes: the pool has exactly one owner, and it is the
+lifespan. Nothing else creates a connection, and nothing outlives the process that
+made it.</p>
+<h2>3. Project structure</h2>
+<div class="hl"><pre><span></span><code>app/
+├── db.py               the pool: creation, shutdown, the acquire helper
+├── main.py             lifespan wires the pool up and down
+├── health.py           the readiness endpoint that reaches the database
+└── queries/
+    └── orders.py       query functions taking a connection, returning rows
+compose.yaml            Postgres for local development, with a healthcheck
+</code></pre></div>
+
+<p><strong>One rule: only <code>db.py</code> holds a reference to the pool.</strong> Everything else receives
+a connection. A module that reaches for the global pool cannot be tested without
+one, and cannot be run inside someone else's transaction — which is what every
+integration test needs and what a background job will eventually need too.</p>
+<h2>4. Reference implementation</h2>
+<div class="hl"><pre><span></span><code><span class="c1"># app/db.py</span>
+<span class="kn">from</span> <span class="nn">contextlib</span> <span class="kn">import</span> <span class="n">asynccontextmanager</span>
+<span class="kn">import</span> <span class="nn">asyncpg</span>
+
+<span class="n">_pool</span><span class="p">:</span> <span class="n">asyncpg</span><span class="o">.</span><span class="n">Pool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">create_pool</span><span class="p">(</span><span class="n">settings</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">asyncpg</span><span class="o">.</span><span class="n">Pool</span><span class="p">:</span>
+    <span class="k">return</span> <span class="k">await</span> <span class="n">asyncpg</span><span class="o">.</span><span class="n">create_pool</span><span class="p">(</span>
+        <span class="n">dsn</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">settings</span><span class="o">.</span><span class="n">database_url</span><span class="p">),</span>
+        <span class="c1"># Sizing is arithmetic, not taste: max_size * worker_count must stay under</span>
+        <span class="c1"># the server&#39;s max_connections with room for migrations, psql and the</span>
+        <span class="c1"># replica. Ten workers at 20 is 200 connections against a default of 100.</span>
+        <span class="n">min_size</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+        <span class="n">max_size</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+        <span class="c1"># A query that hangs holds a pool slot forever; once every slot is held the</span>
+        <span class="c1"># service is down while the database looks idle. This is the single most</span>
+        <span class="c1"># valuable line in the file.</span>
+        <span class="n">command_timeout</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span>
+        <span class="n">server_settings</span><span class="o">=</span><span class="p">{</span>
+            <span class="s2">&quot;statement_timeout&quot;</span><span class="p">:</span> <span class="s2">&quot;30000&quot;</span><span class="p">,</span>          <span class="c1"># the server&#39;s own backstop</span>
+            <span class="s2">&quot;application_name&quot;</span><span class="p">:</span> <span class="s2">&quot;orders-api&quot;</span><span class="p">,</span>      <span class="c1"># so pg_stat_activity names the culprit</span>
+        <span class="p">},</span>
+        <span class="c1"># Only when a pooler in transaction mode is in front. asyncpg caches</span>
+        <span class="c1"># prepared statements per backend; the pooler moves you between backends</span>
+        <span class="c1"># between transactions, so cached names refer to statements that are not</span>
+        <span class="c1"># there. See §10 — it only fails under production concurrency.</span>
+        <span class="n">statement_cache_size</span><span class="o">=</span><span class="mi">0</span> <span class="k">if</span> <span class="n">settings</span><span class="o">.</span><span class="n">database_pooler_transaction_mode</span> <span class="k">else</span> <span class="mi">100</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="nd">@asynccontextmanager</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">lifespan_pool</span><span class="p">(</span><span class="n">settings</span><span class="p">):</span>
+    <span class="k">global</span> <span class="n">_pool</span>
+    <span class="c1"># Created here, not at import: a pool built before the fork is inherited by</span>
+    <span class="c1"># every worker, and they share sockets.</span>
+    <span class="n">_pool</span> <span class="o">=</span> <span class="k">await</span> <span class="n">create_pool</span><span class="p">(</span><span class="n">settings</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">yield</span> <span class="n">_pool</span>
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="c1"># close() waits for checked-out connections to be returned. terminate()</span>
+        <span class="c1"># does not — it severs them mid-query, which rolls back work the client was</span>
+        <span class="c1"># told had succeeded.</span>
+        <span class="k">await</span> <span class="n">_pool</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+        <span class="n">_pool</span> <span class="o">=</span> <span class="kc">None</span>
+
+
+<span class="nd">@asynccontextmanager</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">connection</span><span class="p">():</span>
+    <span class="k">if</span> <span class="n">_pool</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;pool not initialised — acquire outside the lifespan&quot;</span><span class="p">)</span>
+    <span class="k">async</span> <span class="k">with</span> <span class="n">_pool</span><span class="o">.</span><span class="n">acquire</span><span class="p">()</span> <span class="k">as</span> <span class="n">conn</span><span class="p">:</span>
+        <span class="k">yield</span> <span class="n">conn</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/main.py</span>
+<span class="kn">from</span> <span class="nn">contextlib</span> <span class="kn">import</span> <span class="n">asynccontextmanager</span>
+<span class="kn">from</span> <span class="nn">fastapi</span> <span class="kn">import</span> <span class="n">FastAPI</span>
+<span class="kn">from</span> <span class="nn">app.config</span> <span class="kn">import</span> <span class="n">get_settings</span>
+<span class="kn">from</span> <span class="nn">app.db</span> <span class="kn">import</span> <span class="n">lifespan_pool</span>
+
+
+<span class="nd">@asynccontextmanager</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">lifespan</span><span class="p">(</span><span class="n">app</span><span class="p">:</span> <span class="n">FastAPI</span><span class="p">):</span>
+    <span class="k">async</span> <span class="k">with</span> <span class="n">lifespan_pool</span><span class="p">(</span><span class="n">get_settings</span><span class="p">()):</span>
+        <span class="k">yield</span>          <span class="c1"># the app serves only while the pool is up</span>
+
+
+<span class="n">app</span> <span class="o">=</span> <span class="n">FastAPI</span><span class="p">(</span><span class="n">lifespan</span><span class="o">=</span><span class="n">lifespan</span><span class="p">)</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/health.py</span>
+<span class="kn">import</span> <span class="nn">asyncio</span>
+<span class="kn">from</span> <span class="nn">fastapi</span> <span class="kn">import</span> <span class="n">APIRouter</span><span class="p">,</span> <span class="n">Response</span><span class="p">,</span> <span class="n">status</span>
+<span class="kn">from</span> <span class="nn">app.db</span> <span class="kn">import</span> <span class="n">connection</span>
+
+<span class="n">router</span> <span class="o">=</span> <span class="n">APIRouter</span><span class="p">(</span><span class="n">tags</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;health&quot;</span><span class="p">])</span>
+
+
+<span class="nd">@router</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;/health/live&quot;</span><span class="p">)</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">live</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+    <span class="c1"># Liveness answers &quot;is this process wedged&quot;. It must not touch the database:</span>
+    <span class="c1"># if it did, a database blip would restart every healthy worker at once and</span>
+    <span class="c1"># turn a recoverable outage into a thundering herd against a struggling server.</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;status&quot;</span><span class="p">:</span> <span class="s2">&quot;ok&quot;</span><span class="p">}</span>
+
+
+<span class="nd">@router</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;/health/ready&quot;</span><span class="p">)</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">ready</span><span class="p">(</span><span class="n">response</span><span class="p">:</span> <span class="n">Response</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+    <span class="c1"># Readiness answers &quot;can this process serve traffic&quot;, which requires a real</span>
+    <span class="c1"># query. `SELECT 1` on an already-open connection proves the socket works;</span>
+    <span class="c1"># acquiring from the pool first is what proves a slot is available.</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">async</span> <span class="k">with</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">timeout</span><span class="p">(</span><span class="mi">2</span><span class="p">):</span>
+            <span class="k">async</span> <span class="k">with</span> <span class="n">connection</span><span class="p">()</span> <span class="k">as</span> <span class="n">conn</span><span class="p">:</span>
+                <span class="k">await</span> <span class="n">conn</span><span class="o">.</span><span class="n">fetchval</span><span class="p">(</span><span class="s2">&quot;SELECT 1&quot;</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+        <span class="c1"># Never include the exception text: a connection error carries the DSN,</span>
+        <span class="c1"># and the DSN carries the password.</span>
+        <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">=</span> <span class="n">status</span><span class="o">.</span><span class="n">HTTP_503_SERVICE_UNAVAILABLE</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;status&quot;</span><span class="p">:</span> <span class="s2">&quot;database unavailable&quot;</span><span class="p">}</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;status&quot;</span><span class="p">:</span> <span class="s2">&quot;ok&quot;</span><span class="p">}</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># compose.yaml</span><span class="w"></span>
+<span class="nt">services</span><span class="p">:</span><span class="w"></span>
+<span class="w">  </span><span class="nt">db</span><span class="p">:</span><span class="w"></span>
+<span class="w">    </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">postgres:17</span><span class="w"></span>
+<span class="w">    </span><span class="nt">environment</span><span class="p">:</span><span class="w"></span>
+<span class="w">      </span><span class="nt">POSTGRES_PASSWORD</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span><span class="w"></span>
+<span class="w">      </span><span class="nt">POSTGRES_DB</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">orders</span><span class="w"></span>
+<span class="w">    </span><span class="nt">ports</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;5432:5432&quot;</span><span class="p p-Indicator">]</span><span class="w"></span>
+<span class="w">    </span><span class="nt">healthcheck</span><span class="p">:</span><span class="w"></span>
+<span class="w">      </span><span class="c1"># pg_isready, not a port check: the container accepts TCP well before the</span><span class="w"></span>
+<span class="w">      </span><span class="c1"># server accepts queries, so a port check makes the app start too early and</span><span class="w"></span>
+<span class="w">      </span><span class="c1"># &quot;it works on the second up&quot; becomes the onboarding instruction.</span><span class="w"></span>
+<span class="w">      </span><span class="nt">test</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;CMD-SHELL&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;pg_isready</span><span class="nv"> </span><span class="s">-U</span><span class="nv"> </span><span class="s">postgres</span><span class="nv"> </span><span class="s">-d</span><span class="nv"> </span><span class="s">orders&quot;</span><span class="p p-Indicator">]</span><span class="w"></span>
+<span class="w">      </span><span class="nt">interval</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2s</span><span class="w"></span>
+<span class="w">      </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3s</span><span class="w"></span>
+<span class="w">      </span><span class="nt">retries</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">15</span><span class="w"></span>
+<span class="w">    </span><span class="nt">volumes</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;pgdata:/var/lib/postgresql/data&quot;</span><span class="p p-Indicator">]</span><span class="w"></span>
+
+<span class="w">  </span><span class="nt">api</span><span class="p">:</span><span class="w"></span>
+<span class="w">    </span><span class="nt">build</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">.</span><span class="w"></span>
+<span class="w">    </span><span class="nt">depends_on</span><span class="p">:</span><span class="w"></span>
+<span class="w">      </span><span class="nt">db</span><span class="p">:</span><span class="w"></span>
+<span class="w">        </span><span class="nt">condition</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">service_healthy</span><span class="w"></span>
+<span class="nt">volumes</span><span class="p">:</span><span class="w"></span>
+<span class="w">  </span><span class="nt">pgdata</span><span class="p">:</span><span class="w"></span>
+</code></pre></div>
+
+<h2>5. Golden-standard rules</h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Forbidden:</strong> creating the pool at module import</td>
+<td>It is inherited across a fork and several workers then share sockets. The symptoms look like data corruption and reading the code will not find them.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> opening a connection outside the pool</td>
+<td>It escapes every bound you set — timeouts, sizing, metrics — and it is the connection that leaks.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> returning a driver error message to a client or a probe</td>
+<td>Connection errors embed the DSN, and the DSN embeds the password.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> <code>terminate()</code> in the normal shutdown path</td>
+<td>It severs in-flight queries, rolling back work a client was already told succeeded. Drain with <code>close()</code>; keep terminate for a timed-out drain.</td>
+</tr>
+<tr>
+<td>Every query has a timeout, and so does every acquire</td>
+<td>A hung query holds a slot for as long as it hangs. Once all slots are held the service is down while the database sits idle — the least obvious outage in this document.</td>
+</tr>
+<tr>
+<td>Pool size is derived, not chosen</td>
+<td><code>max_size × workers</code> must fit under <code>max_connections</code> with headroom for migrations, a replica and a human with <code>psql</code>. Write the arithmetic in a comment.</td>
+</tr>
+<tr>
+<td>Liveness never touches the database</td>
+<td>Otherwise one database blip restarts every worker simultaneously and a recoverable outage becomes a stampede.</td>
+</tr>
+<tr>
+<td>Readiness always touches the database</td>
+<td>A readiness probe that only proves the process is running will happily route traffic to a worker whose pool is exhausted.</td>
+</tr>
+<tr>
+<td>The application name is set on every connection</td>
+<td>It is what turns <code>pg_stat_activity</code> from a list of anonymous queries into an answer during an incident.</td>
+</tr>
+<tr>
+<td>One module owns the pool; everything else is handed a connection</td>
+<td>A function that reaches for a global cannot be run inside a test's transaction, and integration tests need exactly that.</td>
+</tr>
+<tr>
+<td>Local Postgres is gated on a real readiness check</td>
+<td><code>pg_isready</code>, not an open port. The container accepts TCP long before it accepts queries.</td>
+</tr>
+<tr>
+<td>The pooler's mode is written down where the pool is configured</td>
+<td>Transaction mode changes the driver configuration, not just the tuning, and the failures it causes appear only under production concurrency.</td>
+</tr>
+</tbody>
+</table>
+<h2>6. Data contracts</h2>
+<p>The contract this layer exposes is the connection, and two properties of it:</p>
+<div class="hl"><pre><span></span><code><span class="nd">@asynccontextmanager</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">connection</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">Connection</span><span class="p">]:</span>
+    <span class="sd">&quot;&quot;&quot;Checked out for the duration of the block and returned on exit, including</span>
+<span class="sd">    on exception. Carries a command timeout. Not safe to store, not safe to use</span>
+<span class="sd">    after the block, not safe to share between tasks.&quot;&quot;&quot;</span>
+</code></pre></div>
+
+<p>Everything above this layer takes a connection as an argument rather than
+importing one. That single choice is what makes a query function usable inside a
+request, inside a background job, and inside a test that rolls back — without a
+branch for each.</p>
+<h2>7. Build order</h2>
+<ol>
+<li><strong>Pool created in the lifespan, one query, proven.</strong> Start the app, run a
+   trivial query through the pool, shut it down cleanly. This is the whole risk of
+   the layer, and everything after is addition.</li>
+<li><strong>Compose with a <code>pg_isready</code> healthcheck</strong>, and confirm the app starts on the
+   first <code>up</code> from a cold volume.</li>
+<li><strong>Timeouts</strong> — command, statement, and a bounded acquire — and prove each by
+   forcing it with <code>pg_sleep</code>.</li>
+<li><strong>Readiness and liveness</strong>, split, with a test that stops the database and
+   asserts readiness fails while liveness still passes.</li>
+<li><strong>Drain on shutdown</strong>: send SIGTERM during an in-flight slow query and assert
+   it completed rather than being severed.</li>
+<li><strong>Pool sizing and <code>application_name</code></strong>, with the arithmetic recorded.</li>
+<li><strong>If a pooler is in front:</strong> set the driver's statement caching accordingly and
+   run a concurrency test against it, because nothing below that level of load
+   reproduces the failure.</li>
+</ol>
+<p>Step 5 is placed before sizing deliberately. Losing in-flight work on every deploy
+is a correctness bug that ships silently; a pool that is slightly the wrong size
+is a performance problem you can see.</p>
+<h2>8. Blocks to pull in</h2>
+<p>Nothing here is a prerequisite. These are adjacent problems, by name only —
+resolve them separately if they apply.</p>
+<ul>
+<li>Typed config and settings — where the DSN and the pool sizes are validated</li>
+<li>SQLAlchemy async ORM layer — one thing that can sit on this connection</li>
+<li>Alembic migrations — schema changes against the same database</li>
+<li>Docker Compose dev environment — the fuller local stack this compose file grows into</li>
+<li>Idempotency keys and safe retries — what to do when a query times out and you cannot tell whether it committed</li>
+</ul>
+<h2>9. Metrics</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Connection acquire wait, p99</td>
+<td>&lt; 10 ms under expected load</td>
+</tr>
+<tr>
+<td>Pool slots in use at steady state</td>
+<td>&lt; 70% of <code>max_size</code></td>
+</tr>
+<tr>
+<td>Connections opened per minute at steady state</td>
+<td>~0 — a rising number means the pool is churning</td>
+</tr>
+<tr>
+<td><code>max_size × workers</code> against server <code>max_connections</code></td>
+<td>≤ 70%, leaving room for migrations and operators</td>
+</tr>
+<tr>
+<td>Requests lost to a rolling restart</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Time from database becoming unreachable to readiness failing</td>
+<td>&lt; 5 s</td>
+</tr>
+</tbody>
+</table>
+<h2>10. Failure modes</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Protocol errors, garbled results, or a query returning another request's rows</td>
+<td>The pool was created at import and inherited across the worker fork; processes share sockets</td>
+<td>Create the pool inside the lifespan, after the fork</td>
+</tr>
+<tr>
+<td>The service stops responding while the database shows almost no activity</td>
+<td>Every pool slot is held by a query that will never return, because no command timeout is set</td>
+<td>Set <code>command_timeout</code> and a server-side <code>statement_timeout</code></td>
+</tr>
+<tr>
+<td><code>InvalidSQLStatementNameError</code> or <code>DuplicatePreparedStatementError</code>, only in production, only under load</td>
+<td>asyncpg caches prepared statements per backend; a pooler in transaction mode moves you between backends between transactions</td>
+<td>Disable the driver's statement cache, or use session mode, or a pooler version that tracks prepared statements — and measure the throughput cost, because disabling the cache is not free</td>
+</tr>
+<tr>
+<td><code>FATAL: sorry, too many clients already</code> after adding workers</td>
+<td><code>max_size × workers</code> exceeded <code>max_connections</code>, and nobody did the multiplication</td>
+<td>Recompute; add a pooler rather than raising <code>max_connections</code> past what the server can schedule</td>
+</tr>
+<tr>
+<td>Every deploy loses a handful of requests that returned 200</td>
+<td>Shutdown terminates connections instead of draining them</td>
+<td>Drain with <code>close()</code>, bounded by a timeout, before the process exits</td>
+</tr>
+<tr>
+<td>A database restart restarts every application worker at once</td>
+<td>Liveness probes the database, so a shared dependency failing marks every process dead</td>
+<td>Liveness checks the process; readiness checks the database</td>
+</tr>
+<tr>
+<td>Health is green while requests fail</td>
+<td>Readiness returns 200 without touching the database, so an exhausted pool looks healthy</td>
+<td>Acquire from the pool and run a statement in the readiness path</td>
+</tr>
+<tr>
+<td>The app fails on the first <code>docker compose up</code> and works on the second</td>
+<td><code>depends_on</code> waited for the container, not for the server; Postgres accepts TCP before it accepts queries</td>
+<td>Gate on a <code>pg_isready</code> healthcheck with <code>condition: service_healthy</code></td>
+</tr>
+<tr>
+<td>A password appears in the logs</td>
+<td>A connection error was formatted into a log line or a probe response, and it contains the DSN</td>
+<td>Never render driver exceptions outward; log a fixed string and the error class</td>
+</tr>
+<tr>
+<td><code>pg_stat_activity</code> shows dozens of identical queries with no way to tell which service they belong to</td>
+<td><code>application_name</code> was never set</td>
+<td>Set it in <code>server_settings</code></td>
+</tr>
+</tbody>
+</table>
+<h2>11. Definition of done</h2>
+<ul>
+<li class="task">The pool is created inside the lifespan and a test asserts no pool exists at import time</li>
+<li class="task">Starting the application with the database unreachable fails startup rather than serving traffic</li>
+<li class="task">Every connection carries a command timeout, proven by a test that runs <code>pg_sleep</code> beyond it and expects a timeout rather than a hang</li>
+<li class="task">A server-side <code>statement_timeout</code> is set, verified by querying the setting on a pooled connection</li>
+<li class="task"><code>application_name</code> is set, verified by reading <code>pg_stat_activity</code> in a test</li>
+<li class="task"><code>/health/live</code> returns 200 with the database stopped; <code>/health/ready</code> returns 503 within five seconds of the same, both covered by tests</li>
+<li class="task">SIGTERM during an in-flight query lets it finish and the process exits within the drain timeout, covered by a test</li>
+<li class="task">The pool sizing arithmetic is written in the code next to the numbers, and <code>max_size × workers</code> is under 70% of the server's <code>max_connections</code></li>
+<li class="task">No module other than the pool module holds a reference to the pool, checked by grep in CI</li>
+<li class="task">Every query function accepts a connection rather than acquiring one, so a test can pass a connection inside a rolled-back transaction</li>
+<li class="task">No driver exception text reaches a log, a response or a probe body, covered by a test that fails connection with a bad password and asserts the password is absent from the output</li>
+<li class="task"><code>docker compose up</code> from an empty volume starts the application successfully on the first attempt</li>
+<li class="task">If a pooler is deployed in front, its mode is recorded next to the pool configuration and a concurrency test runs against it</li>
+</ul>
+  </article>
+
+  <aside class="tailpiece">
+    <h2>Use this blueprint</h2>
+    <p>
+      Copy the file into your project and point your agent at it. It works with Claude Code,
+      Cursor, Copilot, ChatGPT and anything else that reads a file — there is nothing to install.
+    </p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/postgres-integration" target="_blank" rel="noopener">Open on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Browse all blueprints</a>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p><a href="/">Awesome Blueprints</a> — same request, same architecture, every time.</p>
+    <p class="dim">MIT · awesomeblueprints.com</p>
+  </div>
+</footer>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'neutral' });
+</script>
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const now = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', now);
+    try { localStorage.setItem('ab-theme', now); } catch (e) {}
+    location.reload();   // the diagram is themed at render time
+  });
+</script>
+
+</body>
+</html>

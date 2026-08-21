@@ -1,0 +1,567 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Integration Tests with Real Dependencies — Blueprint for AI Coding Agents | Awesome Blueprints</title>
+<meta name="description" content="Integration tests with real dependencies: throwaway databases, containers, fixtures, isolation between tests and a suite that stays fast." />
+<link rel="canonical" href="https://awesomeblueprints.com/blueprints/testing-integration/" />
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="Awesome Blueprints" />
+<meta property="og:url" content="https://awesomeblueprints.com/blueprints/testing-integration/" />
+<meta property="og:title" content="Integration Tests with Real Dependencies — Architecture Blueprint" />
+<meta property="og:description" content="Integration tests with real dependencies: throwaway databases, containers, fixtures, isolation between tests and a suite that stays fast." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Integration Tests with Real Dependencies — Architecture Blueprint" />
+<meta name="twitter:description" content="Integration tests with real dependencies: throwaway databases, containers, fixtures, isolation between tests and a suite that stays fast." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/page.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "Integration Tests with Real Dependencies", "description": "Integration tests with real dependencies: throwaway databases, containers, fixtures, isolation between tests and a suite that stays fast.", "url": "https://awesomeblueprints.com/blueprints/testing-integration/", "dateModified": "2026-08-19", "keywords": "Testing", "isAccessibleForFree": true, "license": "https://opensource.org/licenses/MIT", "publisher": {"@type": "Organization", "name": "Awesome Blueprints", "url": "https://awesomeblueprints.com"}}</script>
+<script>
+  (function () {
+    var t;
+    try { t = localStorage.getItem('ab-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">Awesome Blueprints</a>
+    <div class="nav-right">
+      <a class="nav-link" href="/#blueprints">Catalogue</a>
+      <a class="nav-link" href="/#faq">FAQ</a>
+      <a class="nav-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/testing-integration" target="_blank" rel="noopener">GitHub ↗</a>
+      <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Switch theme">◑</button>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/">Home</a> <span>/</span> <a href="/#blueprints">Blueprints</a> <span>/</span>
+    <span>Integration Tests with Real Dependencies</span>
+  </nav>
+
+  <header class="page-head">
+    <p class="eyebrow">testing-integration</p>
+    <h1>Integration Tests with Real Dependencies</h1>
+    <p class="lede">Integration tests with real dependencies: throwaway databases, containers, fixtures, isolation between tests and a suite that stays fast.</p>
+    <div class="facts"><span>medium</span><span>2–4 days</span><span>Verified 2026-08-19</span></div>
+    <div class="tags"><span class="tag">Testing</span></div>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/testing-integration" target="_blank" rel="noopener">Read it on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Back to the catalogue</a>
+    </div>
+  </header>
+
+  <article class="doc">
+<blockquote>
+<p>Tests against a real database and real infrastructure instead of mocks, isolated
+by a transaction that is rolled back rather than by cleanup code, fast enough to
+run on every change, and honest about the one thing mocks can never tell you.</p>
+</blockquote>
+<p><strong>Complexity:</strong> medium · <strong>Typical build:</strong> 2–4 days · <strong>Verified:</strong> 2026-08-19 (re-check after ~90 days)</p>
+<p><strong>Examples in:</strong> Python, with pytest, SQLAlchemy and PostgreSQL. The architecture is language-agnostic: sections 5, 10 and 11 hold wherever you build this. Section 4 is illustrative — if your project is in another language, your agent translates the idioms rather than importing them, and nothing is lost. The rollback-isolation pattern exists as <code>use DatabaseTransactions</code> in Laravel, <code>Ecto.Sandbox</code> in Elixir, and transactional fixtures in Rails — the mechanism differs, the guarantee does not.</p>
+<p><strong>Use when:</strong> the interesting failures are in the seams — a query that is wrong, a constraint that fires, a migration that does not apply, a serialisation that differs from what the client expects — and a mocked dependency would have agreed with the code either way.</p>
+<p><strong>Not for:</strong> logic that has no dependency. Running pure functions against a database container makes a ten-millisecond test a two-second one and proves nothing extra. Also not a replacement for production monitoring: these tests cover the inputs you thought of.</p>
+<hr />
+<h2>⚙️ INSTRUCTIONS FOR THE AI — READ BEFORE WRITING ANY CODE</h2>
+<p><strong>Do not start coding.</strong></p>
+<p><strong>Step 1 — Refresh.</strong> Verify how containers will be started for tests — a library
+that manages their lifecycle from inside the test run, or a Compose stack started
+by the runner — and confirm the chosen one works on the CI runner you actually
+use. Verify the async test client's transport for calling the application in
+process without a network listener. Verify the current API for nested transactions
+and savepoints in the ORM, and whether the "join an external transaction" recipe
+has changed — that recipe is version-sensitive and most examples online are for an
+older major. Report what you verified and what turned out wrong.</p>
+<p><strong>Step 2 — Read the project, then audit what already exists.</strong> Find whether any
+test currently touches a real dependency and how it cleans up — a suite that
+deletes rows in a teardown is the pattern this blueprint replaces, and the
+migration matters. Find how the schema is created for tests: migrations, or
+<code>create_all</code> from the models. Record which external HTTP services the code calls.
+Measure the current suite runtime and the slowest ten tests. Then audit §11 item
+by item, each marked <em>already true</em>, <em>partly true</em> or <em>absent</em>, with the file that
+decides it, reported before anything is proposed.</p>
+<p>Assume the project is right until it demonstrably is not; code satisfying an item
+stays even where its shape differs from §4; replacing something that works needs a
+one-line reason; never delete a working path to make room for the blueprint's
+version. The same holds for language — §4 is illustrative, its idioms get
+translated into the project's language, and §11 is what has to become true rather
+than the syntax.</p>
+<p><strong>Step 3 — Write a plan for the gap only, and get it approved</strong>, including a
+<code>## Proposed stack</code> section and a stated budget for how long the integration suite
+may take. Do not ask open framework questions — propose, and ask for confirmation
+once. Say what you are adding, what you are leaving alone, and what you propose to
+change, and touch nothing else.</p>
+<p><strong>Step 4 — Build in the order in §7.</strong> <strong>Step 5 — §11 is the definition of done.</strong></p>
+<hr />
+<h2>1. What a mock cannot tell you</h2>
+<p>A mocked repository returns what you told it to return. That makes it useful for
+testing the caller and useless for testing the assumption.</p>
+<table>
+<thead>
+<tr>
+<th>Mocked dependencies</th>
+<th>Real dependencies</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The query is never executed, so a wrong join or a missing index is invisible</td>
+<td>The query runs, against the real planner, on the real schema</td>
+</tr>
+<tr>
+<td>Constraints do not exist, so a unique violation your code cannot handle never fires</td>
+<td>The constraint fires, and the code either handles it or fails the test</td>
+</tr>
+<tr>
+<td>Migrations are not applied, so a model and its table can disagree indefinitely</td>
+<td>The schema comes from migrations, so drift fails a test rather than a deploy</td>
+</tr>
+<tr>
+<td>Types are whatever Python made up</td>
+<td>The driver's real round-trip — timestamps with time zones, decimals, JSON, nulls</td>
+</tr>
+</tbody>
+</table>
+<p>The third row is the one that catches teams with good test coverage. Tests built
+on <code>create_all</code> from the models never execute the migrations, so a migration that
+does not apply cleanly is discovered on deploy. <strong>Create the test schema by
+running the migrations</strong>, and that entire class of failure moves from production
+to CI.</p>
+<p>The isolation problem is the other half. The obvious approach is to delete rows
+afterwards, and it fails in three ways: it is slow, it is incomplete the moment
+someone adds a table, and a failing test skips its own cleanup and poisons every
+test after it. Wrapping each test in a transaction and rolling it back is faster,
+complete by construction, and unaffected by a test that raises.</p>
+<h2>2. Architecture</h2>
+<pre class="mermaid">%% GENERATED - do not edit by hand.
+%% Edit the source header in architecture.mmd, then rebuild.
+%% Integration test isolation
+
+flowchart TB
+    ci([&quot;CI run&quot;])
+    session[&quot;Test session setup&quot;]
+    containers[&quot;Dependency containers&quot;]
+    migrate[&quot;Migrations applied once&quot;]
+    outer[&quot;Outer transaction per test&quot;]
+    client[&quot;In process API client&quot;]
+    test[&quot;Integration test&quot;]
+    replay[&quot;Recorded external responses&quot;]
+    store[(&quot;PostgreSQL&quot;)]
+    cache[(&quot;Redis&quot;)]
+    thirdparty{{&quot;Third party API&quot;}}
+
+    ci --&gt; session
+    session --&gt;|&quot;started once for the whole run&quot;| containers
+    containers --&gt; store
+    containers --&gt; cache
+    session --&gt;|&quot;schema from migrations, never from the models&quot;| migrate
+    migrate --&gt; store
+    test --&gt;|&quot;opened before the test body&quot;| outer
+    outer --&gt;|&quot;every write lands inside it&quot;| store
+    test --&gt;|&quot;real requests, no network listener&quot;| client
+    client --&gt;|&quot;the app uses this transaction&quot;| outer
+    test --&gt;|&quot;instead of calling out&quot;| replay
+    replay -.-&gt;|&quot;recorded once, replayed after&quot;| thirdparty
+    outer -.-&gt;|&quot;rolled back, whatever the test did&quot;| store
+
+    classDef service fill:#eff6ff,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b;
+    classDef datastore fill:#e9faf3,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b;
+    classDef external fill:#fff4ed,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b;
+    classDef actor fill:#f0eefc,stroke:#4a3aa7,stroke-width:1.5px,color:#0b0b0b;
+    class session,containers,migrate,outer,client,test,replay service;
+    class store,cache datastore;
+    class thirdparty external;
+    class ci actor;</pre>
+<p>The rule the diagram encodes: <strong>the application under test uses the test's own
+transaction.</strong> If the app opens its own connection, nothing the test does is
+visible to it and nothing it writes is rolled back — which is why the session must
+be injected rather than imported.</p>
+<h2>3. Project structure</h2>
+<div class="hl"><pre><span></span><code>tests/
+├── integration/
+│   ├── conftest.py     containers, migrations, the transactional session, the client
+│   ├── test_orders_api.py
+│   └── cassettes/      recorded third-party responses, committed
+└── unit/               fast, no dependencies
+</code></pre></div>
+
+<p><strong>One rule: containers start once per session, transactions per test.</strong> Starting a
+database per test is correct and unusably slow; sharing a database without
+transactional isolation is fast and wrong. The split is what makes the suite both.</p>
+<h2>4. Reference implementation</h2>
+<div class="hl"><pre><span></span><code><span class="c1"># tests/integration/conftest.py</span>
+<span class="kn">import</span> <span class="nn">pytest</span>
+<span class="kn">from</span> <span class="nn">alembic</span> <span class="kn">import</span> <span class="n">command</span>
+<span class="kn">from</span> <span class="nn">alembic.config</span> <span class="kn">import</span> <span class="n">Config</span>
+<span class="kn">from</span> <span class="nn">httpx</span> <span class="kn">import</span> <span class="n">ASGITransport</span><span class="p">,</span> <span class="n">AsyncClient</span>
+<span class="kn">from</span> <span class="nn">sqlalchemy.ext.asyncio</span> <span class="kn">import</span> <span class="n">AsyncSession</span><span class="p">,</span> <span class="n">async_sessionmaker</span><span class="p">,</span> <span class="n">create_async_engine</span>
+<span class="kn">from</span> <span class="nn">testcontainers.postgres</span> <span class="kn">import</span> <span class="n">PostgresContainer</span>
+<span class="kn">from</span> <span class="nn">app.main</span> <span class="kn">import</span> <span class="n">app</span>
+<span class="kn">from</span> <span class="nn">app.db.session</span> <span class="kn">import</span> <span class="n">get_session</span>
+
+
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span><span class="p">(</span><span class="n">scope</span><span class="o">=</span><span class="s2">&quot;session&quot;</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">postgres</span><span class="p">():</span>
+    <span class="c1"># Once for the whole run. Per-test containers are correct and take about a</span>
+    <span class="c1"># second each, which turns a 200-test suite into four minutes nobody runs.</span>
+    <span class="k">with</span> <span class="n">PostgresContainer</span><span class="p">(</span><span class="s2">&quot;postgres:17-alpine&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">pg</span><span class="p">:</span>
+        <span class="k">yield</span> <span class="n">pg</span>
+
+
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span><span class="p">(</span><span class="n">scope</span><span class="o">=</span><span class="s2">&quot;session&quot;</span><span class="p">)</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">engine</span><span class="p">(</span><span class="n">postgres</span><span class="p">):</span>
+    <span class="n">url</span> <span class="o">=</span> <span class="n">postgres</span><span class="o">.</span><span class="n">get_connection_url</span><span class="p">()</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;psycopg2&quot;</span><span class="p">,</span> <span class="s2">&quot;asyncpg&quot;</span><span class="p">)</span>
+    <span class="n">eng</span> <span class="o">=</span> <span class="n">create_async_engine</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
+
+    <span class="c1"># Migrations, not create_all. create_all builds the schema the models describe;</span>
+    <span class="c1"># migrations build the schema production will actually have. When those differ,</span>
+    <span class="c1"># create_all hides it until deploy — which is exactly the failure worth catching.</span>
+    <span class="n">cfg</span> <span class="o">=</span> <span class="n">Config</span><span class="p">(</span><span class="s2">&quot;alembic.ini&quot;</span><span class="p">)</span>
+    <span class="n">cfg</span><span class="o">.</span><span class="n">set_main_option</span><span class="p">(</span><span class="s2">&quot;sqlalchemy.url&quot;</span><span class="p">,</span> <span class="n">url</span><span class="p">)</span>
+    <span class="k">async</span> <span class="k">with</span> <span class="n">eng</span><span class="o">.</span><span class="n">begin</span><span class="p">()</span> <span class="k">as</span> <span class="n">conn</span><span class="p">:</span>
+        <span class="k">await</span> <span class="n">conn</span><span class="o">.</span><span class="n">run_sync</span><span class="p">(</span><span class="k">lambda</span> <span class="n">c</span><span class="p">:</span> <span class="n">command</span><span class="o">.</span><span class="n">upgrade</span><span class="p">(</span><span class="n">cfg</span><span class="p">,</span> <span class="s2">&quot;head&quot;</span><span class="p">))</span>
+
+    <span class="k">yield</span> <span class="n">eng</span>
+    <span class="k">await</span> <span class="n">eng</span><span class="o">.</span><span class="n">dispose</span><span class="p">()</span>
+
+
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">db_session</span><span class="p">(</span><span class="n">engine</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;One transaction per test, rolled back at the end.</span>
+
+<span class="sd">    Rollback rather than cleanup: it is faster, it is complete by construction —</span>
+<span class="sd">    a new table needs no new teardown — and it survives a failing test, which</span>
+<span class="sd">    skips its own cleanup and would otherwise poison every test after it.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">async</span> <span class="k">with</span> <span class="n">engine</span><span class="o">.</span><span class="n">connect</span><span class="p">()</span> <span class="k">as</span> <span class="n">connection</span><span class="p">:</span>
+        <span class="n">outer</span> <span class="o">=</span> <span class="k">await</span> <span class="n">connection</span><span class="o">.</span><span class="n">begin</span><span class="p">()</span>
+        <span class="c1"># The session joins the already-open transaction instead of starting its</span>
+        <span class="c1"># own. A commit inside the application code then only releases a savepoint,</span>
+        <span class="c1"># so the code under test behaves exactly as in production while the outer</span>
+        <span class="c1"># transaction still holds everything.</span>
+        <span class="n">session</span> <span class="o">=</span> <span class="n">async_sessionmaker</span><span class="p">(</span><span class="n">bind</span><span class="o">=</span><span class="n">connection</span><span class="p">,</span> <span class="n">expire_on_commit</span><span class="o">=</span><span class="kc">False</span><span class="p">)()</span>
+        <span class="n">nested</span> <span class="o">=</span> <span class="k">await</span> <span class="n">connection</span><span class="o">.</span><span class="n">begin_nested</span><span class="p">()</span>
+
+        <span class="nd">@event</span><span class="o">.</span><span class="n">listens_for</span><span class="p">(</span><span class="n">session</span><span class="o">.</span><span class="n">sync_session</span><span class="p">,</span> <span class="s2">&quot;after_transaction_end&quot;</span><span class="p">)</span>
+        <span class="k">def</span> <span class="nf">restart_savepoint</span><span class="p">(</span><span class="n">sess</span><span class="p">,</span> <span class="n">trans</span><span class="p">):</span>
+            <span class="c1"># The application commits; that ends the savepoint. Reopen it so the</span>
+            <span class="c1"># next statement is still inside the outer transaction.</span>
+            <span class="k">nonlocal</span> <span class="n">nested</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">nested</span><span class="o">.</span><span class="n">is_active</span><span class="p">:</span>
+                <span class="n">nested</span> <span class="o">=</span> <span class="n">connection</span><span class="o">.</span><span class="n">sync_connection</span><span class="o">.</span><span class="n">begin_nested</span><span class="p">()</span>
+
+        <span class="k">yield</span> <span class="n">session</span>
+        <span class="k">await</span> <span class="n">session</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+        <span class="k">await</span> <span class="n">outer</span><span class="o">.</span><span class="n">rollback</span><span class="p">()</span>          <span class="c1"># nothing the test did survives</span>
+
+
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">client</span><span class="p">(</span><span class="n">db_session</span><span class="p">):</span>
+    <span class="c1"># The application must use the test&#39;s session, or its writes escape the</span>
+    <span class="c1"># transaction and its reads cannot see the test&#39;s fixtures.</span>
+    <span class="n">app</span><span class="o">.</span><span class="n">dependency_overrides</span><span class="p">[</span><span class="n">get_session</span><span class="p">]</span> <span class="o">=</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">db_session</span>
+    <span class="n">transport</span> <span class="o">=</span> <span class="n">ASGITransport</span><span class="p">(</span><span class="n">app</span><span class="o">=</span><span class="n">app</span><span class="p">)</span>   <span class="c1"># in-process: no port, no listener, no flakiness</span>
+    <span class="k">async</span> <span class="k">with</span> <span class="n">AsyncClient</span><span class="p">(</span><span class="n">transport</span><span class="o">=</span><span class="n">transport</span><span class="p">,</span> <span class="n">base_url</span><span class="o">=</span><span class="s2">&quot;http://test&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">c</span><span class="p">:</span>
+        <span class="k">yield</span> <span class="n">c</span>
+    <span class="n">app</span><span class="o">.</span><span class="n">dependency_overrides</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+
+
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">authed_client</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">db_session</span><span class="p">):</span>
+    <span class="n">user</span> <span class="o">=</span> <span class="k">await</span> <span class="n">create_user</span><span class="p">(</span><span class="n">db_session</span><span class="p">,</span> <span class="n">email</span><span class="o">=</span><span class="s2">&quot;t@example.com&quot;</span><span class="p">,</span> <span class="n">scopes</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;orders:write&quot;</span><span class="p">])</span>
+    <span class="n">client</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s2">&quot;Authorization&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Bearer </span><span class="si">{</span><span class="n">create_access_token</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">user</span><span class="o">.</span><span class="n">id</span><span class="p">),</span> <span class="n">user</span><span class="o">.</span><span class="n">scopes</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+    <span class="k">return</span> <span class="n">client</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># tests/integration/test_orders_api.py</span>
+<span class="kn">import</span> <span class="nn">pytest</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">test_duplicate_order_reference_is_rejected_by_the_database</span><span class="p">(</span><span class="n">authed_client</span><span class="p">,</span> <span class="n">db_session</span><span class="p">):</span>
+    <span class="c1"># The point of an integration test: this asserts the unique constraint exists</span>
+    <span class="c1"># and that the code handles its violation. A mocked repository would agree with</span>
+    <span class="c1"># whatever the code believed, including that the constraint was there.</span>
+    <span class="k">await</span> <span class="n">authed_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="s2">&quot;/api/v1/orders&quot;</span><span class="p">,</span> <span class="n">json</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;reference&quot;</span><span class="p">:</span> <span class="s2">&quot;R-1&quot;</span><span class="p">,</span> <span class="s2">&quot;quantity&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">})</span>
+    <span class="n">second</span> <span class="o">=</span> <span class="k">await</span> <span class="n">authed_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="s2">&quot;/api/v1/orders&quot;</span><span class="p">,</span> <span class="n">json</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;reference&quot;</span><span class="p">:</span> <span class="s2">&quot;R-1&quot;</span><span class="p">,</span> <span class="s2">&quot;quantity&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">})</span>
+    <span class="k">assert</span> <span class="n">second</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">409</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">test_totals_survive_the_database_round_trip</span><span class="p">(</span><span class="n">authed_client</span><span class="p">):</span>
+    <span class="c1"># Decimals, timestamps and JSON are where the driver&#39;s real behaviour differs</span>
+    <span class="c1"># from what a mock returns. This is cheap to assert and catches a whole class.</span>
+    <span class="n">created</span> <span class="o">=</span> <span class="k">await</span> <span class="n">authed_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="s2">&quot;/api/v1/orders&quot;</span><span class="p">,</span> <span class="n">json</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;quantity&quot;</span><span class="p">:</span> <span class="mi">3</span><span class="p">})</span>
+    <span class="n">fetched</span> <span class="o">=</span> <span class="k">await</span> <span class="n">authed_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;/api/v1/orders/</span><span class="si">{</span><span class="n">created</span><span class="o">.</span><span class="n">json</span><span class="p">()[</span><span class="s1">&#39;id&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">fetched</span><span class="o">.</span><span class="n">json</span><span class="p">()[</span><span class="s2">&quot;total&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">created</span><span class="o">.</span><span class="n">json</span><span class="p">()[</span><span class="s2">&quot;total&quot;</span><span class="p">]</span>
+
+
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">slow</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">test_payment_capture_uses_the_recorded_provider_response</span><span class="p">(</span><span class="n">authed_client</span><span class="p">,</span> <span class="n">vcr_cassette</span><span class="p">):</span>
+    <span class="c1"># Recorded once against the real provider, replayed thereafter. The suite stays</span>
+    <span class="c1"># deterministic and offline; the recording is refreshed deliberately, and that</span>
+    <span class="c1"># refresh is when a provider&#39;s contract change is discovered.</span>
+    <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">authed_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="s2">&quot;/api/v1/orders/1/capture&quot;</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">200</span>
+</code></pre></div>
+
+<h2>5. Golden-standard rules</h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Forbidden:</strong> creating the test schema from the models instead of the migrations</td>
+<td>It hides every migration that does not apply cleanly until the deploy that runs it.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> cleaning up by deleting rows</td>
+<td>Slow, incomplete the moment a table is added, and skipped entirely by a failing test — which then poisons everything after it.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> the application opening its own connection during a test</td>
+<td>Its writes escape the test's transaction and its reads cannot see the test's data. Inject the session.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> a live third-party call in the suite</td>
+<td>It makes the suite fail when someone else's service is down, and rate-limits you for having tests. Record and replay.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> tests sharing a database without transactional isolation</td>
+<td>They pass alone, fail together, and the failure depends on order and timing.</td>
+</tr>
+<tr>
+<td>Containers start once per session; transactions are per test</td>
+<td>Per-test containers are correct and turn a two-minute suite into a twenty-minute one.</td>
+</tr>
+<tr>
+<td>Every test creates the data it needs</td>
+<td>Shared seed data becomes an implicit precondition, and changing it breaks tests that never mentioned it.</td>
+</tr>
+<tr>
+<td>Integration tests are marked and separable</td>
+<td>Contributors need a fast default run; CI runs everything. If both are the same command, one of the two constituencies loses.</td>
+</tr>
+<tr>
+<td>The API is exercised in process, not over a port</td>
+<td>A real listener adds a bind, a race and a flake, and proves nothing extra about the code.</td>
+</tr>
+<tr>
+<td>Authenticated requests use the real token path</td>
+<td>A test client that bypasses authentication cannot tell you the route was protected.</td>
+</tr>
+<tr>
+<td>Recordings of external services are committed and refreshed deliberately</td>
+<td>The refresh is when a provider's contract change is discovered — on your schedule rather than during an incident.</td>
+</tr>
+<tr>
+<td>The suite has a stated time budget, enforced in CI</td>
+<td>Without a number, it grows until it is skipped, and a skipped suite is worse than none because it looks like coverage.</td>
+</tr>
+</tbody>
+</table>
+<h2>6. Data contracts</h2>
+<p>What an integration test may assume:</p>
+<div class="hl"><pre><span></span><code>schema      built by running the migrations, identical to production&#39;s path
+isolation   an open transaction; everything the test writes is rolled back
+visibility  the app and the test share one transaction, so each sees the other
+external    no live third-party calls; recorded responses only
+order       arbitrary — tests must pass in any order and in parallel
+</code></pre></div>
+
+<p>The visibility guarantee is what separates this from "a test with a database
+nearby". If the application cannot see rows the test inserted, every test starts
+with an HTTP call to create its own fixtures, and the suite becomes slow for a
+reason that looks like thoroughness.</p>
+<h2>7. Build order</h2>
+<ol>
+<li><strong>One container, migrations applied, one test that queries the database.</strong> No
+   isolation yet — prove the schema comes up from migrations first.</li>
+<li><strong>The transactional fixture</strong>, then a test that writes a row and a second that
+   asserts the row is gone. This is the guarantee everything else rests on.</li>
+<li><strong>The in-process client with the session override</strong>, and a test asserting the
+   application sees a row the test inserted.</li>
+<li><strong>The authenticated client</strong>, using the real token path.</li>
+<li><strong>Tests for the seams</strong> — constraint violations, migrations, round-trip types,
+   the queries with joins.</li>
+<li><strong>Record and replay for external services</strong>, with recordings committed.</li>
+<li><strong>The marker split and the CI budget</strong>, then run the suite in parallel and fix
+   what breaks.</li>
+</ol>
+<p>Step 2 immediately after step 1 because every later test is only as trustworthy as
+that rollback. Two tests are enough to prove it and cheap to write now.</p>
+<h2>8. Blocks to pull in</h2>
+<p>Nothing here is a prerequisite. These are adjacent problems, by name only —
+resolve them separately if they apply.</p>
+<ul>
+<li>Test harness and unit tests — the fast suite this one deliberately complements</li>
+<li>Alembic migrations — what builds the schema these tests run against</li>
+<li>SQLAlchemy async ORM layer — the session this fixture substitutes</li>
+<li>Docker Compose dev environment — the same dependencies, started for development</li>
+<li>GitHub Actions CI — where the container-backed run happens on every change</li>
+</ul>
+<h2>9. Metrics</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Integration suite runtime in CI</td>
+<td>&lt; 3 minutes</td>
+</tr>
+<tr>
+<td>Container startup, once per run</td>
+<td>&lt; 10 s</td>
+</tr>
+<tr>
+<td>Tests that fail when run in a different order</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Tests that fail when run in parallel</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Rows surviving a test</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Live third-party calls during a run</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Migrations exercised by the suite</td>
+<td>All of them, on every run</td>
+</tr>
+</tbody>
+</table>
+<h2>10. Failure modes</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A migration fails on deploy although the tests were green</td>
+<td>The test schema was built with <code>create_all</code>, so the migrations never ran</td>
+<td>Apply migrations to build the test database</td>
+</tr>
+<tr>
+<td>Tests pass alone and fail together</td>
+<td>Shared state without transactional isolation, or a leftover from a failing test's skipped cleanup</td>
+<td>Wrap each test in a transaction and roll it back</td>
+</tr>
+<tr>
+<td>The application cannot see rows the test inserted</td>
+<td>The app opened its own connection instead of using the test's session</td>
+<td>Override the session dependency with the test's</td>
+</tr>
+<tr>
+<td>Data written by the app survives the test</td>
+<td>The app's commit ended the outer transaction rather than a savepoint</td>
+<td>Join the external transaction and restart the savepoint after each commit</td>
+</tr>
+<tr>
+<td>The suite fails when a third-party service is down</td>
+<td>Tests call it live</td>
+<td>Record and replay</td>
+</tr>
+<tr>
+<td>The suite takes twenty minutes</td>
+<td>A container is started per test, or every test creates its fixtures over HTTP</td>
+<td>Session-scoped containers; create fixtures directly against the session</td>
+</tr>
+<tr>
+<td>A test occasionally fails on a port bind or a connection reset</td>
+<td>The app is served on a real port during tests</td>
+<td>Use an in-process transport</td>
+</tr>
+<tr>
+<td>Tests pass in CI and the endpoint is unprotected in production</td>
+<td>The test client bypasses authentication</td>
+<td>Authenticate through the real token path</td>
+</tr>
+<tr>
+<td>A provider changes its API and nobody notices for months</td>
+<td>Recordings are never refreshed</td>
+<td>Refresh them on a schedule and treat the diff as a review item</td>
+</tr>
+<tr>
+<td>The suite is green but the slowest ten tests take most of the time</td>
+<td>Setup is repeated per test rather than shared</td>
+<td>Move invariant setup to session scope; keep only the transaction per test</td>
+</tr>
+</tbody>
+</table>
+<h2>11. Definition of done</h2>
+<ul>
+<li class="task">The test schema is created by running the migrations, verified by a test that asserts the alembic version table is at head</li>
+<li class="task">A test writes a row and a following test asserts it is absent, proving rollback isolation</li>
+<li class="task">The application sees data the test inserted directly, covered by a test</li>
+<li class="task">Data written by the application during a test is absent after it, covered by a test</li>
+<li class="task">The suite passes with the order shuffled and with parallel workers</li>
+<li class="task">No test performs a live third-party HTTP call, enforced by blocking unrecorded requests</li>
+<li class="task">Authenticated requests go through the real token path, and a test asserts an unauthenticated request to a protected route is rejected</li>
+<li class="task">Integration tests are marked and excluded from the default local run</li>
+<li class="task">The suite runs in CI within its stated budget, and CI fails if it exceeds it</li>
+<li class="task">Containers start once per session, verified by the run log</li>
+<li class="task">At least one test asserts a database constraint fires and the application handles it</li>
+<li class="task">At least one test asserts a decimal and a timezone-aware timestamp survive the round trip unchanged</li>
+</ul>
+  </article>
+
+  <aside class="tailpiece">
+    <h2>Use this blueprint</h2>
+    <p>
+      Copy the file into your project and point your agent at it. It works with Claude Code,
+      Cursor, Copilot, ChatGPT and anything else that reads a file — there is nothing to install.
+    </p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/testing-integration" target="_blank" rel="noopener">Open on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Browse all blueprints</a>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p><a href="/">Awesome Blueprints</a> — same request, same architecture, every time.</p>
+    <p class="dim">MIT · awesomeblueprints.com</p>
+  </div>
+</footer>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'neutral' });
+</script>
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const now = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', now);
+    try { localStorage.setItem('ab-theme', now); } catch (e) {}
+    location.reload();   // the diagram is themed at render time
+  });
+</script>
+
+</body>
+</html>

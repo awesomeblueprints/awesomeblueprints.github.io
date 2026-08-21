@@ -1,0 +1,497 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Idempotency Keys and Safe Retries — Blueprint for AI Coding Agents | Awesome Blueprints</title>
+<meta name="description" content="Idempotency keys and safe retries: making webhooks, payments, queued jobs and client POSTs safe to deliver twice without double effects." />
+<link rel="canonical" href="https://awesomeblueprints.com/blueprints/idempotency-and-retries/" />
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="Awesome Blueprints" />
+<meta property="og:url" content="https://awesomeblueprints.com/blueprints/idempotency-and-retries/" />
+<meta property="og:title" content="Idempotency Keys and Safe Retries — Architecture Blueprint" />
+<meta property="og:description" content="Idempotency keys and safe retries: making webhooks, payments, queued jobs and client POSTs safe to deliver twice without double effects." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Idempotency Keys and Safe Retries — Architecture Blueprint" />
+<meta name="twitter:description" content="Idempotency keys and safe retries: making webhooks, payments, queued jobs and client POSTs safe to deliver twice without double effects." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/page.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "Idempotency Keys and Safe Retries", "description": "Idempotency keys and safe retries: making webhooks, payments, queued jobs and client POSTs safe to deliver twice without double effects.", "url": "https://awesomeblueprints.com/blueprints/idempotency-and-retries/", "dateModified": "2026-08-18", "keywords": "Reliability", "isAccessibleForFree": true, "license": "https://opensource.org/licenses/MIT", "publisher": {"@type": "Organization", "name": "Awesome Blueprints", "url": "https://awesomeblueprints.com"}}</script>
+<script>
+  (function () {
+    var t;
+    try { t = localStorage.getItem('ab-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">Awesome Blueprints</a>
+    <div class="nav-right">
+      <a class="nav-link" href="/#blueprints">Catalogue</a>
+      <a class="nav-link" href="/#faq">FAQ</a>
+      <a class="nav-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/idempotency-and-retries" target="_blank" rel="noopener">GitHub ↗</a>
+      <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Switch theme">◑</button>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/">Home</a> <span>/</span> <a href="/#blueprints">Blueprints</a> <span>/</span>
+    <span>Idempotency Keys and Safe Retries</span>
+  </nav>
+
+  <header class="page-head">
+    <p class="eyebrow">idempotency-and-retries</p>
+    <h1>Idempotency Keys and Safe Retries</h1>
+    <p class="lede">Idempotency keys and safe retries: making webhooks, payments, queued jobs and client POSTs safe to deliver twice without double effects.</p>
+    <div class="facts"><span>low</span><span>1–3 days</span><span>Verified 2026-08-18</span></div>
+    <div class="tags"><span class="tag">Reliability</span></div>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/idempotency-and-retries" target="_blank" rel="noopener">Read it on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Back to the catalogue</a>
+    </div>
+  </header>
+
+  <article class="doc">
+<blockquote>
+<p>How to make an operation safe to run twice, so that a retry — from a client, a
+queue, a webhook sender or a human hitting the button again — changes nothing
+the second time.</p>
+</blockquote>
+<p><strong>Complexity:</strong> low-medium · <strong>Typical build:</strong> 1–3 days · <strong>Verified:</strong> 2026-08-18 (re-check after ~90 days)</p>
+<p><strong>Examples in:</strong> TypeScript and Postgres. Only §4 is language-specific — the rules, failure modes and definition of done hold anywhere, and your agent translates the code.</p>
+<p><strong>Use when:</strong> an operation can be delivered or invoked more than once — webhooks, queued jobs, payments, outbound email, any POST a client may retry — and running it twice would double-charge, double-send or double-write.</p>
+<p><strong>Not for:</strong> naturally idempotent reads, or operations where doing the work twice is genuinely harmless — adding retry machinery to those is cost without benefit.</p>
+<hr />
+<h2>⚙️ INSTRUCTIONS FOR THE AI — READ BEFORE WRITING ANY CODE</h2>
+<p><strong>Do not start coding.</strong></p>
+<p><strong>Step 1 — Refresh.</strong> Search the web and verify: whether the database in use
+supports the conflict-handling clause this blueprint relies on (<code>INSERT … ON
+CONFLICT</code> in Postgres, <code>INSERT … ON DUPLICATE KEY</code> in MySQL, conditional writes
+in DynamoDB — the shape differs and the guarantees differ with it); the current
+isolation level defaults of that database; and, if a third-party API is
+involved, whether it accepts an idempotency key header and what its retention
+window for those keys is. Report what you verified and where your assumptions
+were wrong.</p>
+<p><strong>Step 2 — Read the project.</strong> Find how transactions are currently opened, where
+the migration files live, and whether an idempotency or dedup table already
+exists under another name. Match the existing transaction style rather than
+introducing a second one.</p>
+<p><strong>Then audit what exists.</strong> Walk §11 item by item, marking each <em>already true</em>,
+<em>partly true</em> or <em>absent</em> with the file that decides it. Report that before
+proposing anything.</p>
+<p>Assume the project is right until it demonstrably is not. Code that satisfies an
+item stays, whatever its shape — §4 is illustrative, and its idioms translate
+into this project's language. Replacing something that works needs a one-line
+reason. Never delete a working path to make room for the version written here.
+If nothing relevant exists, say so and use §3.</p>
+<p><strong>Step 3 — Write a plan for the gap only, and get it approved.</strong> List: every operation
+you are making retry-safe, where each one's key comes from, what the stored
+response contains, and the retention policy for old keys.</p>
+<p><strong>In that plan, include a <code>## Proposed stack</code> section.</strong> Do not ask an open
+question about storage. <em>Propose</em> where the idempotency records live — almost
+always the same database as the domain data, for reasons in §5 — with a one-line
+reason, and what would change the decision. Ask the user to confirm once.</p>
+<p>Name what you are adding, leaving alone, and changing. Touch nothing else.</p>
+<p><strong>Step 4 — Build in the order in §7.</strong> <strong>Step 5 — §11 is the definition of done.</strong></p>
+<hr />
+<h2>1. Why "it worked" is not the same as "it ran once"</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>An ordinary write</th>
+<th>A retry-safe write</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Delivery assumption</td>
+<td>Exactly once</td>
+<td>At least once — plan for the duplicate</td>
+</tr>
+<tr>
+<td>Who retries</td>
+<td>Nobody, in the happy path</td>
+<td>Client timeouts, queue redelivery, sender retries, the user</td>
+</tr>
+<tr>
+<td>Effect of running twice</td>
+<td>Usually nothing visible</td>
+<td>Two charges, two emails, two rows</td>
+</tr>
+<tr>
+<td>When you find out</td>
+<td>—</td>
+<td>From the customer</td>
+</tr>
+<tr>
+<td>Where the guarantee lives</td>
+<td>Nowhere</td>
+<td>A unique constraint in the schema</td>
+</tr>
+</tbody>
+</table>
+<p>The trap is that a duplicate is <em>not</em> an error state. The first call succeeded;
+the response was simply lost on the way back. The sender does the correct thing
+and retries. Any design that treats the second delivery as anomalous will get
+this wrong, because it is the normal case.</p>
+<p>So the question is never "how do I stop retries" — you cannot, and you do not
+want to. It is "what does the second attempt do instead of the work".</p>
+<h2>2. Architecture</h2>
+<pre class="mermaid">%% GENERATED - do not edit by hand.
+%% Edit the source header in architecture.mmd, then rebuild.
+%% Idempotency Across a Retry Boundary
+
+flowchart TB
+    subgraph edge[&quot;Entry Point&quot;]
+        direction TB
+        handler[&quot;Request Handler&quot;]
+        keyer[&quot;Key Resolver&quot;]
+    end
+    subgraph state[&quot;One Database, One Transaction&quot;]
+        direction TB
+        keys[(&quot;Idempotency Records&quot;)]
+        domain[(&quot;Domain Tables&quot;)]
+    end
+
+    caller([&quot;Caller, may retry&quot;])
+    effect[&quot;Effect Executor&quot;]
+    external{{&quot;Downstream Service&quot;}}
+
+    caller --&gt;|&quot;request arrives, possibly again&quot;| handler
+    handler --&gt;|&quot;derive or read the key&quot;| keyer
+    keyer --&gt;|&quot;claim it - insert, ignore conflict&quot;| keys
+    keys --&gt;|&quot;won the claim, or replay&quot;| handler
+    handler --&gt;|&quot;first delivery only&quot;| effect
+    effect --&gt;|&quot;write&quot;| domain
+    effect --&gt;|&quot;store the response in the same transaction&quot;| keys
+    effect -.-&gt;|&quot;guarded, at most once&quot;| external
+    handler --&gt;|&quot;the same response every time&quot;| caller
+
+    classDef service fill:#eff6ff,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b;
+    classDef datastore fill:#e9faf3,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b;
+    classDef external fill:#fff4ed,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b;
+    classDef actor fill:#f0eefc,stroke:#4a3aa7,stroke-width:1.5px,color:#0b0b0b;
+    class handler,keyer,effect service;
+    class keys,domain datastore;
+    class external external;
+    class caller actor;</pre>
+<p><strong>The rule this diagram encodes:</strong> the claim and the effect commit together, in
+one transaction, in one database. Split them across two systems and there is a
+window where the key says "done" and the work never happened.</p>
+<h2>3. Project structure</h2>
+<div class="hl"><pre><span></span><code>src/
+├── idempotency/
+│   ├── key.ts            # derive a key: header, or a stable hash of the request
+│   ├── claim.ts          # claim(key, tx) -&gt; Won | Replay(storedResponse)
+│   └── schema.sql        # the table and its unique index
+├── domain/               # the actual effects. Knows nothing about retries.
+└── handlers/             # claim, then call domain, then store the response
+</code></pre></div>
+
+<p><strong>The rule that keeps this maintainable:</strong> the domain layer stays unaware of
+idempotency. It exposes an operation that is called once; the wrapper decides
+whether to call it. The moment "have we done this already" leaks into business
+logic, every future operation has to remember to ask.</p>
+<h2>4. Reference implementation</h2>
+<p><strong>Claiming the key.</strong> The entire guarantee is a unique index plus a conflict
+clause — one round trip, no read-then-write race:</p>
+<div class="hl"><pre><span></span><code><span class="k">create</span><span class="w"> </span><span class="k">table</span><span class="w"> </span><span class="n">idempotency_records</span><span class="w"> </span><span class="p">(</span><span class="w"></span>
+<span class="w">  </span><span class="k">key</span><span class="w">            </span><span class="nb">text</span><span class="w"> </span><span class="k">primary</span><span class="w"> </span><span class="k">key</span><span class="p">,</span><span class="w">          </span><span class="c1">-- the unique index IS the lock</span>
+<span class="w">  </span><span class="k">operation</span><span class="w">      </span><span class="nb">text</span><span class="w">        </span><span class="k">not</span><span class="w"> </span><span class="k">null</span><span class="p">,</span><span class="w">       </span><span class="c1">-- &#39;charge&#39;, &#39;send_invite&#39; — see §5</span>
+<span class="w">  </span><span class="n">request_hash</span><span class="w">   </span><span class="nb">text</span><span class="w">        </span><span class="k">not</span><span class="w"> </span><span class="k">null</span><span class="p">,</span><span class="w">       </span><span class="c1">-- guards against key reuse</span>
+<span class="w">  </span><span class="n">status</span><span class="w">         </span><span class="nb">text</span><span class="w">        </span><span class="k">not</span><span class="w"> </span><span class="k">null</span><span class="p">,</span><span class="w">       </span><span class="c1">-- &#39;in_progress&#39; | &#39;completed&#39;</span>
+<span class="w">  </span><span class="n">response</span><span class="w">       </span><span class="n">jsonb</span><span class="p">,</span><span class="w">                      </span><span class="c1">-- replayed verbatim</span>
+<span class="w">  </span><span class="n">created_at</span><span class="w">     </span><span class="n">timestamptz</span><span class="w"> </span><span class="k">not</span><span class="w"> </span><span class="k">null</span><span class="w"> </span><span class="k">default</span><span class="w"> </span><span class="n">now</span><span class="p">(),</span><span class="w"></span>
+<span class="w">  </span><span class="n">completed_at</span><span class="w">   </span><span class="n">timestamptz</span><span class="w"></span>
+<span class="p">);</span><span class="w"></span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="k">export</span> <span class="k">async</span> <span class="kd">function</span> <span class="nx">claim</span><span class="p">(</span><span class="nx">tx</span>: <span class="kt">Tx</span><span class="p">,</span> <span class="nx">key</span>: <span class="kt">string</span><span class="p">,</span> <span class="nx">operation</span>: <span class="kt">string</span><span class="p">,</span> <span class="nx">requestHash</span>: <span class="kt">string</span><span class="p">)</span> <span class="p">{</span>
+  <span class="c1">// ON CONFLICT DO NOTHING makes this a single atomic &quot;did I win?&quot; - two</span>
+  <span class="c1">// concurrent requests cannot both see an empty table and both proceed.</span>
+  <span class="kd">const</span> <span class="nx">inserted</span> <span class="o">=</span> <span class="k">await</span> <span class="nx">tx</span><span class="p">.</span><span class="nx">query</span><span class="p">(</span>
+    <span class="sb">`insert into idempotency_records (key, operation, request_hash, status)</span>
+<span class="sb">     values ($1, $2, $3, &#39;in_progress&#39;)</span>
+<span class="sb">     on conflict (key) do nothing</span>
+<span class="sb">     returning key`</span><span class="p">,</span>
+    <span class="p">[</span><span class="nx">key</span><span class="p">,</span> <span class="nx">operation</span><span class="p">,</span> <span class="nx">requestHash</span><span class="p">],</span>
+  <span class="p">);</span>
+  <span class="k">if</span> <span class="p">(</span><span class="nx">inserted</span><span class="p">.</span><span class="nx">rowCount</span> <span class="o">===</span> <span class="mf">1</span><span class="p">)</span> <span class="k">return</span> <span class="p">{</span> <span class="nx">won</span>: <span class="kt">true</span> <span class="p">}</span> <span class="kr">as</span> <span class="kd">const</span><span class="p">;</span>
+
+  <span class="kd">const</span> <span class="nx">existing</span> <span class="o">=</span> <span class="k">await</span> <span class="nx">tx</span><span class="p">.</span><span class="nx">one</span><span class="p">(</span>
+    <span class="sb">`select operation, request_hash, status, response</span>
+<span class="sb">       from idempotency_records where key = $1`</span><span class="p">,</span> <span class="p">[</span><span class="nx">key</span><span class="p">]);</span>
+
+  <span class="c1">// Same key, different request body: the client reused a key for new content.</span>
+  <span class="c1">// Replaying the old response here would silently answer the wrong question.</span>
+  <span class="k">if</span> <span class="p">(</span><span class="nx">existing</span><span class="p">.</span><span class="nx">request_hash</span> <span class="o">!==</span> <span class="nx">requestHash</span> <span class="o">||</span> <span class="nx">existing</span><span class="p">.</span><span class="nx">operation</span> <span class="o">!==</span> <span class="nx">operation</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">throw</span> <span class="ow">new</span> <span class="nx">IdempotencyKeyReused</span><span class="p">(</span><span class="nx">key</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="k">if</span> <span class="p">(</span><span class="nx">existing</span><span class="p">.</span><span class="nx">status</span> <span class="o">===</span> <span class="s1">&#39;in_progress&#39;</span><span class="p">)</span> <span class="k">throw</span> <span class="ow">new</span> <span class="nx">RequestInFlight</span><span class="p">(</span><span class="nx">key</span><span class="p">);</span>
+  <span class="k">return</span> <span class="p">{</span> <span class="nx">won</span>: <span class="kt">false</span><span class="p">,</span> <span class="nx">response</span>: <span class="kt">existing.response</span> <span class="p">}</span> <span class="kr">as</span> <span class="kd">const</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><strong>Doing the work.</strong> The effect and the completion record commit together. If the
+process dies mid-way, both roll back and the next delivery starts clean:</p>
+<div class="hl"><pre><span></span><code><span class="k">export</span> <span class="k">async</span> <span class="kd">function</span> <span class="nx">runOnce</span><span class="o">&lt;</span><span class="nx">T</span><span class="o">&gt;</span><span class="p">(</span><span class="nx">key</span>: <span class="kt">string</span><span class="p">,</span> <span class="nx">operation</span>: <span class="kt">string</span><span class="p">,</span> <span class="nx">req</span>: <span class="kt">unknown</span><span class="p">,</span>
+                                 <span class="nx">effect</span><span class="o">:</span> <span class="p">(</span><span class="nx">tx</span>: <span class="kt">Tx</span><span class="p">)</span> <span class="p">=&gt;</span> <span class="nb">Promise</span><span class="o">&lt;</span><span class="nx">T</span><span class="o">&gt;</span><span class="p">)</span><span class="o">:</span> <span class="nb">Promise</span><span class="o">&lt;</span><span class="nx">T</span><span class="o">&gt;</span> <span class="p">{</span>
+  <span class="kd">const</span> <span class="nx">hash</span> <span class="o">=</span> <span class="nx">stableHash</span><span class="p">(</span><span class="nx">req</span><span class="p">);</span>
+  <span class="k">return</span> <span class="nx">db</span><span class="p">.</span><span class="nx">transaction</span><span class="p">(</span><span class="k">async</span> <span class="p">(</span><span class="nx">tx</span><span class="p">)</span> <span class="p">=&gt;</span> <span class="p">{</span>
+    <span class="kd">const</span> <span class="nx">claimed</span> <span class="o">=</span> <span class="k">await</span> <span class="nx">claim</span><span class="p">(</span><span class="nx">tx</span><span class="p">,</span> <span class="nx">key</span><span class="p">,</span> <span class="nx">operation</span><span class="p">,</span> <span class="nx">hash</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">claimed</span><span class="p">.</span><span class="nx">won</span><span class="p">)</span> <span class="k">return</span> <span class="nx">claimed</span><span class="p">.</span><span class="nx">response</span> <span class="kr">as</span> <span class="nx">T</span><span class="p">;</span>
+
+    <span class="kd">const</span> <span class="nx">result</span> <span class="o">=</span> <span class="k">await</span> <span class="nx">effect</span><span class="p">(</span><span class="nx">tx</span><span class="p">);</span>          <span class="c1">// domain write, same transaction</span>
+
+    <span class="k">await</span> <span class="nx">tx</span><span class="p">.</span><span class="nx">query</span><span class="p">(</span>
+      <span class="sb">`update idempotency_records</span>
+<span class="sb">          set status = &#39;completed&#39;, response = $2, completed_at = now()</span>
+<span class="sb">        where key = $1`</span><span class="p">,</span> <span class="p">[</span><span class="nx">key</span><span class="p">,</span> <span class="nx">result</span><span class="p">]);</span>
+    <span class="k">return</span> <span class="nx">result</span><span class="p">;</span>                             <span class="c1">// commit publishes both, or neither</span>
+  <span class="p">});</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><strong>The one thing a transaction cannot protect.</strong> An outbound call to a third
+party is not rolled back by your database. Do it <em>after</em> commit, keyed, and let
+the provider deduplicate:</p>
+<div class="hl"><pre><span></span><code><span class="c1">// Inside the transaction: record the intent. After commit: perform it.</span>
+<span class="c1">// The provider&#39;s own idempotency key makes the post-commit retry safe.</span>
+<span class="k">await</span> <span class="nx">stripe</span><span class="p">.</span><span class="nx">charges</span><span class="p">.</span><span class="nx">create</span><span class="p">(</span><span class="nx">payload</span><span class="p">,</span> <span class="p">{</span> <span class="nx">idempotencyKey</span>: <span class="kt">key</span> <span class="p">});</span>
+</code></pre></div>
+
+<h2>5. Golden-standard rules</h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The uniqueness lives in a database constraint, never in application code</td>
+<td>An <code>if (await exists(key))</code> check has a race between the check and the write</td>
+</tr>
+<tr>
+<td>The claim and the effect commit in one transaction, in one database</td>
+<td>Two systems means a window where one says done and the other never ran</td>
+</tr>
+<tr>
+<td>The key is scoped by operation</td>
+<td>The same client key reused across two endpoints must not collide</td>
+</tr>
+<tr>
+<td>A key arriving with a different request body is an error, not a replay</td>
+<td>Otherwise a reused key silently answers the wrong question</td>
+</tr>
+<tr>
+<td>The stored response is replayed verbatim</td>
+<td>A recomputed response can differ from what the caller already acted on</td>
+</tr>
+<tr>
+<td>A replay returns the original status code too</td>
+<td>A 201 that becomes a 200 on retry breaks clients that branch on it</td>
+</tr>
+<tr>
+<td>Third-party calls happen after commit, with the provider's own idempotency key</td>
+<td>Your transaction cannot roll back their charge</td>
+</tr>
+<tr>
+<td>Keys are expired on a schedule, not never</td>
+<td>The table grows forever; pick a window longer than the longest sender retry</td>
+</tr>
+<tr>
+<td>Expiry is longer than every upstream retry window</td>
+<td>Expire at 24h while the sender retries for 72h and you re-run the work</td>
+</tr>
+<tr>
+<td>An in-flight duplicate is refused, not queued</td>
+<td>Blocking invites deadlock; a 409 tells the caller to retry later</td>
+</tr>
+<tr>
+<td>Client-supplied keys are validated for shape and length</td>
+<td>The key is a primary key; unbounded input becomes an index problem</td>
+</tr>
+<tr>
+<td>Where no client key exists, hash the semantic content, not the raw bytes</td>
+<td>Whitespace or key order must not produce a new key</td>
+</tr>
+</tbody>
+</table>
+<h2>6. Data contracts</h2>
+<div class="hl"><pre><span></span><code><span class="cm">/** Derived once, at the boundary. Never re-derived deeper in the stack. */</span>
+<span class="k">export</span> <span class="kr">type</span> <span class="nx">IdempotencyKey</span> <span class="o">=</span> <span class="kt">string</span> <span class="o">&amp;</span> <span class="p">{</span> <span class="k">readonly</span> <span class="nx">__brand</span><span class="o">:</span> <span class="s1">&#39;IdempotencyKey&#39;</span> <span class="p">};</span>
+
+<span class="k">export</span> <span class="kr">type</span> <span class="nx">ClaimResult</span><span class="o">&lt;</span><span class="nx">T</span><span class="o">&gt;</span> <span class="o">=</span>
+  <span class="o">|</span> <span class="p">{</span> <span class="nx">won</span>: <span class="kt">true</span> <span class="p">}</span>                    <span class="c1">// you are the first; do the work</span>
+  <span class="o">|</span> <span class="p">{</span> <span class="nx">won</span>: <span class="kt">false</span><span class="p">;</span> <span class="nx">response</span>: <span class="kt">T</span> <span class="p">};</span>     <span class="c1">// someone already did; return this</span>
+
+<span class="cm">/** Stable across formatting: sort keys, drop undefined, normalise numbers. */</span>
+<span class="k">export</span> <span class="kd">function</span> <span class="nx">stableHash</span><span class="p">(</span><span class="nx">request</span>: <span class="kt">unknown</span><span class="p">)</span><span class="o">:</span> <span class="kt">string</span><span class="p">;</span>
+</code></pre></div>
+
+<h2>7. Build order</h2>
+<ol>
+<li><strong>The table and its unique index</strong>, as a migration. Nothing else yet.</li>
+<li><strong><code>claim()</code></strong>, with a test that runs two concurrent claims of the same key and
+   asserts exactly one wins. Do this before any real operation uses it.</li>
+<li><strong><code>runOnce()</code></strong> wrapping one real operation end to end.</li>
+<li><strong>The replay path</strong> — assert the second call writes nothing and returns the
+   identical body and status.</li>
+<li><strong>Key reuse detection</strong> — same key, different body, expect a hard error.</li>
+<li><strong>The in-flight case</strong> — a second delivery while the first is still running.</li>
+<li><strong>Third-party calls</strong>, moved after commit and given the provider's key.</li>
+<li><strong>Expiry</strong>, as a scheduled delete, with the window written down and justified.</li>
+</ol>
+<h2>8. Related reading</h2>
+<p>Every blueprint here stands on its own: nothing below is a prerequisite, and
+nothing above needs any of it to be implemented. These are adjacent problems you
+will meet next, listed so you know they have been thought about.</p>
+<ul>
+<li><strong>The Error Envelope</strong> — a single shape for the key-reuse and in-flight failures this raises.</li>
+<li><strong>Background Jobs</strong> — queue redelivery is the largest single source of the duplicates handled here.</li>
+</ul>
+<h2>9. Metrics</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Duplicate effects per operation</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Replay rate (claims that lose)</td>
+<td>Expect 0.1–2%; a sudden rise means a caller is timing out</td>
+</tr>
+<tr>
+<td>Key reuse errors</td>
+<td>Near zero; a spike means a client is generating keys wrongly</td>
+</tr>
+<tr>
+<td>Idempotency table row count</td>
+<td>Bounded — flat after expiry starts running</td>
+</tr>
+<tr>
+<td>Claim latency, p95</td>
+<td>&lt; 5 ms; it is one indexed insert</td>
+</tr>
+</tbody>
+</table>
+<h2>10. Failure modes</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Charged twice, one order row</td>
+<td>Third-party call inside the transaction, retried after rollback</td>
+<td>Move it after commit; pass the provider an idempotency key</td>
+</tr>
+<tr>
+<td>Two rows for one request under load</td>
+<td>Check-then-insert instead of a unique constraint</td>
+<td><code>on conflict do nothing</code>, and let the index decide</td>
+</tr>
+<tr>
+<td>Retry returns a different response than the first call</td>
+<td>Response recomputed instead of stored</td>
+<td>Store it at completion; replay verbatim</td>
+</tr>
+<tr>
+<td>Duplicates reappear after a quiet period</td>
+<td>Keys expired sooner than the sender's retry window</td>
+<td>Expiry longer than the longest upstream retry</td>
+</tr>
+<tr>
+<td>Second call hangs</td>
+<td>In-flight duplicate waiting on the first</td>
+<td>Refuse with 409; do not block</td>
+</tr>
+<tr>
+<td>Everything duplicates after a deploy</td>
+<td>Key derivation changed, so old and new keys differ</td>
+<td>Version the derivation; treat a change as a migration</td>
+</tr>
+<tr>
+<td>Table grew to millions of rows</td>
+<td>No expiry</td>
+<td>Scheduled delete on <code>created_at</code></td>
+</tr>
+<tr>
+<td>Works locally, duplicates in production</td>
+<td>Single worker locally, several in production</td>
+<td>Test concurrency, not just repetition</td>
+</tr>
+</tbody>
+</table>
+<h2>11. Definition of done</h2>
+<ul>
+<li class="task">A unique constraint on the key exists in the schema, not only in code.</li>
+<li class="task">Two concurrent claims of the same key produce exactly one winner — covered by a test.</li>
+<li class="task">A second delivery writes nothing and returns the byte-identical response and status code.</li>
+<li class="task">The same key with a different request body is rejected, not replayed.</li>
+<li class="task">The claim and the domain write commit in the same transaction.</li>
+<li class="task">No third-party call happens inside that transaction.</li>
+<li class="task">Every outbound provider call carries an idempotency key.</li>
+<li class="task">Expiry runs on a schedule, and the window is longer than every upstream retry window.</li>
+<li class="task">The domain layer contains no reference to idempotency.</li>
+</ul>
+  </article>
+
+  <aside class="tailpiece">
+    <h2>Use this blueprint</h2>
+    <p>
+      Copy the file into your project and point your agent at it. It works with Claude Code,
+      Cursor, Copilot, ChatGPT and anything else that reads a file — there is nothing to install.
+    </p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/idempotency-and-retries" target="_blank" rel="noopener">Open on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Browse all blueprints</a>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p><a href="/">Awesome Blueprints</a> — same request, same architecture, every time.</p>
+    <p class="dim">MIT · awesomeblueprints.com</p>
+  </div>
+</footer>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'neutral' });
+</script>
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const now = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', now);
+    try { localStorage.setItem('ab-theme', now); } catch (e) {}
+    location.reload();   // the diagram is themed at render time
+  });
+</script>
+
+</body>
+</html>

@@ -1,0 +1,626 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LangGraph Checkpoints and Human Approval — Blueprint for AI Coding Agents | Awesome Blueprints</title>
+<meta name="description" content="LangGraph checkpoints and human approval: durable runs that survive a restart, interrupt-based pauses and idempotent resume semantics." />
+<link rel="canonical" href="https://awesomeblueprints.com/blueprints/langgraph-checkpoints-hitl/" />
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="Awesome Blueprints" />
+<meta property="og:url" content="https://awesomeblueprints.com/blueprints/langgraph-checkpoints-hitl/" />
+<meta property="og:title" content="LangGraph Checkpoints and Human Approval — Architecture Blueprint" />
+<meta property="og:description" content="LangGraph checkpoints and human approval: durable runs that survive a restart, interrupt-based pauses and idempotent resume semantics." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="LangGraph Checkpoints and Human Approval — Architecture Blueprint" />
+<meta name="twitter:description" content="LangGraph checkpoints and human approval: durable runs that survive a restart, interrupt-based pauses and idempotent resume semantics." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/page.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "LangGraph Checkpoints and Human Approval", "description": "LangGraph checkpoints and human approval: durable runs that survive a restart, interrupt-based pauses and idempotent resume semantics.", "url": "https://awesomeblueprints.com/blueprints/langgraph-checkpoints-hitl/", "dateModified": "2026-08-20", "keywords": "LangGraph, Agents", "isAccessibleForFree": true, "license": "https://opensource.org/licenses/MIT", "publisher": {"@type": "Organization", "name": "Awesome Blueprints", "url": "https://awesomeblueprints.com"}}</script>
+<script>
+  (function () {
+    var t;
+    try { t = localStorage.getItem('ab-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">Awesome Blueprints</a>
+    <div class="nav-right">
+      <a class="nav-link" href="/#blueprints">Catalogue</a>
+      <a class="nav-link" href="/#faq">FAQ</a>
+      <a class="nav-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/langgraph-checkpoints-hitl" target="_blank" rel="noopener">GitHub ↗</a>
+      <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Switch theme">◑</button>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/">Home</a> <span>/</span> <a href="/#blueprints">Blueprints</a> <span>/</span>
+    <span>LangGraph Checkpoints and Human Approval</span>
+  </nav>
+
+  <header class="page-head">
+    <p class="eyebrow">langgraph-checkpoints-hitl</p>
+    <h1>LangGraph Checkpoints and Human Approval</h1>
+    <p class="lede">LangGraph checkpoints and human approval: durable runs that survive a restart, interrupt-based pauses and idempotent resume semantics.</p>
+    <div class="facts"><span>high</span><span>4–5 days</span><span>Verified 2026-08-20</span></div>
+    <div class="tags"><span class="tag">LangGraph</span><span class="tag">Agents</span></div>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/langgraph-checkpoints-hitl" target="_blank" rel="noopener">Read it on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Back to the catalogue</a>
+    </div>
+  </header>
+
+  <article class="doc">
+<blockquote>
+<p>A running graph that survives a restart, and a pause in the middle of it where a
+person answers before it goes on — built so that resuming produces the same run
+rather than a second one.</p>
+</blockquote>
+<p><strong>Complexity:</strong> high · <strong>Typical build:</strong> 4–5 days · <strong>Verified:</strong> 2026-08-20 (re-check after ~90 days)</p>
+<p><strong>Examples in:</strong> Python, with LangGraph. The architecture is language-agnostic: sections 5, 10 and 11 hold wherever you build this. Section 4 is illustrative — if your project is in another language, your agent translates the idioms rather than importing them, and nothing is lost. The same shape exists as LangGraph.js in TypeScript, and as a hand-written state machine that persists after every step in any language; what matters is the resume semantics in §1 and the idempotence rules in §5, which are properties of <em>any</em> pause-and-resume design, not of one library.</p>
+<p><strong>Use when:</strong> a run can take longer than the process that started it, or a step in it must not happen until a person says so.</p>
+<p><strong>Not for:</strong> a run that finishes inside one request and does nothing irreversible. Persistence there buys storage cost and a resume path nobody exercises, and an unexercised resume path is worse than none. Also not for approval of <em>everything</em> — an approval on every step is an approval on nothing, because it will be clicked through.</p>
+<hr />
+<h2>⚙️ INSTRUCTIONS FOR THE AI — READ BEFORE WRITING ANY CODE</h2>
+<p><strong>Do not start coding.</strong></p>
+<p><strong>Step 1 — Refresh.</strong> Verify the installed graph library's major version and its
+current pause primitive. The 1.0 line made durable persistence and interrupt-based
+pausing first-class, replacing an older configure-a-node-to-break-before approach
+that most public examples still show. Confirm: the name of the pause call, the
+name of the resume command, whether the resumed value is returned from the pause
+call or read from state, the checkpointer interfaces available, and how a paused
+run is listed. An example that runs is not evidence it is current. Report what you
+verified and what turned out wrong.</p>
+<p><strong>Step 2 — Read the project, then audit what already exists.</strong> Find every
+long-running or resumable process already in the codebase — a job queue, a saga, a
+workflow table — and record how each one stores progress and what happens to it on
+redeploy, because this graph must not become a second, competing durability
+mechanism. Find every existing approval path: an admin screen, a Slack button, a
+status column. Find which actions in the codebase are already irreversible —
+payments, outbound messages, deletions, third-party writes — because those are the
+ones that will need the pause. Then audit §11 item by item, each marked <em>already
+true</em>, <em>partly true</em> or <em>absent</em>, with the file that decides it, reported before
+anything is proposed.</p>
+<p>Assume the project is right until it demonstrably is not; code satisfying an item
+stays even where its shape differs from §4; replacing something that works needs a
+one-line reason; never delete a working path to make room for the blueprint's
+version. The same holds for language — §4 is illustrative, its idioms get
+translated into the project's language, and §11 is what has to become true rather
+than the syntax.</p>
+<p><strong>Step 3 — Write a plan for the gap only, and get it approved</strong>, including a
+<code>## Proposed stack</code> section, the checkpoint store you propose, its retention
+period, and the list of steps that will pause — with the reason each one is on the
+list. Do not ask open questions about the library — propose, and ask for
+confirmation once. Say what you are adding, what you are leaving alone, and what
+you propose to change, and touch nothing else.</p>
+<p><strong>Step 4 — Build in the order in §7.</strong> <strong>Step 5 — §11 is the definition of done.</strong></p>
+<hr />
+<h2>1. The one behaviour that decides the design</h2>
+<p>A checkpointer writes the state after every node boundary, keyed by a thread id.
+That much is unremarkable. The part that determines how you must write your nodes
+is what happens when you resume:</p>
+<blockquote>
+<p><strong>Resuming re-executes the node from its first line.</strong> The pause is not a
+coroutine suspension that picks up where it stopped. The node function runs
+again from the top; everything before the pause call happens a second time; the
+pause call itself, this time, returns the value the person supplied instead of
+pausing.</p>
+</blockquote>
+<p>Two consequences follow, and between them they account for most of the bugs in
+systems built this way:</p>
+<p><strong>Everything before the pause must be idempotent.</strong> A node that charges a card and
+then asks for approval charges the card twice — once on the way in, once on the
+way back. The rule: a node that pauses does <em>nothing with an outside effect before
+the pause</em>. Read, compute, format the question, pause. Act afterwards.</p>
+<p><strong>Several pauses in one node are matched by position, not by identity.</strong> The
+runtime pairs resumed values to pause calls by the order they occur. If the number
+or order of pause calls can change between the first execution and the
+re-execution — because one of them is inside an <code>if</code> whose condition now reads
+differently, or inside a loop whose length depends on state — the answers land on
+the wrong questions, silently. The rule: <strong>one pause per node, at a fixed
+position, never inside a conditional or a loop.</strong> If you need two questions, use
+two nodes.</p>
+<p>The rest of this document is the machinery that makes those two rules enforceable.</p>
+<h3>Which steps pause</h3>
+<p>Pausing everything trains people to click <em>approve</em> without reading, which is
+worse than not pausing, because it manufactures a record of consent that means
+nothing. The test to apply, per action:</p>
+<blockquote>
+<p><strong>Can the agent undo this itself, within the same run?</strong></p>
+</blockquote>
+<p>Reading a record, running a query, calling a read-only API, writing to a scratch
+table the run owns — yes, it can be undone; no pause. Sending a message, moving
+money, deleting data, writing to a third-party system, publishing anything a
+person will see — no, it cannot; pause. That is the whole test, and it is worth
+applying literally rather than by feel: "important" is not the criterion, and
+neither is "expensive". Reversibility is.</p>
+<p>Two refinements that keep the list short enough to be read:</p>
+<ul>
+<li><strong>Thresholds, not categories.</strong> A refund of €2 and a refund of €20 000 are the
+  same category and not the same decision. Pause above a stated amount, and state
+  it in configuration rather than in code.</li>
+<li><strong>Batching.</strong> Ten identical actions in one run are one approval with the list
+  attached, not ten. This is the single most effective defence against approvals
+  being clicked through.</li>
+</ul>
+<h2>2. Architecture</h2>
+<pre class="mermaid">%% GENERATED - do not edit by hand.
+%% Edit the source header in architecture.mmd, then rebuild.
+%% Pause, persist, resume
+
+flowchart TB
+    subgraph durable[&quot;Survives process restart&quot;]
+        direction TB
+        checkpoints[(&quot;Checkpoint store, one row per node boundary&quot;)]
+        pending[(&quot;Pending approvals view, derived from paused threads&quot;)]
+    end
+
+    person([&quot;Reviewer&quot;])
+    api[&quot;Application, starts and resumes runs&quot;]
+    engine[&quot;Compiled graph, checkpointer attached&quot;]
+    prepare[&quot;Prepare node, read only, no effects&quot;]
+    ask[&quot;Pause node, exactly one pause call&quot;]
+    act[&quot;Act node, the irreversible step&quot;]
+    notify[&quot;Notifier&quot;]
+    external{{&quot;External system, the irreversible target&quot;}}
+
+    api --&gt;|&quot;thread id&quot;| engine
+    engine --- checkpoints
+    prepare --&gt; ask
+    ask ---|&quot;run pauses here&quot;| checkpoints
+    ask -.-&gt;|&quot;question raised&quot;| notify
+    notify -.-&gt; person
+    person --&gt;|&quot;decision plus thread id&quot;| api
+    api --&gt;|&quot;resume with the decision&quot;| engine
+    engine --&gt;|&quot;node re-runs from its first line&quot;| act
+    act --&gt; external
+    checkpoints --- pending
+
+    classDef service fill:#eff6ff,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b;
+    classDef datastore fill:#e9faf3,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b;
+    classDef external fill:#fff4ed,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b;
+    classDef actor fill:#f0eefc,stroke:#4a3aa7,stroke-width:1.5px,color:#0b0b0b;
+    class api,engine,prepare,ask,act,notify service;
+    class checkpoints,pending datastore;
+    class external external;
+    class person actor;</pre>
+<p>The arrow that carries the weight is <code>engine -&gt; act</code> labelled <em>node re-runs from its
+first line</em>. Everything in §5 about idempotence exists because that arrow is not a
+resumption, it is a re-entry. Note also that the pending-approvals view is
+<strong>derived</strong> from the checkpoint store rather than being a second table someone
+writes to: a separate approvals table drifts from the graph's real state the first
+time a run fails between writing the row and pausing.</p>
+<h2>3. Project structure</h2>
+<div class="hl"><pre><span></span><code>app/agent/
+├── checkpointer.py    the store, its connection, and its retention job
+├── nodes/
+│   ├── prepare.py     read-only work; nothing with an effect
+│   ├── ask.py         exactly one pause call, at a fixed position
+│   └── act.py         the irreversible step, guarded by an idempotency key
+├── approvals.py       the pending-approvals view, derived from paused threads
+└── runner.py          start(thread_id) and resume(thread_id, decision)
+</code></pre></div>
+
+<p><strong>One rule: a node whose file contains a pause call contains no outbound call of
+any kind.</strong> It is greppable, which is the point — this is the invariant most
+likely to be broken by a well-meaning later edit that adds "just a quick lookup"
+above the pause.</p>
+<h2>4. Reference implementation</h2>
+<div class="hl"><pre><span></span><code><span class="c1"># app/agent/nodes/ask.py</span>
+<span class="kn">from</span> <span class="nn">langgraph.types</span> <span class="kn">import</span> <span class="n">interrupt</span>
+
+
+<span class="k">def</span> <span class="nf">ask_approval</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">AgentState</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Exactly one pause, at a fixed position, with no effect before it.</span>
+
+<span class="sd">    On the first execution `interrupt` stops the graph and the payload is stored</span>
+<span class="sd">    with the checkpoint. On resume this whole function runs again from line one,</span>
+<span class="sd">    and `interrupt` returns the value supplied by the reviewer instead of</span>
+<span class="sd">    pausing. Nothing above this line may have an outside effect, because</span>
+<span class="sd">    everything above this line happens twice.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">decision</span> <span class="o">=</span> <span class="n">interrupt</span><span class="p">({</span>
+        <span class="s2">&quot;kind&quot;</span><span class="p">:</span> <span class="s2">&quot;refund&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;amount_eur&quot;</span><span class="p">:</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;refund&quot;</span><span class="p">][</span><span class="s2">&quot;amount_eur&quot;</span><span class="p">],</span>
+        <span class="s2">&quot;customer&quot;</span><span class="p">:</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;refund&quot;</span><span class="p">][</span><span class="s2">&quot;customer_id&quot;</span><span class="p">],</span>
+        <span class="c1"># The question carries what the reviewer needs to decide with. A payload</span>
+        <span class="c1"># of ids forces them into another system to find out what they are</span>
+        <span class="c1"># approving, which is how approvals become reflexive.</span>
+        <span class="s2">&quot;reason&quot;</span><span class="p">:</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;refund&quot;</span><span class="p">][</span><span class="s2">&quot;reason&quot;</span><span class="p">],</span>
+    <span class="p">})</span>
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s2">&quot;approved&quot;</span><span class="p">:</span> <span class="n">decision</span><span class="p">[</span><span class="s2">&quot;approved&quot;</span><span class="p">],</span>
+        <span class="s2">&quot;approved_by&quot;</span><span class="p">:</span> <span class="n">decision</span><span class="p">[</span><span class="s2">&quot;actor&quot;</span><span class="p">],</span>
+        <span class="s2">&quot;approval_note&quot;</span><span class="p">:</span> <span class="n">decision</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;note&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">),</span>
+    <span class="p">}</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/agent/nodes/act.py</span>
+<span class="kn">import</span> <span class="nn">hashlib</span>
+
+
+<span class="k">def</span> <span class="nf">_idempotency_key</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">AgentState</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="c1"># Derived from the run and the action, not from a clock or a random value —</span>
+    <span class="c1"># a key that changes between attempts is not an idempotency key.</span>
+    <span class="n">raw</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">state</span><span class="p">[</span><span class="s1">&#39;thread_id&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">:refund:</span><span class="si">{</span><span class="n">state</span><span class="p">[</span><span class="s1">&#39;refund&#39;</span><span class="p">][</span><span class="s1">&#39;id&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
+    <span class="k">return</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">sha256</span><span class="p">(</span><span class="n">raw</span><span class="o">.</span><span class="n">encode</span><span class="p">())</span><span class="o">.</span><span class="n">hexdigest</span><span class="p">()</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">act</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">AgentState</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;The irreversible step. Runs only after approval, and only once.</span>
+
+<span class="sd">    The guard is not paranoia: a crash between the external call succeeding and</span>
+<span class="sd">    the checkpoint being written leaves a run that will retry this node. The</span>
+<span class="sd">    checkpoint boundary is after the node, so at-least-once execution is the</span>
+<span class="sd">    contract you get, and idempotency is how you turn it into exactly-once</span>
+<span class="sd">    effects.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">state</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;approved&quot;</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;result&quot;</span><span class="p">:</span> <span class="s2">&quot;declined&quot;</span><span class="p">,</span> <span class="s2">&quot;messages&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">DECLINED</span><span class="p">]}</span>
+    <span class="n">receipt</span> <span class="o">=</span> <span class="k">await</span> <span class="n">payments</span><span class="o">.</span><span class="n">refund</span><span class="p">(</span>
+        <span class="n">amount</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="s2">&quot;refund&quot;</span><span class="p">][</span><span class="s2">&quot;amount_eur&quot;</span><span class="p">],</span>
+        <span class="n">idempotency_key</span><span class="o">=</span><span class="n">_idempotency_key</span><span class="p">(</span><span class="n">state</span><span class="p">),</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;result&quot;</span><span class="p">:</span> <span class="s2">&quot;refunded&quot;</span><span class="p">,</span> <span class="s2">&quot;receipt_id&quot;</span><span class="p">:</span> <span class="n">receipt</span><span class="o">.</span><span class="n">id</span><span class="p">}</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/agent/graph.py</span>
+<span class="kn">from</span> <span class="nn">langgraph.checkpoint.postgres.aio</span> <span class="kn">import</span> <span class="n">AsyncPostgresSaver</span>
+
+<span class="c1"># The checkpointer is durable. An in-memory one is for tests only: it makes every</span>
+<span class="c1"># resume path pass locally and none of them work after a deploy, which is the</span>
+<span class="c1"># worst possible split because the failure appears only in production.</span>
+<span class="n">checkpointer</span> <span class="o">=</span> <span class="n">AsyncPostgresSaver</span><span class="o">.</span><span class="n">from_conn_string</span><span class="p">(</span><span class="n">settings</span><span class="o">.</span><span class="n">checkpoint_dsn</span><span class="p">)</span>
+<span class="n">graph</span> <span class="o">=</span> <span class="n">builder</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">checkpointer</span><span class="o">=</span><span class="n">checkpointer</span><span class="p">)</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/agent/runner.py</span>
+<span class="kn">from</span> <span class="nn">langgraph.types</span> <span class="kn">import</span> <span class="n">Command</span>
+
+<span class="n">CONFIG</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">tid</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;configurable&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;thread_id&quot;</span><span class="p">:</span> <span class="n">tid</span><span class="p">}}</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">start</span><span class="p">(</span><span class="n">thread_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">payload</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">graph</span><span class="o">.</span><span class="n">ainvoke</span><span class="p">(</span><span class="n">payload</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">CONFIG</span><span class="p">(</span><span class="n">thread_id</span><span class="p">))</span>
+    <span class="c1"># A paused run returns with the pause payload rather than a final answer.</span>
+    <span class="c1"># Callers must handle both, so the shape is explicit here rather than being</span>
+    <span class="c1"># discovered by whoever writes the second caller.</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;paused&quot;</span><span class="p">:</span> <span class="s2">&quot;__interrupt__&quot;</span> <span class="ow">in</span> <span class="n">result</span><span class="p">,</span> <span class="s2">&quot;state&quot;</span><span class="p">:</span> <span class="n">result</span><span class="p">}</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">resume</span><span class="p">(</span><span class="n">thread_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">decision</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">actor</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Resume is authenticated and audited here, at the boundary.</span>
+
+<span class="sd">    The graph cannot tell who supplied a decision; it only sees a value. Identity</span>
+<span class="sd">    has to be established before the value is handed over, and recorded next to</span>
+<span class="sd">    it — an approval with no actor is not an approval.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">await</span> <span class="n">audit</span><span class="o">.</span><span class="n">record</span><span class="p">(</span><span class="n">thread_id</span><span class="o">=</span><span class="n">thread_id</span><span class="p">,</span> <span class="n">actor</span><span class="o">=</span><span class="n">actor</span><span class="p">,</span> <span class="n">decision</span><span class="o">=</span><span class="n">decision</span><span class="p">)</span>
+    <span class="k">return</span> <span class="k">await</span> <span class="n">graph</span><span class="o">.</span><span class="n">ainvoke</span><span class="p">(</span>
+        <span class="n">Command</span><span class="p">(</span><span class="n">resume</span><span class="o">=</span><span class="p">{</span><span class="o">**</span><span class="n">decision</span><span class="p">,</span> <span class="s2">&quot;actor&quot;</span><span class="p">:</span> <span class="n">actor</span><span class="p">}),</span> <span class="n">config</span><span class="o">=</span><span class="n">CONFIG</span><span class="p">(</span><span class="n">thread_id</span><span class="p">)</span>
+    <span class="p">)</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># tests/test_resume.py</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">test_the_node_reruns_from_the_top_on_resume</span><span class="p">(</span><span class="n">counter</span><span class="p">):</span>
+    <span class="c1"># The test that documents the semantics. It should surprise a reader once,</span>
+    <span class="c1"># and then never again — which is why it is worth writing even though it</span>
+    <span class="c1"># asserts library behaviour rather than yours.</span>
+    <span class="n">first</span> <span class="o">=</span> <span class="k">await</span> <span class="n">start</span><span class="p">(</span><span class="s2">&quot;t1&quot;</span><span class="p">,</span> <span class="n">PAYLOAD</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">first</span><span class="p">[</span><span class="s2">&quot;paused&quot;</span><span class="p">]</span>
+    <span class="k">assert</span> <span class="n">counter</span><span class="o">.</span><span class="n">prepare_calls</span> <span class="o">==</span> <span class="mi">1</span>
+    <span class="k">await</span> <span class="n">resume</span><span class="p">(</span><span class="s2">&quot;t1&quot;</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;approved&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">},</span> <span class="n">actor</span><span class="o">=</span><span class="s2">&quot;alice&quot;</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">counter</span><span class="o">.</span><span class="n">ask_entries</span> <span class="o">==</span> <span class="mi">2</span>   <span class="c1"># the pausing node ran a second time</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">test_a_second_resume_does_not_act_twice</span><span class="p">(</span><span class="n">payments_spy</span><span class="p">):</span>
+    <span class="k">await</span> <span class="n">start</span><span class="p">(</span><span class="s2">&quot;t2&quot;</span><span class="p">,</span> <span class="n">PAYLOAD</span><span class="p">)</span>
+    <span class="k">await</span> <span class="n">resume</span><span class="p">(</span><span class="s2">&quot;t2&quot;</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;approved&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">},</span> <span class="n">actor</span><span class="o">=</span><span class="s2">&quot;alice&quot;</span><span class="p">)</span>
+    <span class="k">await</span> <span class="n">resume</span><span class="p">(</span><span class="s2">&quot;t2&quot;</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;approved&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">},</span> <span class="n">actor</span><span class="o">=</span><span class="s2">&quot;alice&quot;</span><span class="p">)</span>   <span class="c1"># a double-clicked button</span>
+    <span class="k">assert</span> <span class="n">payments_spy</span><span class="o">.</span><span class="n">calls_with_distinct_keys</span> <span class="o">==</span> <span class="mi">1</span>
+</code></pre></div>
+
+<h2>5. Golden-standard rules</h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Forbidden:</strong> any outbound call, write or side effect before a pause in the same node</td>
+<td>Resuming re-executes the node from its first line, so everything above the pause happens twice.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> more than one pause call in a node</td>
+<td>Resumed values are matched to pause calls by position; two makes the pairing depend on execution order.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> a pause inside a conditional or a loop</td>
+<td>The number of pause calls must be identical on re-execution, or answers land on the wrong questions with no error.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> an in-memory checkpointer outside tests</td>
+<td>Every resume path passes locally and none survives a deploy — the failure appears only in production.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> an irreversible action without an idempotency key derived from the run</td>
+<td>The checkpoint boundary is after the node, so the contract is at-least-once execution.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> resuming without establishing who is resuming</td>
+<td>The graph sees a value, not an actor; an approval with no actor is not an approval.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> a separate approvals table written alongside the pause</td>
+<td>It drifts from real graph state the first time a run dies between the write and the pause. Derive the view from paused threads.</td>
+</tr>
+<tr>
+<td>An action pauses when the agent cannot undo it within the same run</td>
+<td>Reversibility is the criterion. Not importance, not cost.</td>
+</tr>
+<tr>
+<td>Amount-like decisions pause above a configured threshold</td>
+<td>Category-wide approval on a category containing trivial cases is approval nobody reads.</td>
+</tr>
+<tr>
+<td>Repeated identical actions in one run are one approval with the list attached</td>
+<td>It is the most effective defence against reflexive approval.</td>
+</tr>
+<tr>
+<td>The pause payload contains what is needed to decide</td>
+<td>A payload of ids sends the reviewer to another system, and they stop looking.</td>
+</tr>
+<tr>
+<td>A paused thread has a deadline and a default</td>
+<td>A run paused forever is a leaked resource and an unanswered customer; state what happens when nobody answers.</td>
+</tr>
+<tr>
+<td>Checkpoints have a stated retention period and a job that enforces it</td>
+<td>The store grows per node boundary per run; unbounded, it is the first thing to fall over.</td>
+</tr>
+<tr>
+<td>Node names and state fields are treated as a stored interface</td>
+<td>Checkpoints written by the old shape are resumed by the new code after a deploy.</td>
+</tr>
+</tbody>
+</table>
+<h2>6. Data contracts</h2>
+<div class="hl"><pre><span></span><code>thread id       the identity of a run; stable, and the key to everything stored
+pause payload   the question: kind, the facts to decide with, and options
+resume value    the answer: decision, actor, optional note — recorded before use
+checkpoint      full state at a node boundary, keyed by thread id
+</code></pre></div>
+
+<p>Two properties of the resume value are worth stating because they are easy to get
+wrong. It is <strong>untrusted input</strong> — it arrives from an HTTP request like any other
+and needs the same validation, even though it feels internal. And it is <strong>an
+audit record</strong> — decision, actor and time are written before the graph is
+resumed, not after, because writing after means a crash during the resume erases
+the evidence that anyone approved anything.</p>
+<p>The state schema itself is a stored format, versioned by consequence: a
+checkpoint written yesterday is deserialised by today's code. Adding a field with
+a default is safe; renaming or removing one breaks every paused run in the store.
+Treat a field removal as a migration, with a pass over pending threads.</p>
+<h2>7. Build order</h2>
+<ol>
+<li><strong>A durable checkpointer, with a linear graph and no pause at all.</strong> Prove that
+   a run survives a process restart before adding anything that depends on it.</li>
+<li><strong>Retention</strong>, written now, while the store is empty and the job is trivial to
+   verify.</li>
+<li><strong>One pausing node</strong>, containing nothing but the pause call, plus the test that
+   asserts the node re-runs from the top on resume.</li>
+<li><strong>The resume boundary</strong>, with identity established and the audit record written
+   before the graph is resumed.</li>
+<li><strong>The act node with an idempotency key</strong>, and the double-resume test.</li>
+<li><strong>The pending-approvals view</strong>, derived from paused threads rather than stored
+   separately.</li>
+<li><strong>Deadlines and defaults for unanswered pauses</strong>, with a job that applies them.</li>
+<li><strong>Notification</strong>, last, because it is the only part that can be a manual check
+   in the meantime without anything being unsafe.</li>
+</ol>
+<p>Step 1 before step 3 is the sequencing that matters: a pause on a non-durable
+checkpointer looks like it works, and that impression survives until the first
+deploy.</p>
+<h2>8. Blocks to pull in</h2>
+<p>Nothing here is a prerequisite. These are adjacent problems, by name only —
+resolve them separately if they apply.</p>
+<ul>
+<li>LangGraph agent as a state graph — the node, edge and reducer rules a graph rests on</li>
+<li>Human-in-the-loop approval — approval queues, dry runs and reviewer workload at scale</li>
+<li>LLM tool registry and dispatcher — declaring which callables exist and which are irreversible</li>
+<li>Background jobs and workers — running a resumed graph outside a request</li>
+<li>Audit logging — where the record of who approved what is kept</li>
+<li>Notifications — reaching the reviewer</li>
+</ul>
+<h2>9. Metrics</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Runs surviving a deploy mid-flight</td>
+<td>100%, verified by a restart test</td>
+</tr>
+<tr>
+<td>Irreversible actions performed without an idempotency key</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Duplicate external effects from a double resume</td>
+<td>0, covered by a test</td>
+</tr>
+<tr>
+<td>Nodes containing a pause call and any outbound call</td>
+<td>0, checked by grep in CI</td>
+</tr>
+<tr>
+<td>Nodes containing more than one pause call</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Median time a run spends paused</td>
+<td>Tracked; a rising number is reviewer load, not a graph problem</td>
+</tr>
+<tr>
+<td>Approvals answered within the deadline</td>
+<td>&gt; 95%</td>
+</tr>
+<tr>
+<td>Approval rate</td>
+<td>&lt; 98% — a rate at or near 100% means the pause is not being read</td>
+</tr>
+<tr>
+<td>Checkpoint store growth per week</td>
+<td>Bounded by the retention job, and graphed</td>
+</tr>
+<tr>
+<td>Resumes with no recorded actor</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<h2>10. Failure modes</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A side effect happens twice around an approval</td>
+<td>Something with an effect runs before the pause in the same node</td>
+<td>Move it after the pause, or into an earlier node</td>
+</tr>
+<tr>
+<td>An answer is applied to the wrong question</td>
+<td>Two pause calls in a node, or one inside a conditional or loop</td>
+<td>One pause per node, at a fixed position; split into two nodes</td>
+</tr>
+<tr>
+<td>Resuming raises that no checkpoint exists</td>
+<td>No thread id on the original run, or a different one on resume</td>
+<td>The thread id is the identity; pass the same one</td>
+</tr>
+<tr>
+<td>Everything resumes locally and nothing resumes in production</td>
+<td>An in-memory checkpointer</td>
+<td>Durable store everywhere but tests</td>
+</tr>
+<tr>
+<td>A crash after an external call causes it to repeat on retry</td>
+<td>The checkpoint boundary is after the node; execution is at-least-once</td>
+<td>Idempotency key derived from the run and the action</td>
+</tr>
+<tr>
+<td>A double-clicked approve button acts twice</td>
+<td>Resume is not guarded</td>
+<td>Same idempotency key; make a second resume a no-op</td>
+</tr>
+<tr>
+<td>Paused runs accumulate and nothing chases them</td>
+<td>No deadline and no default</td>
+<td>A job that applies the stated default and records that it did</td>
+</tr>
+<tr>
+<td>The database fills with checkpoints</td>
+<td>No retention policy</td>
+<td>State one and enforce it with a job</td>
+</tr>
+<tr>
+<td>Paused runs break after a deploy</td>
+<td>A state field was renamed or removed, or node names changed</td>
+<td>Treat the state schema as a stored format; add with defaults, migrate on removal</td>
+</tr>
+<tr>
+<td>Approvals are always granted, instantly</td>
+<td>Too many pauses, or payloads too thin to read</td>
+<td>Apply the reversibility test; batch repeats; put the facts in the payload</td>
+</tr>
+<tr>
+<td>Nobody can say who approved something</td>
+<td>The actor came from the graph rather than from authentication at the boundary</td>
+<td>Establish identity outside the graph and record it before resuming</td>
+</tr>
+<tr>
+<td>The pending list disagrees with what is actually paused</td>
+<td>An approvals table written next to the pause</td>
+<td>Derive the list from paused threads</td>
+</tr>
+</tbody>
+</table>
+<h2>11. Definition of done</h2>
+<ul>
+<li class="task">A durable checkpointer is configured everywhere except tests, verified by reading the configuration for each environment</li>
+<li class="task">A run started before a process restart completes after it, covered by a test that actually restarts the process</li>
+<li class="task">No node contains both a pause call and an outbound call, checked by grep in CI</li>
+<li class="task">No node contains more than one pause call, and no pause appears inside a conditional or a loop, checked by grep in CI</li>
+<li class="task">A test asserts that the pausing node re-executes from its first line on resume</li>
+<li class="task">Every irreversible action uses an idempotency key derived from the thread id and the action, verified by reading each call site</li>
+<li class="task">Resuming twice with the same decision produces one external effect, covered by a test</li>
+<li class="task">The resume boundary authenticates the actor and writes the audit record before resuming the graph</li>
+<li class="task">The resume value is validated as untrusted input, covered by a test with a malformed decision</li>
+<li class="task">The list of pausing actions is written down, and every entry passes the "cannot be undone within the run" test</li>
+<li class="task">Repeated identical actions in one run raise one approval carrying the full list, covered by a test</li>
+<li class="task">Every pause payload contains the facts needed to decide, verified by reviewing each payload against what a reviewer would otherwise have to look up</li>
+<li class="task">Paused runs have a deadline and a stated default, applied by a job and recorded when applied</li>
+<li class="task">Checkpoint retention is stated and enforced by a job, verified by running it against seeded old rows</li>
+<li class="task">The pending-approvals view is derived from paused threads, not from a separate table</li>
+</ul>
+  </article>
+
+  <aside class="tailpiece">
+    <h2>Use this blueprint</h2>
+    <p>
+      Copy the file into your project and point your agent at it. It works with Claude Code,
+      Cursor, Copilot, ChatGPT and anything else that reads a file — there is nothing to install.
+    </p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/langgraph-checkpoints-hitl" target="_blank" rel="noopener">Open on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Browse all blueprints</a>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p><a href="/">Awesome Blueprints</a> — same request, same architecture, every time.</p>
+    <p class="dim">MIT · awesomeblueprints.com</p>
+  </div>
+</footer>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'neutral' });
+</script>
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const now = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', now);
+    try { localStorage.setItem('ab-theme', now); } catch (e) {}
+    location.reload();   // the diagram is themed at render time
+  });
+</script>
+
+</body>
+</html>

@@ -1,0 +1,585 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>FastAPI Routers and API Versioning — Blueprint for AI Coding Agents | Awesome Blueprints</title>
+<meta name="description" content="FastAPI routers and API versioning: splitting a large main.py into modules, dependency wiring and versioned routes clients can migrate off." />
+<link rel="canonical" href="https://awesomeblueprints.com/blueprints/fastapi-routing/" />
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="Awesome Blueprints" />
+<meta property="og:url" content="https://awesomeblueprints.com/blueprints/fastapi-routing/" />
+<meta property="og:title" content="FastAPI Routers and API Versioning — Architecture Blueprint" />
+<meta property="og:description" content="FastAPI routers and API versioning: splitting a large main.py into modules, dependency wiring and versioned routes clients can migrate off." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="FastAPI Routers and API Versioning — Architecture Blueprint" />
+<meta name="twitter:description" content="FastAPI routers and API versioning: splitting a large main.py into modules, dependency wiring and versioned routes clients can migrate off." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/page.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "FastAPI Routers and API Versioning", "description": "FastAPI routers and API versioning: splitting a large main.py into modules, dependency wiring and versioned routes clients can migrate off.", "url": "https://awesomeblueprints.com/blueprints/fastapi-routing/", "dateModified": "2026-08-19", "keywords": "FastAPI, API, Python", "isAccessibleForFree": true, "license": "https://opensource.org/licenses/MIT", "publisher": {"@type": "Organization", "name": "Awesome Blueprints", "url": "https://awesomeblueprints.com"}}</script>
+<script>
+  (function () {
+    var t;
+    try { t = localStorage.getItem('ab-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">Awesome Blueprints</a>
+    <div class="nav-right">
+      <a class="nav-link" href="/#blueprints">Catalogue</a>
+      <a class="nav-link" href="/#faq">FAQ</a>
+      <a class="nav-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/fastapi-routing" target="_blank" rel="noopener">GitHub ↗</a>
+      <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Switch theme">◑</button>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/">Home</a> <span>/</span> <a href="/#blueprints">Blueprints</a> <span>/</span>
+    <span>FastAPI Routers and API Versioning</span>
+  </nav>
+
+  <header class="page-head">
+    <p class="eyebrow">fastapi-routing</p>
+    <h1>FastAPI Routers and API Versioning</h1>
+    <p class="lede">FastAPI routers and API versioning: splitting a large main.py into modules, dependency wiring and versioned routes clients can migrate off.</p>
+    <div class="facts"><span>low</span><span>1–2 days</span><span>Verified 2026-08-19</span></div>
+    <div class="tags"><span class="tag">FastAPI</span><span class="tag">API</span><span class="tag">Python</span></div>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/fastapi-routing" target="_blank" rel="noopener">Read it on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Back to the catalogue</a>
+    </div>
+  </header>
+
+  <article class="doc">
+<blockquote>
+<p>Endpoints split across routers that each own one resource, mounted under a
+version prefix at one place in the application — so a breaking change ships as
+a new mount rather than as a change every client has to absorb at once.</p>
+</blockquote>
+<p><strong>Complexity:</strong> low · <strong>Typical build:</strong> 1–2 days · <strong>Verified:</strong> 2026-08-19 (re-check after ~90 days)</p>
+<p><strong>Examples in:</strong> Python, with FastAPI. The architecture is language-agnostic: sections 5, 10 and 11 hold wherever you build this. Section 4 is illustrative — if your project is in another language, your agent translates the idioms rather than importing them, and nothing is lost. The equivalents are <code>express.Router()</code> and Nest modules in TypeScript, <code>Blueprint</code> in Flask, <code>scope</code>/<code>pipeline</code> in Phoenix, and <code>chi.Mount</code> in Go.</p>
+<p><strong>Use when:</strong> endpoints are accumulating in one file, or a change to a response shape would break clients you cannot upgrade, or two routes have quietly claimed overlapping paths. Works on an empty application and on one with 800 lines in <code>main.py</code> — in the second case the job is to move existing endpoints into modules without changing what any of them does.</p>
+<p><strong>Not for:</strong> a service with a handful of endpoints and one consumer you deploy alongside it. Versioning has a real cost — two code paths, two test suites, a deprecation calendar — and paying it before anyone depends on the old shape buys nothing. Split the file when it hurts; add versions when a client you do not control exists.</p>
+<hr />
+<h2>⚙️ INSTRUCTIONS FOR THE AI — READ BEFORE WRITING ANY CODE</h2>
+<p><strong>Do not start coding.</strong></p>
+<p><strong>Step 1 — Refresh.</strong> Verify the installed FastAPI and Starlette versions. Confirm
+that <code>APIRouter</code> still takes <code>prefix</code>, <code>tags</code>, <code>dependencies</code> and <code>responses</code>;
+that <code>include_router</code> accepts the same; that <code>generate_unique_id_function</code> still
+exists on the application constructor; and that <code>lifespan</code> is the current startup
+mechanism rather than <code>on_event</code>, which has been deprecated. Check whether the
+reported bug producing duplicate <code>operationId</code> values for a route declaring
+several HTTP methods is fixed in your version — §5 forbids that declaration style
+because of it. Report what you verified and what turned out wrong.</p>
+<p><strong>Step 2 — Read the project, then audit what already exists.</strong> Produce the route
+table before proposing anything: every path, method, handler function and source
+file. From it, identify routes whose paths can shadow each other — a literal
+segment and a path parameter at the same position — and note the declaration
+order, because that is what decides which one answers. Find where the app is
+constructed, whether a reverse proxy or <code>root_path</code> is involved, whether any
+router-level dependency exists today, and how errors are currently handled. Then
+audit §11 item by item, each marked <em>already true</em>, <em>partly true</em> or <em>absent</em>,
+with the file that decides it, reported before anything is proposed.</p>
+<p>Assume the project is right until it demonstrably is not; code satisfying an item
+stays even where its shape differs from §4; replacing something that works needs a
+one-line reason; never delete a working path to make room for the blueprint's
+version. The same holds for language — §4 is illustrative, its idioms get
+translated into the project's language, and §11 is what has to become true rather
+than the syntax.</p>
+<p><strong>On an existing application this is a move, not a rewrite.</strong> Handler bodies are
+relocated unchanged. If a handler needs editing to fit a router, that is a
+separate change with its own reason, proposed separately. The test that the move
+worked is that the route table before and after are identical.</p>
+<p><strong>Step 3 — Write a plan for the gap only, and get it approved</strong>, including a
+<code>## Proposed stack</code> section and, on an existing app, the before-and-after route
+table. Do not ask open framework questions — propose, and ask for confirmation
+once. Say what you are adding, what you are leaving alone, and what you propose to
+change, and touch nothing else.</p>
+<p><strong>Step 4 — Build in the order in §7.</strong> <strong>Step 5 — §11 is the definition of done.</strong></p>
+<hr />
+<h2>1. Why every endpoint in one file stops working</h2>
+<p>The obvious version is decorators on <code>app</code> in <code>main.py</code>. It is the right answer
+for the first twenty endpoints and then fails in four ways at once.</p>
+<table>
+<thead>
+<tr>
+<th>Everything on <code>app</code> in one file</th>
+<th>Routers mounted under a version</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Two routes claim overlapping paths and the file order silently decides which answers</td>
+<td>Each resource owns its paths in one module, where a collision is visible</td>
+</tr>
+<tr>
+<td>A breaking change to a response reaches every client on deploy</td>
+<td>The old shape keeps serving under its prefix while clients migrate</td>
+</tr>
+<tr>
+<td>Authentication is repeated per endpoint, and the one that was missed looks exactly like the ones that were not</td>
+<td>One dependency on the router covers every route in it, including ones added later</td>
+</tr>
+<tr>
+<td>Merges conflict in one file that every feature touches</td>
+<td>Conflicts are confined to the resource that changed</td>
+</tr>
+</tbody>
+</table>
+<p>The third row is where the real incidents come from. A missing <code>Depends</code> on one
+endpoint out of sixty is invisible in review — it is an absence, and absences do
+not appear in a diff you are scanning for what changed. Moving the requirement to
+the router turns it into something a route cannot opt out of by accident.</p>
+<p><strong>The version prefix belongs at the mount, not in the handler.</strong> A handler that
+knows whether it is v1 or v2 will grow a branch on that, and the two versions
+become one function with a conditional — which is the thing versioning exists to
+avoid. Handlers stay ignorant; the router they live in decides.</p>
+<h2>2. Architecture</h2>
+<pre class="mermaid">%% GENERATED - do not edit by hand.
+%% Edit the source header in architecture.mmd, then rebuild.
+%% Routers mounted under a version prefix
+
+flowchart TB
+    subgraph v1[&quot;Mounted at /api/v1&quot;]
+        direction TB
+        ordersone[&quot;Orders router&quot;]
+        productsone[&quot;Products router&quot;]
+    end
+    subgraph v2[&quot;Mounted at /api/v2&quot;]
+        direction TB
+        orderstwo[&quot;Orders router, new response shape&quot;]
+    end
+    subgraph module[&quot;Inside one resource module&quot;]
+        direction TB
+        operations[&quot;Path operations&quot;]
+        service[&quot;Service layer&quot;]
+    end
+
+    client([&quot;API client&quot;])
+    proxy{{&quot;Reverse proxy, terminates TLS&quot;}}
+    app[&quot;Application instance&quot;]
+    guards[&quot;Router level dependencies&quot;]
+    errors[&quot;Exception handlers&quot;]
+    schema[&quot;OpenAPI schema and operation ids&quot;]
+
+    client --&gt;|&quot;https&quot;| proxy
+    proxy --&gt;|&quot;forwarded scheme and root path&quot;| app
+    app ---|&quot;include with prefix and tags&quot;| ordersone
+    app ---|&quot;include with prefix and tags&quot;| productsone
+    app ---|&quot;include with prefix and tags&quot;| orderstwo
+    app --- errors
+    app --- schema
+    ordersone --- guards
+    productsone --- guards
+    orderstwo --- guards
+    guards --&gt;|&quot;run before every operation in the router&quot;| operations
+    operations --&gt;|&quot;version free&quot;| service
+    operations -.-&gt;|&quot;raised&quot;| errors
+
+    classDef service fill:#eff6ff,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b;
+    classDef datastore fill:#e9faf3,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b;
+    classDef external fill:#fff4ed,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b;
+    classDef actor fill:#f0eefc,stroke:#4a3aa7,stroke-width:1.5px,color:#0b0b0b;
+    class app,guards,errors,schema,ordersone,productsone,orderstwo,operations,service service;
+    class proxy external;
+    class client actor;</pre>
+<p>The rule the diagram encodes: <strong>the service layer has no arrow from a version.</strong>
+Both <code>ordersone</code> and <code>orderstwo</code> reach the same service, and the difference
+between them lives entirely in their schemas. A version that reaches into business
+logic is a fork, and forks get maintained twice and diverge.</p>
+<h2>3. Project structure</h2>
+<div class="hl"><pre><span></span><code>app/
+├── main.py                 builds the app, mounts routers, registers handlers — nothing else
+├── api/
+│   ├── v1/
+│   │   ├── __init__.py     assembles the v1 router from the resource routers
+│   │   ├── orders.py
+│   │   └── products.py
+│   └── v2/
+│       ├── __init__.py
+│       └── orders.py       only what changed; v2 re-exports the rest from v1
+├── deps.py                 shared dependencies
+└── errors.py               exception handlers
+</code></pre></div>
+
+<p><strong>One rule: <code>main.py</code> contains no path operation.</strong> It builds the application,
+includes routers and registers handlers. The moment one endpoint is declared there
+"just for now", <code>main.py</code> becomes a module with behaviour, it starts importing
+from everywhere, and it is the file every branch touches.</p>
+<p><strong>A real disagreement, worth deciding rather than inheriting.</strong> FastAPI's own
+documentation lays projects out by layer — a <code>routers/</code> directory, a <code>models/</code>
+directory. A widely-read set of production conventions argues the opposite from
+experience: that layer-first stopped scaling on a monolith with many domains, and
+that each domain should hold its own router, schemas, models and service. Both
+work. Layer-first is easier to navigate under about ten resources; domain-first
+wins when resources outnumber the people working on them, because it confines a
+change to one directory. The layout above is layer-first at the top and
+domain-first inside a version, which is the common middle. Choose deliberately and
+write down which you chose — the expensive outcome is half of each.</p>
+<h2>4. Reference implementation</h2>
+<div class="hl"><pre><span></span><code><span class="c1"># app/api/v1/orders.py</span>
+<span class="kn">from</span> <span class="nn">fastapi</span> <span class="kn">import</span> <span class="n">APIRouter</span><span class="p">,</span> <span class="n">Depends</span><span class="p">,</span> <span class="n">HTTPException</span><span class="p">,</span> <span class="n">status</span>
+<span class="kn">from</span> <span class="nn">app.deps</span> <span class="kn">import</span> <span class="n">require_authenticated_user</span>
+<span class="kn">from</span> <span class="nn">app.schemas.order</span> <span class="kn">import</span> <span class="n">OrderCreate</span><span class="p">,</span> <span class="n">OrderRead</span>
+
+<span class="n">router</span> <span class="o">=</span> <span class="n">APIRouter</span><span class="p">(</span>
+    <span class="n">prefix</span><span class="o">=</span><span class="s2">&quot;/orders&quot;</span><span class="p">,</span>                                  <span class="c1"># never a trailing slash</span>
+    <span class="n">tags</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;orders&quot;</span><span class="p">],</span>                                   <span class="c1"># required: operation ids are built from it</span>
+    <span class="n">dependencies</span><span class="o">=</span><span class="p">[</span><span class="n">Depends</span><span class="p">(</span><span class="n">require_authenticated_user</span><span class="p">)],</span> <span class="c1"># applies to every route below, including</span>
+                                                        <span class="c1"># ones added next year by someone who</span>
+                                                        <span class="c1"># never read this file</span>
+    <span class="n">responses</span><span class="o">=</span><span class="p">{</span><span class="mi">404</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Order not found&quot;</span><span class="p">}},</span>
+<span class="p">)</span>
+
+
+<span class="c1"># Literal segments before parameterised ones. Routing is first match wins, so with</span>
+<span class="c1"># the reverse order &quot;/orders/search&quot; is matched by &quot;/orders/{order_id}&quot; and arrives</span>
+<span class="c1"># as order_id=&quot;search&quot; — a 422, or worse a lookup, never a search.</span>
+<span class="nd">@router</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;/search&quot;</span><span class="p">,</span> <span class="n">response_model</span><span class="o">=</span><span class="nb">list</span><span class="p">[</span><span class="n">OrderRead</span><span class="p">])</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">search_orders</span><span class="p">(</span><span class="n">q</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">OrderRead</span><span class="p">]:</span> <span class="o">...</span>
+
+
+<span class="nd">@router</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;/</span><span class="si">{order_id}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">response_model</span><span class="o">=</span><span class="n">OrderRead</span><span class="p">)</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">get_order</span><span class="p">(</span><span class="n">order_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OrderRead</span><span class="p">:</span> <span class="o">...</span>
+
+
+<span class="c1"># One decorator per method. Declaring methods=[&quot;POST&quot;, &quot;PUT&quot;] on a single route</span>
+<span class="c1"># generates duplicate operation ids and silently breaks client generation.</span>
+<span class="nd">@router</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">response_model</span><span class="o">=</span><span class="n">OrderRead</span><span class="p">,</span> <span class="n">status_code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_201_CREATED</span><span class="p">)</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">create_order</span><span class="p">(</span><span class="n">payload</span><span class="p">:</span> <span class="n">OrderCreate</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OrderRead</span><span class="p">:</span> <span class="o">...</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/api/v1/__init__.py</span>
+<span class="kn">from</span> <span class="nn">fastapi</span> <span class="kn">import</span> <span class="n">APIRouter</span>
+<span class="kn">from</span> <span class="nn">app.api.v1</span> <span class="kn">import</span> <span class="n">orders</span><span class="p">,</span> <span class="n">products</span>
+
+<span class="n">router</span> <span class="o">=</span> <span class="n">APIRouter</span><span class="p">()</span>
+<span class="n">router</span><span class="o">.</span><span class="n">include_router</span><span class="p">(</span><span class="n">orders</span><span class="o">.</span><span class="n">router</span><span class="p">)</span>
+<span class="n">router</span><span class="o">.</span><span class="n">include_router</span><span class="p">(</span><span class="n">products</span><span class="o">.</span><span class="n">router</span><span class="p">)</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/api/v2/__init__.py</span>
+<span class="kn">from</span> <span class="nn">fastapi</span> <span class="kn">import</span> <span class="n">APIRouter</span>
+<span class="kn">from</span> <span class="nn">app.api.v1</span> <span class="kn">import</span> <span class="n">products</span>          <span class="c1"># unchanged in v2 — mounted, not copied</span>
+<span class="kn">from</span> <span class="nn">app.api.v2</span> <span class="kn">import</span> <span class="n">orders</span>
+
+<span class="n">router</span> <span class="o">=</span> <span class="n">APIRouter</span><span class="p">()</span>
+<span class="n">router</span><span class="o">.</span><span class="n">include_router</span><span class="p">(</span><span class="n">orders</span><span class="o">.</span><span class="n">router</span><span class="p">)</span>
+<span class="n">router</span><span class="o">.</span><span class="n">include_router</span><span class="p">(</span><span class="n">products</span><span class="o">.</span><span class="n">router</span><span class="p">)</span>   <span class="c1"># the same router object, a second mount</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/main.py</span>
+<span class="kn">from</span> <span class="nn">contextlib</span> <span class="kn">import</span> <span class="n">asynccontextmanager</span>
+<span class="kn">from</span> <span class="nn">fastapi</span> <span class="kn">import</span> <span class="n">FastAPI</span>
+<span class="kn">from</span> <span class="nn">fastapi.routing</span> <span class="kn">import</span> <span class="n">APIRoute</span>
+<span class="kn">from</span> <span class="nn">app.api</span> <span class="kn">import</span> <span class="n">v1</span><span class="p">,</span> <span class="n">v2</span>
+<span class="kn">from</span> <span class="nn">app.errors</span> <span class="kn">import</span> <span class="n">register_handlers</span>
+
+
+<span class="k">def</span> <span class="nf">unique_id</span><span class="p">(</span><span class="n">route</span><span class="p">:</span> <span class="n">APIRoute</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="c1"># Default ids concatenate function name, path and method, producing client methods</span>
+    <span class="c1"># like createOrderApiV1OrdersPost. This yields orders-create_order, which survives</span>
+    <span class="c1"># a path change — so a generated SDK does not rename half its methods when a</span>
+    <span class="c1"># prefix moves.</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">route</span><span class="o">.</span><span class="n">tags</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">route</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span>
+
+
+<span class="nd">@asynccontextmanager</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">lifespan</span><span class="p">(</span><span class="n">app</span><span class="p">:</span> <span class="n">FastAPI</span><span class="p">):</span>
+    <span class="k">yield</span>
+
+
+<span class="n">app</span> <span class="o">=</span> <span class="n">FastAPI</span><span class="p">(</span>
+    <span class="n">lifespan</span><span class="o">=</span><span class="n">lifespan</span><span class="p">,</span>
+    <span class="n">generate_unique_id_function</span><span class="o">=</span><span class="n">unique_id</span><span class="p">,</span>
+    <span class="c1"># Off deliberately. The default 307 to the slashed variant is rewritten to http</span>
+    <span class="c1"># by a TLS-terminating proxy, so the client follows a redirect out of https.</span>
+    <span class="c1"># An exact-path 404 is a better failure than a silent downgrade.</span>
+    <span class="n">redirect_slashes</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="c1"># Only when the app is mounted under a sub-path by the proxy. Wrong here and</span>
+    <span class="c1"># every generated URL and doc link is wrong; verify against the proxy config.</span>
+    <span class="n">root_path</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">app</span><span class="o">.</span><span class="n">include_router</span><span class="p">(</span><span class="n">v1</span><span class="o">.</span><span class="n">router</span><span class="p">,</span> <span class="n">prefix</span><span class="o">=</span><span class="s2">&quot;/api/v1&quot;</span><span class="p">)</span>
+<span class="n">app</span><span class="o">.</span><span class="n">include_router</span><span class="p">(</span><span class="n">v2</span><span class="o">.</span><span class="n">router</span><span class="p">,</span> <span class="n">prefix</span><span class="o">=</span><span class="s2">&quot;/api/v2&quot;</span><span class="p">)</span>
+<span class="n">register_handlers</span><span class="p">(</span><span class="n">app</span><span class="p">)</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># tests/test_routes.py</span>
+<span class="k">def</span> <span class="nf">test_no_shadowed_routes</span><span class="p">():</span>
+    <span class="c1"># A literal segment declared after a path parameter at the same position is</span>
+    <span class="c1"># unreachable. Nothing warns; the route simply never runs. This is the check</span>
+    <span class="c1"># that would have caught it before the deploy.</span>
+    <span class="n">seen</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">route</span> <span class="ow">in</span> <span class="n">app</span><span class="o">.</span><span class="n">routes</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">method</span> <span class="ow">in</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">route</span><span class="p">,</span> <span class="s2">&quot;methods&quot;</span><span class="p">,</span> <span class="p">()):</span>
+            <span class="n">parts</span> <span class="o">=</span> <span class="n">route</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">strip</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">part</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">parts</span><span class="p">):</span>
+                <span class="n">key</span> <span class="o">=</span> <span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">method</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="s1">&#39;/&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">parts</span><span class="p">[:</span><span class="n">i</span><span class="p">])</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">i</span><span class="p">)</span>
+                <span class="n">seen</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="p">[])</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">part</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">parts</span> <span class="ow">in</span> <span class="n">seen</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="n">params</span> <span class="o">=</span> <span class="p">[</span><span class="n">p</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">parts</span> <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;{&quot;</span><span class="p">)]</span>
+        <span class="n">literals</span> <span class="o">=</span> <span class="p">[</span><span class="n">p</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">parts</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">p</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;{&quot;</span><span class="p">)]</span>
+        <span class="k">if</span> <span class="n">params</span> <span class="ow">and</span> <span class="n">literals</span><span class="p">:</span>
+            <span class="k">assert</span> <span class="n">parts</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">literals</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="o">&lt;</span> <span class="n">parts</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">params</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;literal segment declared after a path parameter at </span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</code></pre></div>
+
+<h2>5. Golden-standard rules</h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Forbidden:</strong> a path operation declared in <code>main.py</code></td>
+<td>It is how <code>main.py</code> becomes the file every branch edits and every module imports. There is never a good "just this one".</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> a router prefix ending in <code>/</code></td>
+<td>FastAPI rejects it, and the reason is that the joined path would carry a double slash that some proxies normalise and some do not.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> one route declaring several HTTP methods</td>
+<td>It generates duplicate operation ids, which breaks client generation without an error. One decorator per method.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> a handler that branches on its API version</td>
+<td>That is one function serving two contracts, and it is exactly what versioning exists to prevent. Give v2 its own handler or its own schema; share the service.</td>
+</tr>
+<tr>
+<td>Literal path segments are declared before parameterised ones</td>
+<td>First match wins. <code>/{id}</code> declared first swallows <code>/search</code>, and nothing warns — the route is simply never reached.</td>
+</tr>
+<tr>
+<td>Authentication is a router dependency, not a per-route one</td>
+<td>A route added later inherits it. A per-route requirement is one an author has to remember, and the one they forget looks identical to the ones they did not.</td>
+</tr>
+<tr>
+<td>Every router carries a tag</td>
+<td>Operation ids are derived from it, documentation groups by it, and a tagless route breaks the id function on the day it is added.</td>
+</tr>
+<tr>
+<td>Version lives in the mount prefix, nowhere else</td>
+<td>A version string inside a handler, a schema or a service is a second place to update and the one that will be missed.</td>
+</tr>
+<tr>
+<td>A version that did not change is mounted, not copied</td>
+<td>The same router object under two prefixes. A copied file drifts, and the drift is silent because both still pass their tests.</td>
+</tr>
+<tr>
+<td>Slash redirects are disabled behind a proxy</td>
+<td>The 307 loses <code>https</code> when a TLS-terminating proxy is in front. A clean 404 on the wrong path beats a redirect that downgrades the scheme.</td>
+</tr>
+<tr>
+<td>Exception handlers are registered once, on the app</td>
+<td>Per-router error handling produces responses that differ by resource, and clients then need a branch per endpoint.</td>
+</tr>
+<tr>
+<td>A deprecated version has a removal date written down before it is deprecated</td>
+<td>"Deprecated" with no date is permanent, and the second version becomes maintenance you never escape.</td>
+</tr>
+</tbody>
+</table>
+<h2>6. Data contracts</h2>
+<p>The contract this blueprint defines is not a body shape — it is the route table.</p>
+<div class="hl"><pre><span></span><code>METHOD  PATH                        OPERATION ID          TAG       AUTH
+GET     /api/v1/orders/search       orders-search_orders  orders    required
+GET     /api/v1/orders/{order_id}   orders-get_order      orders    required
+POST    /api/v1/orders              orders-create_order   orders    required
+GET     /api/v2/orders/{order_id}   orders-get_order_v2   orders    required
+</code></pre></div>
+
+<p>Generate it from the running application rather than maintaining it by hand, and
+commit it. A diff of that file is the only review artefact that makes an
+accidentally shadowed route, a missing authentication requirement or a changed
+operation id visible as a change rather than as an absence.</p>
+<h2>7. Build order</h2>
+<ol>
+<li><strong>Produce the route table from the current application and commit it.</strong> On an
+   empty project this is empty and takes a minute. On an existing one it is the
+   baseline that proves the refactor changed nothing.</li>
+<li><strong>Move one resource into its own router</strong>, mounted at the same paths it had
+   before. Regenerate the table and confirm it is byte-identical.</li>
+<li><strong>Move the rest</strong>, one resource per commit, checking the table each time.</li>
+<li><strong>Add the router-level authentication dependency</strong> and remove the per-route
+   duplicates. Confirm the table's auth column, and confirm an unauthenticated
+   request to each route is rejected.</li>
+<li><strong>Introduce the version prefix</strong> — mount the existing routers at <code>/api/v1</code>.
+   Keep the old unversioned paths mounted alongside if clients exist, with a
+   removal date recorded.</li>
+<li><strong>Add the shadowing test and the operation id function.</strong></li>
+<li><strong>Only when a breaking change is actually needed:</strong> create <code>v2</code> with the one
+   changed resource, mounting the unchanged routers.</li>
+</ol>
+<p>Step 1 before step 2 because the risk in this work is not writing a bad router, it
+is silently losing a route during the move. The table is what makes that
+impossible rather than unlikely.</p>
+<h2>8. Blocks to pull in</h2>
+<p>Nothing here is a prerequisite. These are adjacent problems, by name only —
+resolve them separately if they apply.</p>
+<ul>
+<li>Pydantic request and response schemas — what the routes in each version actually exchange</li>
+<li>Error envelope — the one response shape the handlers registered here produce</li>
+<li>JWT authentication — what the router-level dependency verifies</li>
+<li>Typed config and settings — where the version prefix and root path come from</li>
+<li>GitHub Actions CI — where the committed route table gets checked</li>
+</ul>
+<h2>9. Metrics</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Path operations declared in <code>main.py</code></td>
+<td>0</td>
+</tr>
+<tr>
+<td>Routes unreachable because an earlier route shadows them</td>
+<td>0, asserted by a test</td>
+</tr>
+<tr>
+<td>Routes without a tag</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Duplicate operation ids in the generated schema</td>
+<td>0, asserted by a test</td>
+</tr>
+<tr>
+<td>Routes reachable without the router's authentication dependency</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Deprecated versions with no recorded removal date</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<h2>10. Failure modes</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/orders/search</code> returns 422 complaining that <code>search</code> is not a valid integer</td>
+<td><code>/orders/{order_id}</code> is declared before it; first match wins and the literal never gets a chance</td>
+<td>Declare literal segments first, and add the shadowing test</td>
+</tr>
+<tr>
+<td>One endpoint out of sixty is reachable without a token, and nobody can say when that started</td>
+<td>Authentication is a per-route dependency and this route was added without it</td>
+<td>Move the dependency to the router; a new route then cannot opt out by omission</td>
+</tr>
+<tr>
+<td>A client following a redirect ends up on <code>http</code> and the request is rejected or intercepted</td>
+<td>The trailing-slash 307 is generated without the forwarded scheme, so it downgrades behind a TLS-terminating proxy</td>
+<td><code>redirect_slashes=False</code>, and configure the proxy to forward the scheme</td>
+</tr>
+<tr>
+<td>Generated client methods are named <code>createOrderApiV1OrdersPost</code>, and renaming a prefix renames half the SDK</td>
+<td>Default operation ids concatenate function name, path and method</td>
+<td>Set <code>generate_unique_id_function</code> to build from tag and function name</td>
+</tr>
+<tr>
+<td>Client generation fails or produces one method for two operations</td>
+<td>A single route declares multiple methods, producing duplicate operation ids</td>
+<td>One decorator per method</td>
+</tr>
+<tr>
+<td>Documentation links and generated URLs are all missing a path segment</td>
+<td>The app is mounted under a sub-path by the proxy and <code>root_path</code> was not set to match</td>
+<td>Set <code>root_path</code> to the mount point; verify against the proxy config, not by guessing</td>
+</tr>
+<tr>
+<td>v2 fixes a bug and v1 does not, though the code looks the same</td>
+<td>The unchanged router was copied into v2 rather than mounted, and the copies drifted</td>
+<td>Mount the same router object under both prefixes</td>
+</tr>
+<tr>
+<td>A route in v1 behaves differently from v2 in a way no schema explains</td>
+<td>A handler or a service branches on the version</td>
+<td>Remove the branch; the difference belongs in the schema or in a separate handler</td>
+</tr>
+<tr>
+<td>Every feature branch conflicts in the same file</td>
+<td>Path operations still live in <code>main.py</code> or in one shared router module</td>
+<td>Finish the split; the conflict rate is the symptom the structure exists to fix</td>
+</tr>
+</tbody>
+</table>
+<h2>11. Definition of done</h2>
+<ul>
+<li class="task"><code>main.py</code> declares no path operation; a test asserts every route's handler is defined outside it</li>
+<li class="task">A committed route table lists every path, method, operation id, tag and whether authentication is required, and it is regenerated and diffed in CI</li>
+<li class="task">A test fails if any route is unreachable because a path parameter at the same position is declared before a literal segment</li>
+<li class="task">Every route carries at least one tag, asserted by a test</li>
+<li class="task">Operation ids are unique across the whole application, asserted against the generated schema</li>
+<li class="task">Authentication is declared once per router, and a test issues an unauthenticated request to every route in a protected router and expects rejection on each</li>
+<li class="task">Every route is reachable under its version prefix, and a request to a path without the prefix returns 404 rather than being served</li>
+<li class="task">A router shared between two versions is the same object, verified by identity rather than by reading</li>
+<li class="task">No handler, schema or service function contains a version string or a branch on version</li>
+<li class="task">Slash-redirect behaviour is set explicitly rather than left at the default, with a comment naming the proxy setup it assumes</li>
+<li class="task">Each deprecated version has a removal date recorded outside the code, and a test or CI check fails once that date has passed</li>
+</ul>
+  </article>
+
+  <aside class="tailpiece">
+    <h2>Use this blueprint</h2>
+    <p>
+      Copy the file into your project and point your agent at it. It works with Claude Code,
+      Cursor, Copilot, ChatGPT and anything else that reads a file — there is nothing to install.
+    </p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/fastapi-routing" target="_blank" rel="noopener">Open on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Browse all blueprints</a>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p><a href="/">Awesome Blueprints</a> — same request, same architecture, every time.</p>
+    <p class="dim">MIT · awesomeblueprints.com</p>
+  </div>
+</footer>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'neutral' });
+</script>
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const now = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', now);
+    try { localStorage.setItem('ab-theme', now); } catch (e) {}
+    location.reload();   // the diagram is themed at render time
+  });
+</script>
+
+</body>
+</html>

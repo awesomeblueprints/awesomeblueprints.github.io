@@ -3,19 +3,35 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Architecture Blueprints and skills for AI Coding Agents | Awesome Blueprints</title>
-<meta name="description" content="Free, open-source architecture blueprints and skills for AI coding agents — Claude Code, Cursor, Copilot and the rest. Copy one file and your agent builds the feature the same correct way every time." />
+<title>Build AI Agents, RAG and MCP Servers — Architecture Blueprints for AI Coding Agents</title>
+<meta name="description" content="Free architecture blueprints for building AI agents, RAG pipelines, MCP servers and the backend around them. Drop one file into your project and Claude Code, Cursor or Copilot builds it correctly — with the rules, the build order and a checklist for done." />
 <link rel="canonical" href="https://awesomeblueprints.com/" />
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="Awesome Blueprints" />
 <meta property="og:url" content="https://awesomeblueprints.com/" />
-<meta property="og:title" content="Architecture Blueprints and skills for AI Coding Agents" />
-<meta property="og:description" content="Nine free blueprints and one skill for the things AI coding agents get wrong. Copy one file into your project and the agent builds it the same correct way every time." />
+<meta property="og:title" content="Build AI Agents, RAG and MCP Servers — Architecture Blueprints" />
+<meta property="og:description" content="Free architecture blueprints for AI agents, RAG, MCP servers, streaming, vector search and the backend around them. One file per problem, for Claude Code, Cursor and Copilot." />
 <meta name="twitter:card" content="summary_large_image" />
-<meta name="twitter:title" content="Architecture Blueprints for AI Coding Agents" />
-<meta name="twitter:description" content="Nine free blueprints and one skill for the things AI coding agents get wrong. MIT, any language, no setup." />
+<meta name="twitter:title" content="Build AI Agents, RAG and MCP Servers — Architecture Blueprints" />
+<meta name="twitter:description" content="Architecture blueprints for AI agents, RAG pipelines and MCP servers. MIT, any language, no setup." />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='-16 -30 286 220'%3E%3Crect x='-16' y='-30' width='286' height='220' fill='%23080808'/%3E%3Cg fill='%23f5f5f5' fill-rule='evenodd'%3E%3Cg transform='translate(36 0) skewX(-13)'%3E%3Cpath d='M0 142 L46 18 H74 L120 142 H88 L79 116 H41 L32 142 Z M50 90 H70 L60 56 Z'/%3E%3C/g%3E%3Cpath d='M140 18 h48 c26 0 42 13 42 33 0 12 -6 21 -17 26 12 4 21 14 21 28 0 22 -18 37 -47 37 h-47 Z M172 44 v24 h16 c9 0 15 -5 15 -12 0 -7 -6 -12 -15 -12 Z M172 92 v26 h18 c10 0 16 -5 16 -13 0 -8 -6 -13 -16 -13 Z'/%3E%3C/g%3E%3C/svg%3E">
 <meta name="theme-color" content="#080808" id="theme-color" />
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {"@type":"Question","name":"How do I build an AI agent that doesn't invent its own architecture?","acceptedAnswer":{"@type":"Answer","text":"Give the agent the architecture before it starts. A blueprint is one file stating what to build, in what order, and what it may not do: the components and how they talk, the rules that must not be broken, a build order sequenced by risk, and a checklist where every item is something you can run, query or grep for."}},
+    {"@type":"Question","name":"How do I build an MCP server?","acceptedAnswer":{"@type":"Answer","text":"It depends on who calls it. A server on a developer's own machine runs as a subprocess over stdio with that developer's permissions, with no authorization and no deployment. A server other people point their agents at needs authorization, tenant isolation, rate limits and somewhere to run."}},
+    {"@type":"Question","name":"How do I build a RAG pipeline that works in production?","acceptedAnswer":{"@type":"Answer","text":"Most of it is decided before retrieval runs. Chunk size, overlap and metadata set the ceiling on quality, re-ingestion must update rather than duplicate, and embeddings are close to blind for identifiers and error codes, which hybrid search fixes. Then choose a store: pgvector if the data is already in PostgreSQL, Qdrant if filtering dominates, ChromaDB for prototypes."}},
+    {"@type":"Question","name":"Will an agent overwrite the code I already have?","acceptedAnswer":{"@type":"Answer","text":"No. Every blueprint makes the agent audit the project first, marking each checklist item already true, partly true or absent with the file that decides it, and reporting that before proposing anything. It is told never to delete a working path to make room for the blueprint's version."}},
+    {"@type":"Question","name":"Does this work with Claude Code, Cursor and Copilot?","acceptedAnswer":{"@type":"Answer","text":"Yes, and with anything else that reads files. Put the folder in the repository and point CLAUDE.md at it, add the file to Cursor's chat context or .cursor/rules/, or paste it as the first message in ChatGPT or Gemini. There is nothing to install."}},
+    {"@type":"Question","name":"Are the blueprints tied to Python?","acceptedAnswer":{"@type":"Answer","text":"The reference implementations are mostly Python; the architecture is not. The rules, failure modes and definition of done hold in any language, and the agent translates the idioms rather than importing them."}},
+    {"@type":"Question","name":"What does it cost?","acceptedAnswer":{"@type":"Answer","text":"The published catalogue is free and MIT-licensed. Clone it, copy one file, keep it in your repository. Nothing is time-limited and there is no account."}}
+  ]
+}
+</script>
+
 <script>
   // Applied before first paint so there is no flash. Dark is the default.
   (function () {
@@ -705,6 +721,55 @@
   .release-id + .tier { display: inline-block; margin-top: 10px; }
 
   .release[hidden], .release.is-hidden { display: none !important; }
+  /* .cta sets display:inline-flex, and an author rule beats the browser's
+     own [hidden] rule - so the button needs this to be hideable at all. */
+  .cta[hidden] { display: none !important; }
+  .chip[hidden] { display: none !important; }
+
+  /* The card is a div with a full-bleed anchor over it, so the one link that
+     goes somewhere else can sit above that anchor. An <a> inside an <a> is not
+     valid HTML and browsers un-nest it, which is how the two destinations
+     would otherwise collapse into one. */
+  .release-link { position: absolute; inset: 0; z-index: 1; border-radius: inherit; }
+  .release-acts { display: inline-flex; align-items: center; gap: 14px; }
+  .release-page {
+    position: relative; z-index: 2;
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--muted); text-decoration: none;
+    border: 1px solid var(--line); border-radius: 3px; padding: 6px 10px;
+    transition: color 160ms ease, border-color 160ms ease;
+  }
+  .release-page:hover { color: var(--fg); border-color: var(--line-strong); }
+
+  /* Second filter row: what kind of thing, under the row that asks
+     whether it is free. The two are separate questions and reading
+     them as one row of nine chips is what we are avoiding. */
+  .filterbar-2 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: -18px 0 32px; }
+
+  .topics { display: grid; grid-template-columns: repeat(2, 1fr); gap: 28px 40px; margin-top: 40px; }
+  @media (max-width: 860px) { .topics { grid-template-columns: 1fr; } }
+  .topic h3 { font-family: var(--display); font-size: 21px; font-weight: 600; margin: 0 0 10px; letter-spacing: -0.01em; }
+  .topic p { margin: 0 0 12px; color: var(--muted); font-size: 15.5px; line-height: 1.62; }
+  .topic .topic-links { display: flex; flex-wrap: wrap; gap: 8px; }
+  .topic .topic-links button {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--muted); background: none; border: 1px solid var(--line); border-radius: 3px;
+    padding: 6px 10px; cursor: pointer;
+  }
+  .topic .topic-links button:hover { color: var(--fg); border-color: var(--line-strong); }
+
+  .faq { margin-top: 40px; border-top: 1px solid var(--line); }
+  .faq details { border-bottom: 1px solid var(--line); }
+  .faq summary {
+    cursor: pointer; list-style: none; padding: 22px 0;
+    font-family: var(--display); font-size: 19px; font-weight: 500; letter-spacing: -0.01em;
+    display: flex; justify-content: space-between; gap: 24px; align-items: baseline;
+  }
+  .faq summary::-webkit-details-marker { display: none; }
+  .faq summary::after { content: "+"; color: var(--muted); font-family: var(--mono); font-size: 18px; }
+  .faq details[open] summary::after { content: "–"; }
+  .faq .answer { padding: 0 0 24px; margin: 0; color: var(--muted); font-size: 15.5px; line-height: 1.68; max-width: 70ch; }
+  @media (max-width: 700px) { .filterbar-2 .chip { flex: 1 1 auto; justify-content: center; } }
 
   /* ---------- Blueprint grid ---------- */
   .releases {
@@ -1157,7 +1222,9 @@
       </a>
       <div class="nav-right">
         <a class="nav-link hide-xs" href="#blueprints">Blueprints</a>
+        <a class="nav-link hide-sm" href="#build">Build</a>
         <a class="nav-link hide-sm" href="#why">Why</a>
+        <a class="nav-link hide-sm" href="#faq">FAQ</a>
         <a class="nav-link hide-sm" href="#use">Use one</a>
         <a class="nav-link" href="https://github.com/ysz7/awesome-ai-blueprints" target="_blank" rel="noopener">
           GitHub<span class="arrow">↗</span>
@@ -1180,16 +1247,16 @@
     <div class="hero-glow" aria-hidden="true"></div>
     <div class="container hero-inner">
       <h1 class="headline">
-        <span class="line">Architecture blueprints</span>
-        <span class="line"><em>and skills</em> for</span>
-        <span class="line">AI coding agents.</span>
+        <span class="line">Build AI agents, RAG</span>
+        <span class="line">and <em>MCP servers</em> —</span>
+        <span class="line">without the guesswork.</span>
       </h1>
 
       <div class="hero-meta">
         <div class="hero-copy">
           <p class="subline">
-            Free files you drop into your project so <strong>Claude Code, Cursor, Copilot</strong> or any other agent builds the feature properly.<br>
-            Each one gives it the architecture, the rules it must not break, the order to build in, and a checklist for “done”.
+            Architecture blueprints and skills for AI coding agents. Free files you drop into your project so <strong>Claude Code, Cursor, Copilot</strong> or any other agent builds the feature properly.<br>
+            Each one gives it the architecture, the rules it must not break, the order to build in, and a checklist for “done” — for agent loops, retrieval, tools, streaming and the infrastructure underneath.
           </p>
           <div class="hero-actions">
             <a class="cta" href="#blueprints">
@@ -1275,7 +1342,7 @@
     <div class="container">
       <div class="section-label"><span class="num">01 /</span> Catalogue</div>
       <h2 class="section-headline">
-        Nine free blueprints for the things agents get wrong. <em>Find your problem, copy one file, ship it.</em>
+        <span id="cat-count">Free</span> blueprints for AI agents, RAG and infrastructure. <em>Find your problem, copy one file, ship it.</em>
       </h2>
 
       <div class="filterbar">
@@ -1284,180 +1351,624 @@
             <circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.4"/>
             <path d="M10.8 10.8 L14 14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
           </svg>
-          <input id="q" type="search" placeholder="Search blueprints — “retry”, “webhook”, “Zod”, “tracing”…" autocomplete="off" aria-label="Search blueprints" />
+          <input id="q" type="search" placeholder="Search blueprints — “RAG”, “MCP server”, “LangGraph”, “streaming”…" autocomplete="off" aria-label="Search blueprints" />
           <button class="clear" id="clear" type="button" aria-label="Clear search" hidden>✕</button>
         </div>
-        <div class="chips" role="group" aria-label="Filter by tier">
+        <div class="chips" id="chips-tier" role="group" aria-label="Filter by price">
           <button class="chip is-on" type="button" data-tier="all">All <span class="c" data-count="all"></span></button>
           <button class="chip" type="button" data-tier="free">Free <span class="c" data-count="free"></span></button>
           <button class="chip" type="button" data-tier="paid">Paid <span class="c" data-count="paid"></span></button>
         </div>
       </div>
+      <div class="filterbar-2" id="chips-type" role="group" aria-label="Filter by kind">
+        <button class="chip is-on" type="button" data-type="all">All kinds <span class="c" data-count-type="all"></span></button>
+        <button class="chip" type="button" data-type="blueprint">Blueprints <span class="c" data-count-type="blueprint"></span></button>
+        <button class="chip" type="button" data-type="project-blueprint">Project blueprints <span class="c" data-count-type="project-blueprint"></span></button>
+        <button class="chip" type="button" data-type="skill">Skills <span class="c" data-count-type="skill"></span></button>
+      </div>
+
       <p class="empty" id="empty" hidden>Nothing matches that. <button class="linkish" type="button" id="reset">Reset filters</button></p>
 
       <div class="releases" id="grid">
-
-        <!-- Featured: The Agent Loop -->
-        <a data-tier="free" class="release featured" href="https://github.com/ysz7/awesome-ai-blueprints/blob/main/blueprints/agent-loop/blueprint.md" target="_blank" rel="noopener" aria-label="The Agent Loop blueprint">
+        <!-- CATALOGUE:START - generated, do not edit by hand -->
+        <!-- generated 2026-08-21 from catalogue.json -->
+        <div data-tier="free" data-type="blueprint" class="release featured">
+          <a class="release-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/agent-loop" target="_blank" rel="noopener" aria-label="The Agent Loop on GitHub"></a>
           <div class="release-head">
             <div>
               <div class="release-id">AB-001 · agent-loop</div><span class="tier">Free</span>
             </div>
             <div style="text-align:right; display:flex; flex-direction:column; gap:8px; align-items:flex-end;">
-              <div class="release-version">medium · 3–5 days · Python</div>
+              <div class="release-version">medium · 3–5 days</div>
               <div class="release-status"><span class="dot"></span> Verified 2026-08-18</div>
             </div>
           </div>
-
           <div class="release-body">
             <div>
               <h3 class="release-name">The Agent Loop</h3>
-              <p class="release-tagline">
-                <span class="lead">Use when</span>
-                The number of steps is unknown at design time, the next action depends on what the last one returned, and the task has an end state you can recognise — “find the bug in this repo”, “get this ticket to done”.
-              </p>
+              <p class="release-tagline"><span class="lead">Use when</span>The number of steps is unknown at design time, the next action depends on what the last one returned, and the task has an end state you can recognise — &quot;find the bug in this repo&quot;, &quot;get this ticket to done&quot;.</p>
             </div>
-            <pre class="terminal" aria-hidden="true"><span class="dim">›</span> <span class="prompt">agent</span> build the agent loop from this blueprint
+            <pre class="terminal" aria-hidden="true"><span class="dim">›</span> <span class="prompt">agent</span> build this from the blueprint
 <span class="dim">→</span> matched blueprint · agent-loop
-<span class="dim">→</span> checking current APIs · reading 22 files
-<span class="dim">→</span> audit · 4 items already true · 7 absent
-<span class="out">plan ready.</span> 9 steps, risk-ordered<span class="cursor"></span></pre>
+<span class="dim">→</span> checking current APIs · reading the project
+<span class="dim">→</span> audit · what is already true · what is absent
+<span class="out">plan ready.</span> gap only, risk-ordered<span class="cursor"></span></pre>
           </div>
-
           <div class="release-foot">
-            <div class="release-tags">
-              <span>Agents</span><span>Control flow</span><span>Tool use</span><span>Stop conditions</span>
-            </div>
-            <span class="release-cta">Read the blueprint <span>→</span></span>
+            <div class="release-tags"><span>Agents</span></div>
+            <div class="release-acts"><a class="release-page" href="/blueprints/agent-loop/">Details</a><span class="release-cta">Read the blueprint <span>→</span></span></div>
           </div>
-        </a>
+        </div>
 
-        <!-- 002 -->
-        <a data-tier="free" class="release" href="https://github.com/ysz7/awesome-ai-blueprints/blob/main/blueprints/error-envelope/blueprint.md" target="_blank" rel="noopener">
-          <div class="release-head">
+        <div data-tier="free" data-type="blueprint" class="release"><a class="release-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/alembic-migrations" target="_blank" rel="noopener" aria-label="Alembic Schema Migrations on GitHub"></a><div class="release-head">
             <div><div class="release-id">AB-002</div><span class="tier">Free</span></div>
-            <div style="text-align:right;"><div class="release-version">low · 1–2 days</div></div>
+            <div style="text-align:right;"><div class="release-version">medium · 2–3 days</div></div>
           </div>
-          <h3 class="release-name">The Error Envelope</h3>
-          <p class="release-tagline"><span class="lead">Use when</span>Clients — web, mobile, another service, an agent — need to react differently to different failures, and you want one shape rather than one per route.</p>
-          <div class="release-foot">
-            <div class="release-tags"><span>TypeScript</span><span>API</span></div>
-            <span class="release-cta">Read <span>→</span></span>
-          </div>
-        </a>
+          <h3 class="release-name">Alembic Schema Migrations</h3>
+          <p class="release-tagline"><span class="lead">Use when</span>More than one person or more than one environment runs the same schema, and you need the change that worked on a laptop to arrive identically in production, in order, with a way back.</p><div class="release-foot">
+            <div class="release-tags"><span>PostgreSQL</span></div>
+            <div class="release-acts"><a class="release-page" href="/blueprints/alembic-migrations/">Details</a><span class="release-cta">Read <span>→</span></span></div>
+          </div></div>
 
-        <!-- 003 -->
-        <a data-tier="free" class="release" href="https://github.com/ysz7/awesome-ai-blueprints/blob/main/blueprints/eval-harness-design/blueprint.md" target="_blank" rel="noopener">
-          <div class="release-head">
+        <div data-tier="free" data-type="blueprint" class="release"><a class="release-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/chromadb" target="_blank" rel="noopener" aria-label="ChromaDB Embedded Vector Store on GitHub"></a><div class="release-head">
             <div><div class="release-id">AB-003</div><span class="tier">Free</span></div>
+            <div style="text-align:right;"><div class="release-version">low · 1 day</div></div>
+          </div>
+          <h3 class="release-name">ChromaDB Embedded Vector Store</h3>
+          <p class="release-tagline"><span class="lead">Use when</span>You need retrieval working today and infrastructure is the thing in the way — a prototype, a demo, a desktop or CLI tool, a test suite that needs a real vector store, or embedded search inside another product.</p><div class="release-foot">
+            <div class="release-tags"><span>Vector search</span></div>
+            <div class="release-acts"><a class="release-page" href="/blueprints/chromadb/">Details</a><span class="release-cta">Read <span>→</span></span></div>
+          </div></div>
+
+        <div data-tier="free" data-type="blueprint" class="release"><a class="release-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/chunking-embeddings" target="_blank" rel="noopener" aria-label="Chunking and Embeddings for Retrieval on GitHub"></a><div class="release-head">
+            <div><div class="release-id">AB-004</div><span class="tier">Free</span></div>
             <div style="text-align:right;"><div class="release-version">medium · 3–5 days</div></div>
           </div>
-          <h3 class="release-name">Eval Harness Design</h3>
-          <p class="release-tagline"><span class="lead">Use when</span>You are about to make the second change to any system built on a model. The first you can eyeball; from the second you are trading one set of failures for another and cannot see it.</p>
-          <div class="release-foot">
-            <div class="release-tags"><span>Python</span><span>Evals</span></div>
-            <span class="release-cta">Read <span>→</span></span>
-          </div>
-        </a>
+          <h3 class="release-name">Chunking and Embeddings for Retrieval</h3>
+          <p class="release-tagline"><span class="lead">Use when</span>Retrieval quality is the problem and the search itself looks correct — the right index, the right query, and answers built from fragments that do not say enough to answer with.</p><div class="release-foot">
+            <div class="release-tags"><span>Vector search</span><span>Retrieval</span><span>Evals</span></div>
+            <div class="release-acts"><a class="release-page" href="/blueprints/chunking-embeddings/">Details</a><span class="release-cta">Read <span>→</span></span></div>
+          </div></div>
 
-        <!-- 004 -->
-        <a data-tier="free" class="release" href="https://github.com/ysz7/awesome-ai-blueprints/blob/main/blueprints/idempotency-and-retries/blueprint.md" target="_blank" rel="noopener">
-          <div class="release-head">
-            <div><div class="release-id">AB-004</div><span class="tier">Free</span></div>
-            <div style="text-align:right;"><div class="release-version">low-med · 1–3 days</div></div>
-          </div>
-          <h3 class="release-name">Idempotency &amp; Retry Safety</h3>
-          <p class="release-tagline"><span class="lead">Use when</span>An operation can be delivered more than once — webhooks, queued jobs, payments, outbound email — and running it twice would double-charge, double-send or double-write.</p>
-          <div class="release-foot">
-            <div class="release-tags"><span>TypeScript</span><span>Postgres</span></div>
-            <span class="release-cta">Read <span>→</span></span>
-          </div>
-        </a>
-
-        <!-- 005 -->
-        <a data-tier="free" class="release" href="https://github.com/ysz7/awesome-ai-blueprints/blob/main/blueprints/observability-tracing/blueprint.md" target="_blank" rel="noopener">
-          <div class="release-head">
+        <div data-tier="free" data-type="blueprint" class="release"><a class="release-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/cursor-pagination" target="_blank" rel="noopener" aria-label="Cursor Pagination on GitHub"></a><div class="release-head">
             <div><div class="release-id">AB-005</div><span class="tier">Free</span></div>
-            <div style="text-align:right;"><div class="release-version">medium · 4–6 days</div></div>
-          </div>
-          <h3 class="release-name">Observability &amp; Tracing</h3>
-          <p class="release-tagline"><span class="lead">Use when</span>A system that calls a model runs somewhere you cannot watch it, and someone will eventually say “it gave me a strange answer on Tuesday”. Or nobody can say which feature is responsible for the model bill.</p>
-          <div class="release-foot">
-            <div class="release-tags"><span>Python</span><span>OpenTelemetry</span></div>
-            <span class="release-cta">Read <span>→</span></span>
-          </div>
-        </a>
-
-        <!-- 006 -->
-        <a data-tier="free" class="release" href="https://github.com/ysz7/awesome-ai-blueprints/blob/main/blueprints/prompt-structure/blueprint.md" target="_blank" rel="noopener">
-          <div class="release-head">
-            <div><div class="release-id">AB-006</div><span class="tier">Free</span></div>
-            <div style="text-align:right;"><div class="release-version">low · 1–3 days</div></div>
-          </div>
-          <h3 class="release-name">Prompt Structure</h3>
-          <p class="release-tagline"><span class="lead">Use when</span>A prompt will run more than a handful of times — anything in a product path. Also when an existing prompt has grown by accretion and now contradicts itself or caches badly.</p>
-          <div class="release-foot">
-            <div class="release-tags"><span>Python</span><span>Caching</span></div>
-            <span class="release-cta">Read <span>→</span></span>
-          </div>
-        </a>
-
-        <!-- 007 -->
-        <a data-tier="free" class="release" href="https://github.com/ysz7/awesome-ai-blueprints/blob/main/blueprints/structured-output/blueprint.md" target="_blank" rel="noopener">
-          <div class="release-head">
-            <div><div class="release-id">AB-007</div><span class="tier">Free</span></div>
-            <div style="text-align:right;"><div class="release-version">low · 2–3 days</div></div>
-          </div>
-          <h3 class="release-name">Structured Model Output</h3>
-          <p class="release-tagline"><span class="lead">Use when</span>The model's output feeds code rather than a person — extraction, classification, filling a form — and a parse failure is an incident rather than a nuisance.</p>
-          <div class="release-foot">
-            <div class="release-tags"><span>Python</span><span>Pydantic</span></div>
-            <span class="release-cta">Read <span>→</span></span>
-          </div>
-        </a>
-
-        <!-- 008 -->
-        <a data-tier="free" class="release" href="https://github.com/ysz7/awesome-ai-blueprints/blob/main/blueprints/tool-design/blueprint.md" target="_blank" rel="noopener">
-          <div class="release-head">
-            <div><div class="release-id">AB-008</div><span class="tier">Free</span></div>
-            <div style="text-align:right;"><div class="release-version">low · 2–4 days</div></div>
-          </div>
-          <h3 class="release-name">Tool Design</h3>
-          <p class="release-tagline"><span class="lead">Use when</span>An agent has more than one tool, and it picks the wrong one, sends malformed arguments, or misreads what came back. Also whenever tool schemas are being reworked.</p>
-          <div class="release-foot">
-            <div class="release-tags"><span>Python</span><span>Pydantic</span></div>
-            <span class="release-cta">Read <span>→</span></span>
-          </div>
-        </a>
-
-        <!-- 009 -->
-        <a data-tier="free" class="release" href="https://github.com/ysz7/awesome-ai-blueprints/blob/main/blueprints/validation-at-the-boundary/blueprint.md" target="_blank" rel="noopener">
-          <div class="release-head">
-            <div><div class="release-id">AB-009</div><span class="tier">Free</span></div>
             <div style="text-align:right;"><div class="release-version">low · 1–2 days</div></div>
           </div>
-          <h3 class="release-name">Validation at the Boundary</h3>
-          <p class="release-tagline"><span class="lead">Use when</span>Data arrives from anywhere you do not control — HTTP bodies, webhooks, queue messages, env vars, third-party responses, model output — and the rest of the code should be able to trust it.</p>
-          <div class="release-foot">
-            <div class="release-tags"><span>TypeScript</span><span>Zod</span></div>
-            <span class="release-cta">Read <span>→</span></span>
-          </div>
-        </a>
+          <h3 class="release-name">Cursor Pagination</h3>
+          <p class="release-tagline"><span class="lead">Use when</span>Paging through a list that changes while a user reads it — feeds, inboxes, activity logs, search results, any admin table — or through a large result set from a script or an export.</p><div class="release-foot">
+            <div class="release-tags"><span>API</span></div>
+            <div class="release-acts"><a class="release-page" href="/blueprints/cursor-pagination/">Details</a><span class="release-cta">Read <span>→</span></span></div>
+          </div></div>
 
-        <!-- Skill -->
-        <a data-tier="free" class="release queued" href="https://github.com/ysz7/awesome-ai-blueprints/blob/main/skills/map/SKILL.md" target="_blank" rel="noopener">
-          <div class="release-head">
-            <div><div class="release-id">SKILL · map</div><span class="tier">Free</span></div>
-            <div style="text-align:right;"><div class="release-status queued"><span class="dot"></span> Claude Code</div></div>
+        <div data-tier="free" data-type="blueprint" class="release"><a class="release-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/docker-compose-dev" target="_blank" rel="noopener" aria-label="Docker Compose for Local Development on GitHub"></a><div class="release-head">
+            <div><div class="release-id">AB-006</div><span class="tier">Free</span></div>
+            <div style="text-align:right;"><div class="release-version">low · 1 day</div></div>
           </div>
-          <h3 class="release-name">map</h3>
-          <p class="release-tagline"><span class="lead">Drop-in skill</span>Draws a self-contained HTML map of a codebase — its jobs, not its folders.</p>
-          <div class="release-foot">
-            <div class="release-tags"><span>Skill</span><span>HTML</span></div>
-            <span class="release-cta">Read <span>→</span></span>
-          </div>
-        </a>
+          <h3 class="release-name">Docker Compose for Local Development</h3>
+          <p class="release-tagline"><span class="lead">Use when</span>The project needs more than one process to run — an application plus a database, a cache, a queue, an object store — and onboarding currently involves a wiki page with steps that no longer work.</p><div class="release-foot">
+            <div class="release-tags"><span>Docker</span></div>
+            <div class="release-acts"><a class="release-page" href="/blueprints/docker-compose-dev/">Details</a><span class="release-cta">Read <span>→</span></span></div>
+          </div></div>
 
+        <div data-tier="free" data-type="blueprint" class="release"><a class="release-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/dockerfile-service" target="_blank" rel="noopener" aria-label="Dockerfile for a Production Service on GitHub"></a><div class="release-head">
+            <div><div class="release-id">AB-007</div><span class="tier">Free</span></div>
+            <div style="text-align:right;"><div class="release-version">low · 1 day</div></div>
+          </div>
+          <h3 class="release-name">Dockerfile for a Production Service</h3>
+          <p class="release-tagline"><span class="lead">Use when</span>A service needs an image that ships to a registry and runs somewhere you do not control — a rolling deploy, a scheduler, a colleague&#x27;s machine — and you want the same bytes to run in all three.</p><div class="release-foot">
+            <div class="release-tags"><span>Docker</span></div>
+            <div class="release-acts"><a class="release-page" href="/blueprints/dockerfile-service/">Details</a><span class="release-cta">Read <span>→</span></span></div>
+          </div></div>
+
+        <div data-tier="free" data-type="blueprint" class="release"><a class="release-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/error-envelope" target="_blank" rel="noopener" aria-label="One Error Envelope for an HTTP API on GitHub"></a><div class="release-head">
+            <div><div class="release-id">AB-008</div><span class="tier">Free</span></div>
+            <div style="text-align:right;"><div class="release-version">low · 1–2 days</div></div>
+          </div>
+          <h3 class="release-name">One Error Envelope for an HTTP API</h3>
+          <p class="release-tagline"><span class="lead">Use when</span>Anything with clients — a web app, a mobile app, another service, or an AI agent — needs to react differently to different failures, and you want one shape rather than one per route.</p><div class="release-foot">
+            <div class="release-tags"><span>API</span></div>
+            <div class="release-acts"><a class="release-page" href="/blueprints/error-envelope/">Details</a><span class="release-cta">Read <span>→</span></span></div>
+          </div></div>
+
+        <div data-tier="free" data-type="blueprint" class="release"><a class="release-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/eval-harness-design" target="_blank" rel="noopener" aria-label="LLM Eval Harness on GitHub"></a><div class="release-head">
+            <div><div class="release-id">AB-009</div><span class="tier">Free</span></div>
+            <div style="text-align:right;"><div class="release-version">medium · 3–5 days</div></div>
+          </div>
+          <h3 class="release-name">LLM Eval Harness</h3>
+          <p class="release-tagline"><span class="lead">Use when</span>You are about to make the second change to any system built on a model. The first change you can eyeball; from the second onwards you are trading one set of failures for another and cannot see it.</p><div class="release-foot">
+            <div class="release-tags"><span>Evals</span></div>
+            <div class="release-acts"><a class="release-page" href="/blueprints/eval-harness-design/">Details</a><span class="release-cta">Read <span>→</span></span></div>
+          </div></div>
+
+        <div data-tier="free" data-type="blueprint" class="release"><a class="release-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/fastapi-routing" target="_blank" rel="noopener" aria-label="FastAPI Routers and API Versioning on GitHub"></a><div class="release-head">
+            <div><div class="release-id">AB-010</div><span class="tier">Free</span></div>
+            <div style="text-align:right;"><div class="release-version">low · 1–2 days</div></div>
+          </div>
+          <h3 class="release-name">FastAPI Routers and API Versioning</h3>
+          <p class="release-tagline"><span class="lead">Use when</span>Endpoints are accumulating in one file, or a change to a response shape would break clients you cannot upgrade, or two routes have quietly claimed overlapping paths. Works on an empty application and on one with 800 lines in `main.py` — in the second case the job is to move existing endpoints into modules without changing what any of them does.</p><div class="release-foot">
+            <div class="release-tags"><span>FastAPI</span><span>API</span><span>Python</span></div>
+            <div class="release-acts"><a class="release-page" href="/blueprints/fastapi-routing/">Details</a><span class="release-cta">Read <span>→</span></span></div>
+          </div></div>
+
+        <div data-tier="free" data-type="blueprint" class="release"><a class="release-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/github-actions-cd" target="_blank" rel="noopener" aria-label="GitHub Actions CD on GitHub"></a><div class="release-head">
+            <div><div class="release-id">AB-011</div><span class="tier">Free</span></div>
+            <div style="text-align:right;"><div class="release-version">medium · 2–4 days</div></div>
+          </div>
+          <h3 class="release-name">GitHub Actions CD</h3>
+          <p class="release-tagline"><span class="lead">Use when</span>A service is deployed often enough that doing it by hand is a risk, and CI already runs and blocks merges. This builds on that: it does not repeat the checks, it requires them.</p><div class="release-foot">
+            <div class="release-tags"><span>CI/CD</span></div>
+            <div class="release-acts"><a class="release-page" href="/blueprints/github-actions-cd/">Details</a><span class="release-cta">Read <span>→</span></span></div>
+          </div></div>
+
+        <div data-tier="free" data-type="blueprint" class="release"><a class="release-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/github-actions-ci" target="_blank" rel="noopener" aria-label="GitHub Actions CI on GitHub"></a><div class="release-head">
+            <div><div class="release-id">AB-012</div><span class="tier">Free</span></div>
+            <div style="text-align:right;"><div class="release-version">low · 1–2 days</div></div>
+          </div>
+          <h3 class="release-name">GitHub Actions CI</h3>
+          <p class="release-tagline"><span class="lead">Use when</span>More than one person merges into a shared branch, or one person merges often enough to have broken it once. Covers the pull-request workflow, dependency caching, service containers, and making the checks actually block a merge.</p><div class="release-foot">
+            <div class="release-tags"><span>CI/CD</span></div>
+            <div class="release-acts"><a class="release-page" href="/blueprints/github-actions-ci/">Details</a><span class="release-cta">Read <span>→</span></span></div>
+          </div></div>
+
+        <div data-tier="free" data-type="blueprint" class="release"><a class="release-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/hybrid-search-rrf" target="_blank" rel="noopener" aria-label="Hybrid Search: Keyword + Vector with RRF on GitHub"></a><div class="release-head">
+            <div><div class="release-id">AB-013</div><span class="tier">Free</span></div>
+            <div style="text-align:right;"><div class="release-version">medium · 3–5 days</div></div>
+          </div>
+          <h3 class="release-name">Hybrid Search: Keyword + Vector with RRF</h3>
+          <p class="release-tagline"><span class="lead">Use when</span>Queries contain identifiers, error codes, SKUs, function names, proper nouns or exact phrases; or recall is short of target with embeddings alone.</p><div class="release-foot">
+            <div class="release-tags"><span>Vector search</span><span>Retrieval</span></div>
+            <div class="release-acts"><a class="release-page" href="/blueprints/hybrid-search-rrf/">Details</a><span class="release-cta">Read <span>→</span></span></div>
+          </div></div>
+
+        <div data-tier="free" data-type="blueprint" class="release"><a class="release-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/idempotency-and-retries" target="_blank" rel="noopener" aria-label="Idempotency Keys and Safe Retries on GitHub"></a><div class="release-head">
+            <div><div class="release-id">AB-014</div><span class="tier">Free</span></div>
+            <div style="text-align:right;"><div class="release-version">low · 1–3 days</div></div>
+          </div>
+          <h3 class="release-name">Idempotency Keys and Safe Retries</h3>
+          <p class="release-tagline"><span class="lead">Use when</span>An operation can be delivered or invoked more than once — webhooks, queued jobs, payments, outbound email, any POST a client may retry — and running it twice would double-charge, double-send or double-write.</p><div class="release-foot">
+            <div class="release-tags"><span>Reliability</span></div>
+            <div class="release-acts"><a class="release-page" href="/blueprints/idempotency-and-retries/">Details</a><span class="release-cta">Read <span>→</span></span></div>
+          </div></div>
+
+        <div data-tier="free" data-type="blueprint" class="release"><a class="release-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/jwt-auth" target="_blank" rel="noopener" aria-label="JWT Access Token Authentication on GitHub"></a><div class="release-head">
+            <div><div class="release-id">AB-015</div><span class="tier">Free</span></div>
+            <div style="text-align:right;"><div class="release-version">medium · 2–3 days</div></div>
+          </div>
+          <h3 class="release-name">JWT Access Token Authentication</h3>
+          <p class="release-tagline"><span class="lead">Use when</span>An API needs to know who is calling, the callers are your own clients, and you control both sides. Covers registration, login, a `current_user` dependency, roles and scopes.</p><div class="release-foot">
+            <div class="release-tags"><span>Auth</span></div>
+            <div class="release-acts"><a class="release-page" href="/blueprints/jwt-auth/">Details</a><span class="release-cta">Read <span>→</span></span></div>
+          </div></div>
+
+        <div data-tier="free" data-type="blueprint" class="release"><a class="release-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/jwt-refresh-sessions" target="_blank" rel="noopener" aria-label="JWT Refresh Tokens and Session Revocation on GitHub"></a><div class="release-head">
+            <div><div class="release-id">AB-016</div><span class="tier">Free</span></div>
+            <div style="text-align:right;"><div class="release-version">medium · 3–5 days</div></div>
+          </div>
+          <h3 class="release-name">JWT Refresh Tokens and Session Revocation</h3>
+          <p class="release-tagline"><span class="lead">Use when</span>Users must stay signed in for days or weeks, or you need to end a session on demand — a stolen device, a password change, an administrator disabling an account, a &quot;sign out of all sessions&quot; button.</p><div class="release-foot">
+            <div class="release-tags"><span>Auth</span></div>
+            <div class="release-acts"><a class="release-page" href="/blueprints/jwt-refresh-sessions/">Details</a><span class="release-cta">Read <span>→</span></span></div>
+          </div></div>
+
+        <div data-tier="free" data-type="blueprint" class="release"><a class="release-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/langchain-lcel" target="_blank" rel="noopener" aria-label="LangChain LCEL: Composable Chains on GitHub"></a><div class="release-head">
+            <div><div class="release-id">AB-017</div><span class="tier">Free</span></div>
+            <div style="text-align:right;"><div class="release-version">medium · 2–3 days</div></div>
+          </div>
+          <h3 class="release-name">LangChain LCEL: Composable Chains</h3>
+          <p class="release-tagline"><span class="lead">Use when</span>Several places need the same prompt-to-parsed-output path, and you want streaming, batching and fallbacks once rather than per call site.</p><div class="release-foot">
+            <div class="release-tags"><span>LangChain</span></div>
+            <div class="release-acts"><a class="release-page" href="/blueprints/langchain-lcel/">Details</a><span class="release-cta">Read <span>→</span></span></div>
+          </div></div>
+
+        <div data-tier="free" data-type="blueprint" data-extra="1" class="release"><a class="release-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/langchain-rag" target="_blank" rel="noopener" aria-label="LangChain RAG Retrieval Chain on GitHub"></a><div class="release-head">
+            <div><div class="release-id">AB-018</div><span class="tier">Free</span></div>
+            <div style="text-align:right;"><div class="release-version">medium · 2–4 days</div></div>
+          </div>
+          <h3 class="release-name">LangChain RAG Retrieval Chain</h3>
+          <p class="release-tagline"><span class="lead">Use when</span>Documents are already indexed and searchable, and what is missing is the path from a user&#x27;s question to a grounded answer — including the second question, which is where most retrieval chains fall over.</p><div class="release-foot">
+            <div class="release-tags"><span>LangChain</span><span>Retrieval</span><span>Evals</span></div>
+            <div class="release-acts"><a class="release-page" href="/blueprints/langchain-rag/">Details</a><span class="release-cta">Read <span>→</span></span></div>
+          </div></div>
+
+        <div data-tier="free" data-type="blueprint" data-extra="1" class="release"><a class="release-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/langgraph-agent" target="_blank" rel="noopener" aria-label="LangGraph: Agent as a State Graph on GitHub"></a><div class="release-head">
+            <div><div class="release-id">AB-019</div><span class="tier">Free</span></div>
+            <div style="text-align:right;"><div class="release-version">medium · 3–4 days</div></div>
+          </div>
+          <h3 class="release-name">LangGraph: Agent as a State Graph</h3>
+          <p class="release-tagline"><span class="lead">Use when</span>The next step depends on what the previous step produced — a tool result, a classification, a validation failure — and a fixed sequence of calls cannot express it.</p><div class="release-foot">
+            <div class="release-tags"><span>LangGraph</span><span>Agents</span></div>
+            <div class="release-acts"><a class="release-page" href="/blueprints/langgraph-agent/">Details</a><span class="release-cta">Read <span>→</span></span></div>
+          </div></div>
+
+        <div data-tier="free" data-type="blueprint" data-extra="1" class="release"><a class="release-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/langgraph-checkpoints-hitl" target="_blank" rel="noopener" aria-label="LangGraph Checkpoints and Human Approval on GitHub"></a><div class="release-head">
+            <div><div class="release-id">AB-020</div><span class="tier">Free</span></div>
+            <div style="text-align:right;"><div class="release-version">high · 4–5 days</div></div>
+          </div>
+          <h3 class="release-name">LangGraph Checkpoints and Human Approval</h3>
+          <p class="release-tagline"><span class="lead">Use when</span>A run can take longer than the process that started it, or a step in it must not happen until a person says so.</p><div class="release-foot">
+            <div class="release-tags"><span>LangGraph</span><span>Agents</span></div>
+            <div class="release-acts"><a class="release-page" href="/blueprints/langgraph-checkpoints-hitl/">Details</a><span class="release-cta">Read <span>→</span></span></div>
+          </div></div>
+
+        <div data-tier="free" data-type="blueprint" data-extra="1" class="release"><a class="release-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/llm-as-judge" target="_blank" rel="noopener" aria-label="LLM-as-a-Judge Evaluation on GitHub"></a><div class="release-head">
+            <div><div class="release-id">AB-021</div><span class="tier">Free</span></div>
+            <div style="text-align:right;"><div class="release-version">medium · 3–4 days</div></div>
+          </div>
+          <h3 class="release-name">LLM-as-a-Judge Evaluation</h3>
+          <p class="release-tagline"><span class="lead">Use when</span>You change prompts or models often enough that hand-grading has become the bottleneck, and the quality you care about cannot be checked by an assertion.</p><div class="release-foot">
+            <div class="release-tags"><span>Evals</span></div>
+            <div class="release-acts"><a class="release-page" href="/blueprints/llm-as-judge/">Details</a><span class="release-cta">Read <span>→</span></span></div>
+          </div></div>
+
+        <div data-tier="free" data-type="blueprint" data-extra="1" class="release"><a class="release-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/llm-guardrails" target="_blank" rel="noopener" aria-label="LLM Input Guardrails and Prompt-Injection Detection on GitHub"></a><div class="release-head">
+            <div><div class="release-id">AB-022</div><span class="tier">Free</span></div>
+            <div style="text-align:right;"><div class="release-version">medium · 2–3 days</div></div>
+          </div>
+          <h3 class="release-name">LLM Input Guardrails and Prompt-Injection Detection</h3>
+          <p class="release-tagline"><span class="lead">Use when</span>Model input can contain anything a user typed, or any text fetched from a page, a document, an email or a tool result.</p><div class="release-foot">
+            <div class="release-tags"><span>Safety</span></div>
+            <div class="release-acts"><a class="release-page" href="/blueprints/llm-guardrails/">Details</a><span class="release-cta">Read <span>→</span></span></div>
+          </div></div>
+
+        <div data-tier="free" data-type="blueprint" data-extra="1" class="release"><a class="release-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/llm-streaming-client" target="_blank" rel="noopener" aria-label="Streaming LLM Output in the Browser on GitHub"></a><div class="release-head">
+            <div><div class="release-id">AB-023</div><span class="tier">Free</span></div>
+            <div style="text-align:right;"><div class="release-version">medium · 2–4 days</div></div>
+          </div>
+          <h3 class="release-name">Streaming LLM Output in the Browser</h3>
+          <p class="release-tagline"><span class="lead">Use when</span>A backend already streams and the interface has to show it — a chat, a generated document, anything where the user watches text arrive.</p><div class="release-foot">
+            <div class="release-tags"><span>Streaming</span></div>
+            <div class="release-acts"><a class="release-page" href="/blueprints/llm-streaming-client/">Details</a><span class="release-cta">Read <span>→</span></span></div>
+          </div></div>
+
+        <div data-tier="free" data-type="blueprint" data-extra="1" class="release"><a class="release-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/llm-streaming-sse" target="_blank" rel="noopener" aria-label="Streaming LLM Output over SSE on GitHub"></a><div class="release-head">
+            <div><div class="release-id">AB-024</div><span class="tier">Free</span></div>
+            <div style="text-align:right;"><div class="release-version">medium · 2–3 days</div></div>
+          </div>
+          <h3 class="release-name">Streaming LLM Output over SSE</h3>
+          <p class="release-tagline"><span class="lead">Use when</span>A model call takes long enough that waiting for the whole answer feels broken — a chat reply, a generated document, a long summary — and the user should see it arrive.</p><div class="release-foot">
+            <div class="release-tags"><span>Streaming</span></div>
+            <div class="release-acts"><a class="release-page" href="/blueprints/llm-streaming-sse/">Details</a><span class="release-cta">Read <span>→</span></span></div>
+          </div></div>
+
+        <div data-tier="free" data-type="blueprint" data-extra="1" class="release"><a class="release-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/mcp-client-integration" target="_blank" rel="noopener" aria-label="MCP Client Integration on GitHub"></a><div class="release-head">
+            <div><div class="release-id">AB-025</div><span class="tier">Free</span></div>
+            <div style="text-align:right;"><div class="release-version">medium · 3–5 days</div></div>
+          </div>
+          <h3 class="release-name">MCP Client Integration</h3>
+          <p class="release-tagline"><span class="lead">Use when</span>An agent should use tools that somebody else maintains — a hosted service, a colleague&#x27;s server, a vendor&#x27;s integration — instead of you writing and keeping a wrapper for each.</p><div class="release-foot">
+            <div class="release-tags"><span>MCP</span><span>Agents</span></div>
+            <div class="release-acts"><a class="release-page" href="/blueprints/mcp-client-integration/">Details</a><span class="release-cta">Read <span>→</span></span></div>
+          </div></div>
+
+        <div data-tier="free" data-type="blueprint" data-extra="1" class="release"><a class="release-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/mcp-server-remote" target="_blank" rel="noopener" aria-label="MCP Server over HTTP on GitHub"></a><div class="release-head">
+            <div><div class="release-id">AB-026</div><span class="tier">Free</span></div>
+            <div style="text-align:right;"><div class="release-version">high · 1–2 weeks</div></div>
+          </div>
+          <h3 class="release-name">MCP Server over HTTP</h3>
+          <p class="release-tagline"><span class="lead">Use when</span>People outside your organisation should be able to point their agent at your service — a product with an API, an internal platform used by several teams, anything where the caller is not the person who deployed the server.</p><div class="release-foot">
+            <div class="release-tags"><span>MCP</span><span>Agents</span></div>
+            <div class="release-acts"><a class="release-page" href="/blueprints/mcp-server-remote/">Details</a><span class="release-cta">Read <span>→</span></span></div>
+          </div></div>
+
+        <div data-tier="free" data-type="blueprint" data-extra="1" class="release"><a class="release-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/mcp-server-stdio" target="_blank" rel="noopener" aria-label="MCP Server over stdio on GitHub"></a><div class="release-head">
+            <div><div class="release-id">AB-027</div><span class="tier">Free</span></div>
+            <div style="text-align:right;"><div class="release-version">low · 1–2 days</div></div>
+          </div>
+          <h3 class="release-name">MCP Server over stdio</h3>
+          <p class="release-tagline"><span class="lead">Use when</span>Something on a developer&#x27;s own machine should be available to their agent — a project&#x27;s build system, an internal command-line tool, a local database, a scratch directory — and it runs as the same user with the same permissions they already have.</p><div class="release-foot">
+            <div class="release-tags"><span>MCP</span><span>Agents</span></div>
+            <div class="release-acts"><a class="release-page" href="/blueprints/mcp-server-stdio/">Details</a><span class="release-cta">Read <span>→</span></span></div>
+          </div></div>
+
+        <div data-tier="free" data-type="blueprint" data-extra="1" class="release"><a class="release-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/observability-tracing" target="_blank" rel="noopener" aria-label="LLM Observability and Tracing on GitHub"></a><div class="release-head">
+            <div><div class="release-id">AB-028</div><span class="tier">Free</span></div>
+            <div style="text-align:right;"><div class="release-version">medium · 4–6 days</div></div>
+          </div>
+          <h3 class="release-name">LLM Observability and Tracing</h3>
+          <p class="release-tagline"><span class="lead">Use when</span>A system that calls a model runs somewhere you cannot watch it, and someone will eventually say &quot;it gave me a strange answer on Tuesday&quot;. Also when nobody can say which feature is responsible for the model bill.</p><div class="release-foot">
+            <div class="release-tags"><span>Observability</span></div>
+            <div class="release-acts"><a class="release-page" href="/blueprints/observability-tracing/">Details</a><span class="release-cta">Read <span>→</span></span></div>
+          </div></div>
+
+        <div data-tier="free" data-type="blueprint" data-extra="1" class="release"><a class="release-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/pgvector" target="_blank" rel="noopener" aria-label="pgvector: Vector Search in Postgres on GitHub"></a><div class="release-head">
+            <div><div class="release-id">AB-029</div><span class="tier">Free</span></div>
+            <div style="text-align:right;"><div class="release-version">medium · 2–4 days</div></div>
+          </div>
+          <h3 class="release-name">pgvector: Vector Search in Postgres</h3>
+          <p class="release-tagline"><span class="lead">Use when</span>The data is already in Postgres, the corpus is large enough that a full scan is too slow, and you would rather have transactions, backups and joins than a second datastore to operate.</p><div class="release-foot">
+            <div class="release-tags"><span>PostgreSQL</span><span>Vector search</span></div>
+            <div class="release-acts"><a class="release-page" href="/blueprints/pgvector/">Details</a><span class="release-cta">Read <span>→</span></span></div>
+          </div></div>
+
+        <div data-tier="free" data-type="blueprint" data-extra="1" class="release"><a class="release-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/postgres-integration" target="_blank" rel="noopener" aria-label="PostgreSQL Connection Pool and Lifecycle on GitHub"></a><div class="release-head">
+            <div><div class="release-id">AB-030</div><span class="tier">Free</span></div>
+            <div style="text-align:right;"><div class="release-version">low · 1–2 days</div></div>
+          </div>
+          <h3 class="release-name">PostgreSQL Connection Pool and Lifecycle</h3>
+          <p class="release-tagline"><span class="lead">Use when</span>A service needs Postgres and you want the connection lifecycle right before anything is built on top — pool sizing, startup, shutdown, health, and the pooler in front of it in production.</p><div class="release-foot">
+            <div class="release-tags"><span>PostgreSQL</span></div>
+            <div class="release-acts"><a class="release-page" href="/blueprints/postgres-integration/">Details</a><span class="release-cta">Read <span>→</span></span></div>
+          </div></div>
+
+        <div data-tier="free" data-type="blueprint" data-extra="1" class="release"><a class="release-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/prompt-structure" target="_blank" rel="noopener" aria-label="Prompt Structure and System Prompts on GitHub"></a><div class="release-head">
+            <div><div class="release-id">AB-031</div><span class="tier">Free</span></div>
+            <div style="text-align:right;"><div class="release-version">low · 1–3 days</div></div>
+          </div>
+          <h3 class="release-name">Prompt Structure and System Prompts</h3>
+          <p class="release-tagline"><span class="lead">Use when</span>A prompt will run more than a handful of times — anything in a product path. Also when an existing prompt has grown by accretion and now contradicts itself, ignores rules, or caches badly.</p><div class="release-foot">
+            <div class="release-tags"><span>Prompting</span></div>
+            <div class="release-acts"><a class="release-page" href="/blueprints/prompt-structure/">Details</a><span class="release-cta">Read <span>→</span></span></div>
+          </div></div>
+
+        <div data-tier="free" data-type="blueprint" data-extra="1" class="release"><a class="release-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/pydantic-schemas" target="_blank" rel="noopener" aria-label="Pydantic Request and Response Schemas on GitHub"></a><div class="release-head">
+            <div><div class="release-id">AB-032</div><span class="tier">Free</span></div>
+            <div style="text-align:right;"><div class="release-version">low · 1–2 days</div></div>
+          </div>
+          <h3 class="release-name">Pydantic Request and Response Schemas</h3>
+          <p class="release-tagline"><span class="lead">Use when</span>An HTTP API accepts JSON bodies or returns objects built from database rows, and you want the accepted shape and the exposed shape to be two decisions rather than one accident.</p><div class="release-foot">
+            <div class="release-tags"><span>API</span><span>Python</span></div>
+            <div class="release-acts"><a class="release-page" href="/blueprints/pydantic-schemas/">Details</a><span class="release-cta">Read <span>→</span></span></div>
+          </div></div>
+
+        <div data-tier="free" data-type="blueprint" data-extra="1" class="release"><a class="release-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/pydantic-settings" target="_blank" rel="noopener" aria-label="Pydantic Settings: Typed Configuration on GitHub"></a><div class="release-head">
+            <div><div class="release-id">AB-033</div><span class="tier">Free</span></div>
+            <div style="text-align:right;"><div class="release-version">low · 1 day</div></div>
+          </div>
+          <h3 class="release-name">Pydantic Settings: Typed Configuration</h3>
+          <p class="release-tagline"><span class="lead">Use when</span>Anything about how the app behaves comes from outside the code — a database URL, an API key, a feature flag, a timeout, a bucket name — and you want it wrong-or-missing to be a failed deploy rather than a runtime surprise.</p><div class="release-foot">
+            <div class="release-tags"><span>Python</span></div>
+            <div class="release-acts"><a class="release-page" href="/blueprints/pydantic-settings/">Details</a><span class="release-cta">Read <span>→</span></span></div>
+          </div></div>
+
+        <div data-tier="free" data-type="blueprint" data-extra="1" class="release"><a class="release-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/qdrant-integration" target="_blank" rel="noopener" aria-label="Qdrant Vector Search with Filters on GitHub"></a><div class="release-head">
+            <div><div class="release-id">AB-034</div><span class="tier">Free</span></div>
+            <div style="text-align:right;"><div class="release-version">medium · 2–4 days</div></div>
+          </div>
+          <h3 class="release-name">Qdrant Vector Search with Filters</h3>
+          <p class="release-tagline"><span class="lead">Use when</span>The corpus is large, search is filtered by attributes on almost every query, and you want a store built for that rather than a general database extended to do it.</p><div class="release-foot">
+            <div class="release-tags"><span>Vector search</span></div>
+            <div class="release-acts"><a class="release-page" href="/blueprints/qdrant-integration/">Details</a><span class="release-cta">Read <span>→</span></span></div>
+          </div></div>
+
+        <div data-tier="free" data-type="blueprint" data-extra="1" class="release"><a class="release-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/redis-cache" target="_blank" rel="noopener" aria-label="Redis Cache Layer on GitHub"></a><div class="release-head">
+            <div><div class="release-id">AB-035</div><span class="tier">Free</span></div>
+            <div style="text-align:right;"><div class="release-version">medium · 2–3 days</div></div>
+          </div>
+          <h3 class="release-name">Redis Cache Layer</h3>
+          <p class="release-tagline"><span class="lead">Use when</span>A read is expensive and repeated — an aggregate over many rows, a third-party response, a permission set computed per request — and the answer is allowed to be slightly old.</p><div class="release-foot">
+            <div class="release-tags"><span>Redis</span></div>
+            <div class="release-acts"><a class="release-page" href="/blueprints/redis-cache/">Details</a><span class="release-cta">Read <span>→</span></span></div>
+          </div></div>
+
+        <div data-tier="free" data-type="blueprint" data-extra="1" class="release"><a class="release-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/redis-ratelimit-queue" target="_blank" rel="noopener" aria-label="Redis Rate Limiting and Job Queues on GitHub"></a><div class="release-head">
+            <div><div class="release-id">AB-036</div><span class="tier">Free</span></div>
+            <div style="text-align:right;"><div class="release-version">medium · 3–5 days</div></div>
+          </div>
+          <h3 class="release-name">Redis Rate Limiting and Job Queues</h3>
+          <p class="release-tagline"><span class="lead">Use when</span>Requests must be bounded per caller, or work must happen outside the request — sending mail, generating a document, calling a slow third party — and losing that work is not acceptable.</p><div class="release-foot">
+            <div class="release-tags"><span>Redis</span></div>
+            <div class="release-acts"><a class="release-page" href="/blueprints/redis-ratelimit-queue/">Details</a><span class="release-cta">Read <span>→</span></span></div>
+          </div></div>
+
+        <div data-tier="free" data-type="blueprint" data-extra="1" class="release"><a class="release-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/sqlalchemy-orm" target="_blank" rel="noopener" aria-label="Async SQLAlchemy ORM Layer on GitHub"></a><div class="release-head">
+            <div><div class="release-id">AB-037</div><span class="tier">Free</span></div>
+            <div style="text-align:right;"><div class="release-version">medium · 2–4 days</div></div>
+          </div>
+          <h3 class="release-name">Async SQLAlchemy ORM Layer</h3>
+          <p class="release-tagline"><span class="lead">Use when</span>The data model has relationships worth traversing, several places need the same queries, and you want transaction boundaries in one place rather than repeated at every call site.</p><div class="release-foot">
+            <div class="release-tags"><span>PostgreSQL</span><span>Python</span></div>
+            <div class="release-acts"><a class="release-page" href="/blueprints/sqlalchemy-orm/">Details</a><span class="release-cta">Read <span>→</span></span></div>
+          </div></div>
+
+        <div data-tier="free" data-type="blueprint" data-extra="1" class="release"><a class="release-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/structured-output" target="_blank" rel="noopener" aria-label="Structured LLM Output with JSON Schema on GitHub"></a><div class="release-head">
+            <div><div class="release-id">AB-038</div><span class="tier">Free</span></div>
+            <div style="text-align:right;"><div class="release-version">low · 2–3 days</div></div>
+          </div>
+          <h3 class="release-name">Structured LLM Output with JSON Schema</h3>
+          <p class="release-tagline"><span class="lead">Use when</span>The model&#x27;s output feeds code rather than a person — extraction, classification, filling a form, producing arguments for something downstream — and a parse failure is an incident rather than a nuisance.</p><div class="release-foot">
+            <div class="release-tags"><span>Prompting</span></div>
+            <div class="release-acts"><a class="release-page" href="/blueprints/structured-output/">Details</a><span class="release-cta">Read <span>→</span></span></div>
+          </div></div>
+
+        <div data-tier="free" data-type="blueprint" data-extra="1" class="release"><a class="release-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/testing-integration" target="_blank" rel="noopener" aria-label="Integration Tests with Real Dependencies on GitHub"></a><div class="release-head">
+            <div><div class="release-id">AB-039</div><span class="tier">Free</span></div>
+            <div style="text-align:right;"><div class="release-version">medium · 2–4 days</div></div>
+          </div>
+          <h3 class="release-name">Integration Tests with Real Dependencies</h3>
+          <p class="release-tagline"><span class="lead">Use when</span>The interesting failures are in the seams — a query that is wrong, a constraint that fires, a migration that does not apply, a serialisation that differs from what the client expects — and a mocked dependency would have agreed with the code either way.</p><div class="release-foot">
+            <div class="release-tags"><span>Testing</span></div>
+            <div class="release-acts"><a class="release-page" href="/blueprints/testing-integration/">Details</a><span class="release-cta">Read <span>→</span></span></div>
+          </div></div>
+
+        <div data-tier="free" data-type="blueprint" data-extra="1" class="release"><a class="release-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/testing-setup" target="_blank" rel="noopener" aria-label="Test Harness and Unit Tests on GitHub"></a><div class="release-head">
+            <div><div class="release-id">AB-040</div><span class="tier">Free</span></div>
+            <div style="text-align:right;"><div class="release-version">low · 1–2 days</div></div>
+          </div>
+          <h3 class="release-name">Test Harness and Unit Tests</h3>
+          <p class="release-tagline"><span class="lead">Use when</span>A project has no tests, or has tests that nobody trusts — they fail sometimes, they pass when the code is wrong, or they must be run in a particular order. Covers layout, fixtures, factories, mocking the outside world, and a coverage bar that is worth having.</p><div class="release-foot">
+            <div class="release-tags"><span>Testing</span></div>
+            <div class="release-acts"><a class="release-page" href="/blueprints/testing-setup/">Details</a><span class="release-cta">Read <span>→</span></span></div>
+          </div></div>
+
+        <div data-tier="free" data-type="blueprint" data-extra="1" class="release"><a class="release-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/tool-design" target="_blank" rel="noopener" aria-label="LLM Tool Design on GitHub"></a><div class="release-head">
+            <div><div class="release-id">AB-041</div><span class="tier">Free</span></div>
+            <div style="text-align:right;"><div class="release-version">low · 2–4 days</div></div>
+          </div>
+          <h3 class="release-name">LLM Tool Design</h3>
+          <p class="release-tagline"><span class="lead">Use when</span>An agent has more than one tool, and it picks the wrong one, sends malformed arguments, or misreads what came back. Also whenever tool schemas, descriptions or return shapes are being written or reworked.</p><div class="release-foot">
+            <div class="release-tags"><span>Agents</span></div>
+            <div class="release-acts"><a class="release-page" href="/blueprints/tool-design/">Details</a><span class="release-cta">Read <span>→</span></span></div>
+          </div></div>
+
+        <div data-tier="free" data-type="blueprint" data-extra="1" class="release"><a class="release-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/tool-registry" target="_blank" rel="noopener" aria-label="LLM Tool Registry and Dispatcher on GitHub"></a><div class="release-head">
+            <div><div class="release-id">AB-042</div><span class="tier">Free</span></div>
+            <div style="text-align:right;"><div class="release-version">medium · 2–3 days</div></div>
+          </div>
+          <h3 class="release-name">LLM Tool Registry and Dispatcher</h3>
+          <p class="release-tagline"><span class="lead">Use when</span>An agent has more than a handful of tools, they are added by more than one person, and the failures are now operational rather than descriptive — a schema that no longer matches its function, an argument that reached the code unchecked, one slow tool holding up the turn.</p><div class="release-foot">
+            <div class="release-tags"><span>Agents</span></div>
+            <div class="release-acts"><a class="release-page" href="/blueprints/tool-registry/">Details</a><span class="release-cta">Read <span>→</span></span></div>
+          </div></div>
+
+        <div data-tier="free" data-type="blueprint" data-extra="1" class="release"><a class="release-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/validation-at-the-boundary" target="_blank" rel="noopener" aria-label="Input Validation at the API Boundary on GitHub"></a><div class="release-head">
+            <div><div class="release-id">AB-043</div><span class="tier">Free</span></div>
+            <div style="text-align:right;"><div class="release-version">low · 1–2 days</div></div>
+          </div>
+          <h3 class="release-name">Input Validation at the API Boundary</h3>
+          <p class="release-tagline"><span class="lead">Use when</span>Data arrives from anywhere you do not control — HTTP bodies, query strings, webhooks, queue messages, environment variables, third-party responses, model output — and the rest of the code should be able to trust it.</p><div class="release-foot">
+            <div class="release-tags"><span>API</span></div>
+            <div class="release-acts"><a class="release-page" href="/blueprints/validation-at-the-boundary/">Details</a><span class="release-cta">Read <span>→</span></span></div>
+          </div></div>
+
+        <div data-tier="free" data-type="blueprint" data-extra="1" class="release"><a class="release-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/websocket-fastapi" target="_blank" rel="noopener" aria-label="FastAPI WebSocket Endpoint on GitHub"></a><div class="release-head">
+            <div><div class="release-id">AB-044</div><span class="tier">Free</span></div>
+            <div style="text-align:right;"><div class="release-version">medium · 3–5 days</div></div>
+          </div>
+          <h3 class="release-name">FastAPI WebSocket Endpoint</h3>
+          <p class="release-tagline"><span class="lead">Use when</span>The server needs to push — live updates, a chat, a collaborative document, progress on a long job — and polling is either too slow or too expensive.</p><div class="release-foot">
+            <div class="release-tags"><span>FastAPI</span><span>Streaming</span><span>Python</span></div>
+            <div class="release-acts"><a class="release-page" href="/blueprints/websocket-fastapi/">Details</a><span class="release-cta">Read <span>→</span></span></div>
+          </div></div>
+
+        <div data-tier="free" data-type="blueprint" data-extra="1" class="release"><a class="release-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/websocket-redis-pubsub" target="_blank" rel="noopener" aria-label="WebSocket Broadcast with Redis Pub/Sub on GitHub"></a><div class="release-head">
+            <div><div class="release-id">AB-045</div><span class="tier">Free</span></div>
+            <div style="text-align:right;"><div class="release-version">medium · 3–5 days</div></div>
+          </div>
+          <h3 class="release-name">WebSocket Broadcast with Redis Pub/Sub</h3>
+          <p class="release-tagline"><span class="lead">Use when</span>A real-time feature already works on one process and now has to run on more than one — because it was scaled, or because a rolling deploy briefly runs two versions at once. That second case surprises people: you do not need to have chosen horizontal scaling to hit this.</p><div class="release-foot">
+            <div class="release-tags"><span>Redis</span><span>Streaming</span></div>
+            <div class="release-acts"><a class="release-page" href="/blueprints/websocket-redis-pubsub/">Details</a><span class="release-cta">Read <span>→</span></span></div>
+          </div></div>
+
+        <div data-tier="free" data-type="skill" data-extra="1" class="release"><a class="release-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/skills/map" target="_blank" rel="noopener" aria-label="Mapping a repository on GitHub"></a><div class="release-head">
+            <div><div class="release-id">AB-046</div><span class="tier">Free</span></div>
+            <div style="text-align:right;"><div class="release-version"></div></div>
+          </div>
+          <h3 class="release-name">Mapping a repository</h3>
+          <p class="release-tagline"><span class="lead">Use when</span>A skill that draws a codebase&#x27;s architecture as a diagram: scan the repository, infer services, stores and boundaries, and render a map you can read.</p><div class="release-foot">
+            <div class="release-tags"><span>Skill</span></div>
+            <div class="release-acts"><span class="release-cta">Read <span>→</span></span></div>
+          </div></div>
+        <!-- CATALOGUE:END -->
+      </div>
+
+      <div class="more-wrap" style="display:flex; justify-content:center; margin-top:34px;">
+        <button class="cta" type="button" id="more" hidden>
+          <span id="more-label">Show all</span> <span class="arr">→</span>
+        </button>
+      </div>
+
+      <p class="empty" id="cat-error" hidden>
+        The catalogue could not be loaded.
+        <a class="linkish" href="https://github.com/ysz7/awesome-ai-blueprints" target="_blank" rel="noopener">Browse it on GitHub</a>.
+      </p>
+
+      <noscript>
+        <p class="empty">
+          The catalogue is rendered with JavaScript.
+          <a class="linkish" href="https://github.com/ysz7/awesome-ai-blueprints" target="_blank" rel="noopener">Browse it on GitHub</a>.
+        </p>
+      </noscript>
+
+    </div>
+  </section>
+
+
+  <!-- ============= WHAT YOU CAN BUILD ============= -->
+  <section class="section" id="build" style="padding-top:40px">
+    <div class="container">
+      <div class="section-label"><span class="num">02 /</span> What you can build</div>
+      <h2 class="section-headline">
+        The things agents are asked for constantly. <em>Each one has a blueprint.</em>
+      </h2>
+
+      <div class="topics">
+        <div class="topic">
+          <h3>AI agents</h3>
+          <p>
+            How to build an AI agent that stops, reports and can be resumed — rather than a loop
+            with no iteration cap and no idea what it already did. Agent loops with step budgets,
+            LangGraph state graphs with typed state and reducers, tool registries, and a pause
+            where a person approves anything irreversible.
+          </p>
+          <div class="topic-links">
+            <button type="button" data-q="agent">Agent loops</button>
+            <button type="button" data-q="langgraph">LangGraph</button>
+            <button type="button" data-q="tool">Tools</button>
+          </div>
+        </div>
+
+        <div class="topic">
+          <h3>RAG and vector search</h3>
+          <p>
+            How to build a RAG pipeline that answers the second question as well as the first.
+            Chunking and embeddings, pgvector in PostgreSQL, Qdrant with filters, ChromaDB for
+            prototypes, and hybrid search with reciprocal rank fusion for the queries embeddings
+            are blind to — identifiers, error codes, exact phrases.
+          </p>
+          <div class="topic-links">
+            <button type="button" data-q="rag">RAG</button>
+            <button type="button" data-q="vector search">Vector search</button>
+            <button type="button" data-q="chunking">Chunking</button>
+          </div>
+        </div>
+
+        <div class="topic">
+          <h3>MCP servers and clients</h3>
+          <p>
+            How to build an MCP server — over stdio for a developer's own machine, or over HTTP
+            for agents outside your organisation, where authorization, tenancy and rate limits
+            are the whole job. Plus the client side: connecting an agent to Model Context
+            Protocol servers without one slow server stalling every run.
+          </p>
+          <div class="topic-links">
+            <button type="button" data-q="mcp">MCP</button>
+          </div>
+        </div>
+
+        <div class="topic">
+          <h3>LLM plumbing</h3>
+          <p>
+            The parts that decide whether a feature survives contact with users: streaming model
+            output over SSE and rendering it in the browser, structured output with JSON Schema,
+            prompt-injection detection, LLM-as-a-judge evaluation, and tracing that can tell you
+            which run produced the bad answer.
+          </p>
+          <div class="topic-links">
+            <button type="button" data-q="streaming">Streaming</button>
+            <button type="button" data-q="llm">LLM</button>
+            <button type="button" data-q="evals">Evals</button>
+          </div>
+        </div>
+
+        <div class="topic">
+          <h3>The backend underneath</h3>
+          <p>
+            An agent feature still runs on ordinary infrastructure, and this is where agents
+            improvise most. FastAPI routers and versioning, Pydantic schemas and settings,
+            PostgreSQL pooling, async SQLAlchemy, Alembic migrations, Redis caching and rate
+            limits, WebSockets, Docker, GitHub Actions, JWT authentication and session
+            revocation.
+          </p>
+          <div class="topic-links">
+            <button type="button" data-q="fastapi">FastAPI</button>
+            <button type="button" data-q="postgres">PostgreSQL</button>
+            <button type="button" data-q="redis">Redis</button>
+            <button type="button" data-q="docker">Docker</button>
+          </div>
+        </div>
+
+        <div class="topic">
+          <h3>Skills</h3>
+          <p>
+            A skill is a different shape from a blueprint: instructions your agent loads when a
+            task matches, rather than a document you hand it. The catalogue carries these
+            alongside the blueprints and marks which is which.
+          </p>
+          <div class="topic-links">
+            <button type="button" data-q="skill">Skills</button>
+          </div>
+        </div>
       </div>
     </div>
   </section>
@@ -1465,7 +1976,7 @@
   <!-- ============= USE ONE ============= -->
   <section class="section" id="use" style="padding-top:40px">
     <div class="container">
-      <div class="section-label"><span class="num">02 /</span> Get it &amp; use it</div>
+      <div class="section-label"><span class="num">03 /</span> Get it &amp; use it</div>
       <h2 class="section-headline">
         Put them in the project. <em>Then let the agent pick.</em>
       </h2>
@@ -1517,7 +2028,7 @@ using, and why.</pre>
   <!-- ============= THE PROBLEM ============= -->
   <section class="section" id="why" style="padding-top:40px">
     <div class="container">
-      <div class="section-label"><span class="num">03 /</span> Why</div>
+      <div class="section-label"><span class="num">04 /</span> Why</div>
       <h2 class="section-headline">
         Ask an agent to “add payments” and the result <em>looks finished.</em>
       </h2>
@@ -1546,6 +2057,95 @@ using, and why.</pre>
 
         <div class="compare-cell">You find the ways it breaks in production</div>
         <div class="compare-cell right">The ways it breaks are listed up front, with symptom, cause and fix</div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ============= FAQ ============= -->
+  <section class="section" id="faq" style="padding-top:40px">
+    <div class="container">
+      <div class="section-label"><span class="num">05 /</span> Questions</div>
+      <h2 class="section-headline">
+        The things people ask <em>before they try one.</em>
+      </h2>
+
+      <div class="faq">
+        <details>
+          <summary>How do I build an AI agent that doesn't invent its own architecture?</summary>
+          <p class="answer">
+            Give the agent the architecture before it starts, not corrections afterwards. A
+            blueprint is one file stating what to build, in what order, and what it may not do:
+            the components and how they talk, the rules that must not be broken, a build order
+            sequenced by risk, and a checklist where every item is something you can run, query
+            or grep for. The agent reads it, checks the current versions of whatever it is about
+            to use, audits what your project already has, and proposes a plan before writing
+            anything.
+          </p>
+        </details>
+
+        <details>
+          <summary>How do I build an MCP server?</summary>
+          <p class="answer">
+            It depends on who calls it, and the two answers share almost no code. A server on a
+            developer's own machine runs as a subprocess over stdio with that developer's
+            permissions — no authorization, no deployment, an afternoon of work. A server other
+            people point their agents at needs authorization, tenant isolation, rate limits and
+            somewhere to run. The catalogue has a blueprint for each, plus one for the client
+            side.
+          </p>
+        </details>
+
+        <details>
+          <summary>How do I build a RAG pipeline that works in production?</summary>
+          <p class="answer">
+            Most of the answer is decided before retrieval runs. Chunk size, overlap and metadata
+            set the ceiling on quality; re-ingestion has to update rather than duplicate; and
+            embeddings alone are close to blind for identifiers, SKUs and error codes, which is
+            what hybrid search fixes. Then choose a store: pgvector if the data is already in
+            PostgreSQL, Qdrant if filtering dominates, ChromaDB if you need it working today.
+          </p>
+        </details>
+
+        <details>
+          <summary>Will an agent overwrite the code I already have?</summary>
+          <p class="answer">
+            No — every blueprint makes the agent audit the project first. It goes through the
+            checklist item by item, marks each one already true, partly true or absent, names the
+            file that decides it, and reports that before proposing anything. The rule it is
+            given is explicit: never delete a working path to make room for the blueprint's
+            version, and replacing something that works needs a reason from you. Blueprints are
+            written for projects that already exist, not only for empty ones.
+          </p>
+        </details>
+
+        <details>
+          <summary>Does this work with Claude Code, Cursor and Copilot?</summary>
+          <p class="answer">
+            Yes, and with anything else that reads files. For Claude Code, put the folder in the
+            repository and point CLAUDE.md at it. For Cursor or Windsurf, add the file to chat
+            context or drop it in .cursor/rules/. For ChatGPT or Gemini, paste it as the first
+            message. There is nothing to install and no runtime — a blueprint is a Markdown file.
+          </p>
+        </details>
+
+        <details>
+          <summary>Are the blueprints tied to Python?</summary>
+          <p class="answer">
+            The reference implementations are mostly Python, and the architecture is not. The
+            rules, the failure modes and the definition of done hold in any language; the agent
+            translates the idioms rather than importing them. Each blueprint says so at the top
+            and names the equivalents where they exist.
+          </p>
+        </details>
+
+        <details>
+          <summary>What does it cost?</summary>
+          <p class="answer">
+            The published catalogue is free and MIT-licensed — clone it, copy one file, keep it
+            in your repository. Nothing is time-limited and there is no account.
+          </p>
+        </details>
       </div>
     </div>
   </section>
@@ -1783,53 +2383,248 @@ using, and why.</pre>
     vis.observe(root);
   })();
 
-  // Catalogue: search + tier filters
+  // Catalogue: baked into the HTML, refreshed from the repository.
+  //
+  // The cards are written into index.html by the build, so a crawler and a
+  // reader without JavaScript get the whole catalogue and every description.
+  // On load the page fetches catalogue.json and re-renders from it, so a newly
+  // published blueprint appears here without the site being rebuilt. If the
+  // fetch fails, the baked markup is already on screen and nothing is lost.
+  //
+  // The card markup below must stay identical to the build's renderer. Change
+  // one, change the other.
   (function () {
+    const FEED = 'https://raw.githubusercontent.com/ysz7/awesome-ai-blueprints/main/catalogue.json';
+
+    // How many cards show before the reader asks for the rest. The featured
+    // card is not counted: it is one wide card, not one of the sixteen.
+    const LIMIT = 16;
+
     const grid  = document.getElementById('grid');
-    const cards = Array.from(grid.querySelectorAll('.release'));
     const input = document.getElementById('q');
     const clear = document.getElementById('clear');
     const empty = document.getElementById('empty');
-    const chips = Array.from(document.querySelectorAll('.chip'));
+    const error = document.getElementById('cat-error');
+    const count = document.getElementById('cat-count');
+    const more  = document.getElementById('more');
+    const moreLabel = document.getElementById('more-label');
+    const tierChips = Array.from(document.querySelectorAll('#chips-tier .chip'));
+    const typeChips = Array.from(document.querySelectorAll('#chips-type .chip'));
 
-    // index each card once
-    cards.forEach(c => { c.dataset.text = c.textContent.replace(/\s+/g, ' ').toLowerCase(); });
+    const esc = s => String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
 
-    // static counts per tier
-    const counts = { all: cards.length, free: 0, paid: 0 };
-    cards.forEach(c => { counts[c.dataset.tier] = (counts[c.dataset.tier] || 0) + 1; });
-    document.querySelectorAll('.c').forEach(el => { el.textContent = counts[el.dataset.count] || 0; });
+    const metaLine = it => [it.complexity, it.build_time].filter(Boolean).join(' · ');
+    const tagsOf   = it => (it.tags || []).map(x => `<span>${esc(x)}</span>`).join('');
+    const tierOf   = it => (it.tier === 'paid' ? 'Paid' : 'Free');
 
+    // The one link on a card that does not go to GitHub. Everything else on
+    // the card is the overlay anchor; this sits above it.
+    const pageLink = it => it.page_url
+      ? `<a class="release-page" href="${esc(it.page_url)}">Details</a>` : '';
+    const overlay = it => it.url
+      ? `<a class="release-link" href="${esc(it.url)}" target="_blank" rel="noopener" aria-label="${esc(it.title)} on GitHub"></a>` : '';
+
+    function featuredCard(it, id) {
+      const verified = it.verified
+        ? `<div class="release-status"><span class="dot"></span> Verified ${esc(it.verified)}</div>` : '';
+      return `<div data-tier="${esc(it.tier)}" data-type="${esc(it.type)}" class="release featured">
+          ${overlay(it)}
+          <div class="release-head">
+            <div>
+              <div class="release-id">${id} · ${esc(it.id)}</div><span class="tier">${tierOf(it)}</span>
+            </div>
+            <div style="text-align:right; display:flex; flex-direction:column; gap:8px; align-items:flex-end;">
+              <div class="release-version">${esc(metaLine(it))}</div>
+              ${verified}
+            </div>
+          </div>
+          <div class="release-body">
+            <div>
+              <h3 class="release-name">${esc(it.title)}</h3>
+              <p class="release-tagline"><span class="lead">Use when</span>${esc(it.use_when || it.description)}</p>
+            </div>
+            <pre class="terminal" aria-hidden="true"><span class="dim">›</span> <span class="prompt">agent</span> build this from the blueprint
+<span class="dim">→</span> matched blueprint · ${esc(it.id)}
+<span class="dim">→</span> checking current APIs · reading the project
+<span class="dim">→</span> audit · what is already true · what is absent
+<span class="out">plan ready.</span> gap only, risk-ordered<span class="cursor"></span></pre>
+          </div>
+          <div class="release-foot">
+            <div class="release-tags">${tagsOf(it)}</div>
+            <div class="release-acts">${pageLink(it)}<span class="release-cta">Read the blueprint <span>→</span></span></div>
+          </div>
+        </div>`;
+    }
+
+    function plainCard(it, id, extra) {
+      const head = `<div class="release-head">
+            <div><div class="release-id">${id}</div><span class="tier">${tierOf(it)}</span></div>
+            <div style="text-align:right;"><div class="release-version">${esc(metaLine(it))}</div></div>
+          </div>
+          <h3 class="release-name">${esc(it.title)}</h3>
+          <p class="release-tagline"><span class="lead">Use when</span>${esc(it.use_when || it.description)}</p>`;
+      const foot = cta => `<div class="release-foot">
+            <div class="release-tags">${tagsOf(it)}</div>
+            <div class="release-acts">${pageLink(it)}<span class="release-cta">${cta}</span></div>
+          </div>`;
+      const mark = extra ? ' data-extra="1"' : '';
+      // A paid item with nowhere to send the reader gets no overlay: a dead
+      // anchor looks clickable and is worse than none.
+      const cta = it.url ? 'Read <span>→</span>' : 'Coming soon';
+      return `<div data-tier="${esc(it.tier)}" data-type="${esc(it.type)}"${mark} class="release${it.url ? '' : ' queued'}">${overlay(it)}${head}${foot(cta)}</div>`;
+    }
+
+    let cards = [];
+    let featuredCount = 0;
     let tier = 'all';
+    let type = 'all';
+    let expanded = false;
+
+    function index() {
+      cards = Array.from(grid.querySelectorAll('.release'));
+      featuredCount = cards.filter(c => c.classList.contains('featured')).length;
+      // Index each card's visible text once, so a keystroke is a substring test
+      // rather than a walk of the DOM.
+      cards.forEach(c => { c.dataset.text = c.textContent.replace(/\s+/g, ' ').toLowerCase(); });
+
+      const byTier = { all: cards.length, free: 0, paid: 0 };
+      const byType = { all: cards.length };
+      cards.forEach(c => {
+        byTier[c.dataset.tier] = (byTier[c.dataset.tier] || 0) + 1;
+        byType[c.dataset.type] = (byType[c.dataset.type] || 0) + 1;
+      });
+      document.querySelectorAll('.c[data-count]').forEach(el => {
+        el.textContent = byTier[el.dataset.count] || 0;
+      });
+      document.querySelectorAll('.c[data-count-type]').forEach(el => {
+        el.textContent = byType[el.dataset.countType] || 0;
+      });
+      // A kind with nothing in it is not a filter, it is an advertisement for
+      // an empty shelf. Hide the chip until something lands in that category;
+      // it reappears on its own when the feed carries one.
+      typeChips.forEach(ch => {
+        const key = ch.dataset.type;
+        ch.hidden = key !== 'all' && !byType[key];
+      });
+      // If every kind but one is empty, the row asks a question with one answer.
+      const kindsPresent = typeChips.filter(ch => ch.dataset.type !== 'all' && !ch.hidden).length;
+      const typeRow = document.getElementById('chips-type');
+      if (typeRow) typeRow.hidden = kindsPresent < 2;
+    }
 
     function apply() {
       const q = input.value.trim().toLowerCase();
-      let shown = 0;
+      // While searching or filtering, the collapse is off. A blueprint the
+      // reader asked for must not be missing because it sat past the sixteenth
+      // card - that would make the search quietly wrong.
+      const filtering = q !== '' || tier !== 'all' || type !== 'all';
+      const collapsed = !filtering && !expanded;
+
+      let matched = 0;
+      let plainShown = 0;
       cards.forEach(c => {
-        const ok = (tier === 'all' || c.dataset.tier === tier) && (!q || c.dataset.text.includes(q));
-        c.hidden = !ok;
-        c.classList.toggle('is-hidden', !ok);
-        if (ok) shown++;
+        const isFeatured = c.classList.contains('featured');
+        const ok = (tier === 'all' || c.dataset.tier === tier)
+                && (type === 'all' || c.dataset.type === type)
+                && (!q || c.dataset.text.includes(q));
+        if (ok) matched++;
+        let visible = ok;
+        if (ok && !isFeatured) {
+          if (collapsed && plainShown >= LIMIT) visible = false;
+          else plainShown++;
+        }
+        c.hidden = !visible;
+        c.classList.toggle('is-hidden', !visible);
       });
-      empty.hidden = shown > 0;
+
+      empty.hidden = matched > 0;
       clear.hidden = !q;
+
+      const hiddenByCollapse = collapsed && (matched - featuredCount) > LIMIT;
+      more.hidden = !hiddenByCollapse;
+      if (hiddenByCollapse && moreLabel) moreLabel.textContent = 'Show all ' + matched;
+    }
+
+    function render(items) {
+      let plain = 0;
+      grid.innerHTML = items.map((it, i) => {
+        const id = 'AB-' + String(i + 1).padStart(3, '0');
+        if (i === 0 && it.url) return featuredCard(it, id);
+        const extra = plain >= LIMIT;
+        plain++;
+        return plainCard(it, id, extra);
+      }).join('');
+      grid.removeAttribute('aria-busy');
+      index();
+      // The headline counts blueprints, not catalogue entries: the skill is
+      // listed in the same grid but it is not a blueprint.
+      if (count) count.textContent = items.filter(x => x.type === 'blueprint' && x.tier === 'free').length;
+      apply();
     }
 
     input.addEventListener('input', apply);
     clear.addEventListener('click', () => { input.value = ''; input.focus(); apply(); });
-    chips.forEach(ch => ch.addEventListener('click', () => {
-      chips.forEach(o => o.classList.toggle('is-on', o === ch));
+    tierChips.forEach(ch => ch.addEventListener('click', () => {
+      tierChips.forEach(o => o.classList.toggle('is-on', o === ch));
       tier = ch.dataset.tier;
+      apply();
+    }));
+    typeChips.forEach(ch => ch.addEventListener('click', () => {
+      typeChips.forEach(o => o.classList.toggle('is-on', o === ch));
+      type = ch.dataset.type;
       apply();
     }));
     document.getElementById('reset').addEventListener('click', () => {
       input.value = '';
-      chips.forEach(o => o.classList.toggle('is-on', o.dataset.tier === 'all'));
+      tierChips.forEach(o => o.classList.toggle('is-on', o.dataset.tier === 'all'));
+      typeChips.forEach(o => o.classList.toggle('is-on', o.dataset.type === 'all'));
       tier = 'all';
+      type = 'all';
+      expanded = false;
       apply();
     });
+    more.addEventListener('click', () => {
+      expanded = true;
+      apply();
+      // Move focus to the first card that was just revealed, so a keyboard
+      // reader is not left at a button that has disappeared.
+      const revealed = cards.filter(c => c.dataset.extra === '1' && !c.hidden)[0];
+      if (revealed) revealed.setAttribute('tabindex', '-1'), revealed.focus({ preventScroll: true });
+    });
+
+    index();
     apply();
+
+    fetch(FEED, { cache: 'no-cache' })
+      .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(data => {
+        const items = (data.items || []);
+        if (!items.length) throw new Error('empty catalogue');
+        render(items);
+      })
+      .catch(() => {
+        // The baked markup is already on screen, so there is nothing to repair
+        // and nothing to apologise for. The notice appears only when the grid
+        // is genuinely empty - a page served without its generated block.
+        if (!cards.length) {
+          empty.hidden = true;
+          error.hidden = false;
+        }
+      });
   })();
+
+  // Topic links: prefill the catalogue search and scroll to it. A link that
+  // just jumps to the grid leaves the reader to find the thing themselves.
+  document.querySelectorAll('.topic-links button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const q = document.getElementById('q');
+      q.value = btn.dataset.q;
+      q.dispatchEvent(new Event('input'));
+      document.getElementById('blueprints').scrollIntoView({ behavior: 'smooth' });
+    });
+  });
 
   // Copy buttons
   document.querySelectorAll('.copy').forEach(btn => {

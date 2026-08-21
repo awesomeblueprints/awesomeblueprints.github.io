@@ -1,0 +1,586 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>FastAPI WebSocket Endpoint — Blueprint for AI Coding Agents | Awesome Blueprints</title>
+<meta name="description" content="A FastAPI WebSocket endpoint: connection lifecycle, authentication, heartbeats, backpressure and cleaning up when a client vanishes." />
+<link rel="canonical" href="https://awesomeblueprints.com/blueprints/websocket-fastapi/" />
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="Awesome Blueprints" />
+<meta property="og:url" content="https://awesomeblueprints.com/blueprints/websocket-fastapi/" />
+<meta property="og:title" content="FastAPI WebSocket Endpoint — Architecture Blueprint" />
+<meta property="og:description" content="A FastAPI WebSocket endpoint: connection lifecycle, authentication, heartbeats, backpressure and cleaning up when a client vanishes." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="FastAPI WebSocket Endpoint — Architecture Blueprint" />
+<meta name="twitter:description" content="A FastAPI WebSocket endpoint: connection lifecycle, authentication, heartbeats, backpressure and cleaning up when a client vanishes." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/page.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "FastAPI WebSocket Endpoint", "description": "A FastAPI WebSocket endpoint: connection lifecycle, authentication, heartbeats, backpressure and cleaning up when a client vanishes.", "url": "https://awesomeblueprints.com/blueprints/websocket-fastapi/", "dateModified": "2026-08-19", "keywords": "FastAPI, Streaming, Python", "isAccessibleForFree": true, "license": "https://opensource.org/licenses/MIT", "publisher": {"@type": "Organization", "name": "Awesome Blueprints", "url": "https://awesomeblueprints.com"}}</script>
+<script>
+  (function () {
+    var t;
+    try { t = localStorage.getItem('ab-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">Awesome Blueprints</a>
+    <div class="nav-right">
+      <a class="nav-link" href="/#blueprints">Catalogue</a>
+      <a class="nav-link" href="/#faq">FAQ</a>
+      <a class="nav-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/websocket-fastapi" target="_blank" rel="noopener">GitHub ↗</a>
+      <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Switch theme">◑</button>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/">Home</a> <span>/</span> <a href="/#blueprints">Blueprints</a> <span>/</span>
+    <span>FastAPI WebSocket Endpoint</span>
+  </nav>
+
+  <header class="page-head">
+    <p class="eyebrow">websocket-fastapi</p>
+    <h1>FastAPI WebSocket Endpoint</h1>
+    <p class="lede">A FastAPI WebSocket endpoint: connection lifecycle, authentication, heartbeats, backpressure and cleaning up when a client vanishes.</p>
+    <div class="facts"><span>medium</span><span>3–5 days</span><span>Verified 2026-08-19</span></div>
+    <div class="tags"><span class="tag">FastAPI</span><span class="tag">Streaming</span><span class="tag">Python</span></div>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/websocket-fastapi" target="_blank" rel="noopener">Read it on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Back to the catalogue</a>
+    </div>
+  </header>
+
+  <article class="doc">
+<blockquote>
+<p>A bidirectional channel with authentication at the handshake, rooms, a
+heartbeat that detects the half-open connections TCP will not, and a rule for
+the slow client — because in a broadcast someone is always slow, and waiting
+for them stalls everyone else.</p>
+</blockquote>
+<p><strong>Complexity:</strong> medium · <strong>Typical build:</strong> 3–5 days · <strong>Verified:</strong> 2026-08-19 (re-check after ~90 days)</p>
+<p><strong>Examples in:</strong> Python, with FastAPI and Starlette's WebSocket API. The architecture is language-agnostic: sections 5, 10 and 11 hold wherever you build this. Section 4 is illustrative — if your project is in another language, your agent translates the idioms rather than importing them, and nothing is lost. The equivalents are <code>ws</code> or Socket.IO in Node, Phoenix Channels in Elixir — which solve most of §10 for you — and <code>gorilla/websocket</code> in Go.</p>
+<p><strong>Use when:</strong> the server needs to push — live updates, a chat, a collaborative document, progress on a long job — and polling is either too slow or too expensive.</p>
+<p><strong>Not for:</strong> a stream that only flows from server to client, where server-sent events are simpler, survive proxies better and reconnect on their own. Also not for request-response dressed up as a socket: if every message expects exactly one reply, you have written HTTP with worse tooling and no caching. And not, on its own, for more than one replica — an in-process connection registry stops working at the second one.</p>
+<hr />
+<h2>⚙️ INSTRUCTIONS FOR THE AI — READ BEFORE WRITING ANY CODE</h2>
+<p><strong>Do not start coding.</strong></p>
+<p><strong>Step 1 — Refresh.</strong> Verify the framework's WebSocket API: how to accept with a
+negotiated subprotocol, how disconnects are surfaced, and whether concurrent sends
+on one connection are safe — in most implementations they are not, and that is a
+runtime error rather than a documented constraint. Verify what sits in front of
+the application: a proxy or load balancer needs explicit configuration to allow
+the upgrade and an idle timeout longer than your heartbeat, and this is where most
+"works locally, drops in production" reports come from. Report what you verified
+and what turned out wrong.</p>
+<p><strong>Step 2 — Read the project, then audit what already exists.</strong> Find how HTTP
+requests are authenticated today, because the WebSocket handshake cannot reuse it
+directly — a browser cannot set an <code>Authorization</code> header on a WebSocket. Find the
+replica count and whether it will ever exceed one; if it will, note that this
+blueprint's registry does not survive that and a second one is needed. Find the
+proxy's idle timeout. Then audit §11 item by item, each marked <em>already true</em>,
+<em>partly true</em> or <em>absent</em>, with the file that decides it, reported before anything
+is proposed.</p>
+<p>Assume the project is right until it demonstrably is not; code satisfying an item
+stays even where its shape differs from §4; replacing something that works needs a
+one-line reason; never delete a working path to make room for the blueprint's
+version. The same holds for language — §4 is illustrative, its idioms get
+translated into the project's language, and §11 is what has to become true rather
+than the syntax.</p>
+<p><strong>Step 3 — Write a plan for the gap only, and get it approved</strong>, including a
+<code>## Proposed stack</code> section, the chosen handshake authentication method with a
+reason, and the policy for a client that cannot keep up. Do not ask open framework
+questions — propose, and ask for confirmation once. Say what you are adding, what
+you are leaving alone, and what you propose to change, and touch nothing else.</p>
+<p><strong>Step 4 — Build in the order in §7.</strong> <strong>Step 5 — §11 is the definition of done.</strong></p>
+<hr />
+<h2>1. Why the tutorial WebSocket falls over</h2>
+<p>The tutorial version accepts a connection, appends it to a list, and broadcasts by
+looping over the list. Four things go wrong, all of them in production only.</p>
+<table>
+<thead>
+<tr>
+<th>The tutorial endpoint</th>
+<th>This one</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Anyone who can reach the URL is connected; authentication is added "later"</td>
+<td>The connection is rejected during the handshake if the token is bad</td>
+</tr>
+<tr>
+<td>A disconnected client is removed when a send fails — so the list holds dead entries until the next broadcast</td>
+<td>Removal happens in a <code>finally</code>, so it happens even when the handler raises</td>
+</tr>
+<tr>
+<td>Broadcast awaits each send, so one slow client stalls the room</td>
+<td>Sends are independent, and a client that cannot keep up is disconnected</td>
+</tr>
+<tr>
+<td>A connection that died without a close frame stays in the list forever</td>
+<td>A heartbeat detects it, because TCP will not</td>
+</tr>
+</tbody>
+</table>
+<p>The third row is the one that is invisible until it is an outage. Awaiting each
+send is backpressure, and backpressure is correct for one connection. Across a
+room it means the whole broadcast runs at the speed of the worst connection —
+which is usually a phone on a train that has already stopped receiving. Libraries
+built for this abandon backpressure during a broadcast on purpose: <strong>slowing every
+client to let the slowest catch up is the wrong trade, because the slowest is
+about to time out anyway.</strong></p>
+<p>The fourth row explains most "ghost user" reports. A laptop that closes its lid
+sends nothing. TCP will not notice for a long time, and the socket looks open. The
+only thing that finds it is a heartbeat with a deadline.</p>
+<h2>2. Architecture</h2>
+<pre class="mermaid">%% GENERATED - do not edit by hand.
+%% Edit the source header in architecture.mmd, then rebuild.
+%% WebSocket connection lifecycle
+
+flowchart TB
+    client([&quot;Browser client&quot;])
+    handshake[&quot;Upgrade request&quot;]
+    auth[&quot;Handshake authentication&quot;]
+    registry[&quot;Connection registry, in this process&quot;]
+    rooms[&quot;Room membership&quot;]
+    reader[&quot;Receive loop&quot;]
+    writer[&quot;Per connection send queue&quot;]
+    heartbeat[&quot;Heartbeat and deadline&quot;]
+    shutdown[&quot;Graceful shutdown&quot;]
+    proxy{{&quot;Reverse proxy&quot;}}
+    closed([&quot;Connection closed&quot;])
+
+    client --&gt;|&quot;upgrade&quot;| proxy
+    proxy --&gt;|&quot;forwarded, idle timeout longer than the heartbeat&quot;| handshake
+    handshake --&gt;|&quot;token from the subprotocol&quot;| auth
+    auth -.-&gt;|&quot;rejected before accept&quot;| closed
+    auth --&gt;|&quot;accepted&quot;| registry
+    registry --- rooms
+    registry --- reader
+    registry --- writer
+    reader --&gt;|&quot;join and leave&quot;| rooms
+    rooms --&gt;|&quot;one message fanned out&quot;| writer
+    writer -.-&gt;|&quot;drops a client that cannot keep up&quot;| client
+    heartbeat --&gt;|&quot;ping on a schedule&quot;| writer
+    heartbeat -.-&gt;|&quot;no pong before the deadline&quot;| closed
+    shutdown --&gt;|&quot;close frame to everyone, then exit&quot;| writer
+
+    classDef service fill:#eff6ff,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b;
+    classDef datastore fill:#e9faf3,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b;
+    classDef external fill:#fff4ed,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b;
+    classDef actor fill:#f0eefc,stroke:#4a3aa7,stroke-width:1.5px,color:#0b0b0b;
+    class handshake,auth,registry,rooms,reader,writer,heartbeat,shutdown service;
+    class proxy external;
+    class client,closed actor;</pre>
+<p>The rule the diagram encodes: <strong>every connection has exactly one writer.</strong> Two
+tasks sending on one socket interleave frames and corrupt the stream — in most
+implementations that is a runtime error, and in the rest it is worse. Fanning out
+through a per-connection queue is what makes the single-writer rule hold without
+anyone having to remember it.</p>
+<h2>3. Project structure</h2>
+<div class="hl"><pre><span></span><code>app/ws/
+├── auth.py         handshake authentication — the only place a socket is rejected
+├── registry.py     connections, rooms, the per-connection send queue
+├── protocol.py     the message envelope both sides agree on
+└── routes.py       the endpoint: accept, receive loop, finally-disconnect
+</code></pre></div>
+
+<p><strong>One rule: the registry is the only thing holding a socket object.</strong> A handler
+that captures a socket and outlives the connection sends into a closed transport,
+and the resulting error surfaces somewhere unrelated. Everything else refers to a
+connection by id.</p>
+<h2>4. Reference implementation</h2>
+<div class="hl"><pre><span></span><code><span class="c1"># app/ws/auth.py</span>
+<span class="kn">from</span> <span class="nn">fastapi</span> <span class="kn">import</span> <span class="n">WebSocket</span><span class="p">,</span> <span class="n">status</span>
+
+<span class="n">SUBPROTOCOL_PREFIX</span> <span class="o">=</span> <span class="s2">&quot;bearer.&quot;</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">authenticate</span><span class="p">(</span><span class="n">ws</span><span class="p">:</span> <span class="n">WebSocket</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">User</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Authenticate during the handshake, before accept().</span>
+
+<span class="sd">    A browser cannot set an Authorization header on a WebSocket, so the token has</span>
+<span class="sd">    to travel another way. The subprotocol header is the least bad option: unlike a</span>
+<span class="sd">    query string it is not written to access logs, not kept in browser history, and</span>
+<span class="sd">    not leaked in a Referer. Cookies work too, and bring CSRF along with them.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">offered</span> <span class="o">=</span> <span class="n">ws</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;sec-websocket-protocol&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+    <span class="n">token</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span>
+        <span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">strip</span><span class="p">()[</span><span class="nb">len</span><span class="p">(</span><span class="n">SUBPROTOCOL_PREFIX</span><span class="p">):]</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">offered</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;,&quot;</span><span class="p">)</span>
+         <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">SUBPROTOCOL_PREFIX</span><span class="p">)),</span>
+        <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">token</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">await</span> <span class="n">ws</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="n">code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">WS_1008_POLICY_VIOLATION</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">claims</span> <span class="o">=</span> <span class="n">decode_access_token</span><span class="p">(</span><span class="n">token</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+        <span class="c1"># Reject before accept: an unauthenticated socket is never registered, so</span>
+        <span class="c1"># there is no window in which it could be broadcast to.</span>
+        <span class="k">await</span> <span class="n">ws</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="n">code</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">WS_1008_POLICY_VIOLATION</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">return</span> <span class="k">await</span> <span class="n">load_user</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">claims</span><span class="p">[</span><span class="s2">&quot;sub&quot;</span><span class="p">]))</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/ws/registry.py</span>
+<span class="kn">import</span> <span class="nn">asyncio</span>
+<span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
+
+<span class="n">SEND_QUEUE_MAX</span> <span class="o">=</span> <span class="mi">64</span>          <span class="c1"># messages, not bytes — tune against your message size</span>
+
+
+<span class="nd">@dataclass</span>
+<span class="k">class</span> <span class="nc">Connection</span><span class="p">:</span>
+    <span class="nb">id</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">user_id</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">socket</span><span class="p">:</span> <span class="n">WebSocket</span>
+    <span class="c1"># One queue, one writer task. Two tasks calling send() on one socket interleave</span>
+    <span class="c1"># frames; most implementations raise, and the ones that do not corrupt the stream.</span>
+    <span class="n">outbox</span><span class="p">:</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Queue</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Queue</span><span class="p">(</span><span class="n">SEND_QUEUE_MAX</span><span class="p">))</span>
+    <span class="n">rooms</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">set</span><span class="p">)</span>
+
+
+<span class="k">class</span> <span class="nc">Registry</span><span class="p">:</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_conns</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Connection</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_rooms</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">writer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">conn</span><span class="p">:</span> <span class="n">Connection</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="n">message</span> <span class="o">=</span> <span class="k">await</span> <span class="n">conn</span><span class="o">.</span><span class="n">outbox</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">message</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">return</span>
+            <span class="k">await</span> <span class="n">conn</span><span class="o">.</span><span class="n">socket</span><span class="o">.</span><span class="n">send_text</span><span class="p">(</span><span class="n">message</span><span class="p">)</span>     <span class="c1"># the only send() in the codebase</span>
+
+    <span class="k">def</span> <span class="nf">broadcast</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">room</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Not a coroutine, deliberately.</span>
+
+<span class="sd">        Awaiting each send makes the broadcast run at the speed of the slowest</span>
+<span class="sd">        client — usually one that has already stopped receiving. Instead each</span>
+<span class="sd">        connection gets the message in its own bounded queue, and a client that</span>
+<span class="sd">        cannot drain its queue is disconnected rather than allowed to slow the room.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">cid</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_rooms</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">room</span><span class="p">,</span> <span class="p">())):</span>
+            <span class="n">conn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_conns</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">cid</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">conn</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">conn</span><span class="o">.</span><span class="n">outbox</span><span class="o">.</span><span class="n">put_nowait</span><span class="p">(</span><span class="n">message</span><span class="p">)</span>
+            <span class="k">except</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">QueueFull</span><span class="p">:</span>
+                <span class="c1"># A full queue means this client is not keeping up. Dropping the</span>
+                <span class="c1"># message would leave it silently out of sync, which is worse than</span>
+                <span class="c1"># a disconnect it can detect and recover from by reconnecting.</span>
+                <span class="n">asyncio</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">disconnect</span><span class="p">(</span><span class="n">cid</span><span class="p">,</span> <span class="n">code</span><span class="o">=</span><span class="mi">1013</span><span class="p">))</span>   <span class="c1"># try again later</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">disconnect</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cid</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">code</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1000</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">conn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_conns</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">cid</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">conn</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>                                   <span class="c1"># already gone; idempotent on purpose</span>
+        <span class="k">for</span> <span class="n">room</span> <span class="ow">in</span> <span class="n">conn</span><span class="o">.</span><span class="n">rooms</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_rooms</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">room</span><span class="p">,</span> <span class="nb">set</span><span class="p">())</span><span class="o">.</span><span class="n">discard</span><span class="p">(</span><span class="n">cid</span><span class="p">)</span>
+        <span class="k">await</span> <span class="n">conn</span><span class="o">.</span><span class="n">outbox</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+        <span class="k">with</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">suppress</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
+            <span class="k">await</span> <span class="n">conn</span><span class="o">.</span><span class="n">socket</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="n">code</span><span class="o">=</span><span class="n">code</span><span class="p">)</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/ws/routes.py</span>
+<span class="nd">@router</span><span class="o">.</span><span class="n">websocket</span><span class="p">(</span><span class="s2">&quot;/ws&quot;</span><span class="p">)</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">websocket_endpoint</span><span class="p">(</span><span class="n">ws</span><span class="p">:</span> <span class="n">WebSocket</span><span class="p">):</span>
+    <span class="n">user</span> <span class="o">=</span> <span class="k">await</span> <span class="n">authenticate</span><span class="p">(</span><span class="n">ws</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">user</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span>
+
+    <span class="c1"># Echo the subprotocol back, or the browser rejects the handshake it offered.</span>
+    <span class="k">await</span> <span class="n">ws</span><span class="o">.</span><span class="n">accept</span><span class="p">(</span><span class="n">subprotocol</span><span class="o">=</span><span class="n">ws</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;sec-websocket-protocol&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;,&quot;</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">strip</span><span class="p">())</span>
+    <span class="n">conn</span> <span class="o">=</span> <span class="n">registry</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">user</span><span class="p">,</span> <span class="n">ws</span><span class="p">)</span>
+    <span class="n">writer</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span><span class="n">registry</span><span class="o">.</span><span class="n">writer</span><span class="p">(</span><span class="n">conn</span><span class="p">))</span>
+    <span class="n">beat</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span><span class="n">heartbeat</span><span class="p">(</span><span class="n">conn</span><span class="p">))</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="n">raw</span> <span class="o">=</span> <span class="k">await</span> <span class="n">ws</span><span class="o">.</span><span class="n">receive_text</span><span class="p">()</span>
+            <span class="k">await</span> <span class="n">handle</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">raw</span><span class="p">)</span>
+    <span class="k">except</span> <span class="n">WebSocketDisconnect</span><span class="p">:</span>
+        <span class="k">pass</span>
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="c1"># finally, always. Cleaning up only on the WebSocketDisconnect path leaks a</span>
+        <span class="c1"># registry entry every time a handler raises for any other reason — and the</span>
+        <span class="c1"># leak is invisible until a broadcast sends into a dead socket.</span>
+        <span class="n">beat</span><span class="o">.</span><span class="n">cancel</span><span class="p">()</span>
+        <span class="n">writer</span><span class="o">.</span><span class="n">cancel</span><span class="p">()</span>
+        <span class="k">await</span> <span class="n">registry</span><span class="o">.</span><span class="n">disconnect</span><span class="p">(</span><span class="n">conn</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">heartbeat</span><span class="p">(</span><span class="n">conn</span><span class="p">:</span> <span class="n">Connection</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="c1"># TCP does not tell you the client is gone. A laptop that closed its lid sends</span>
+    <span class="c1"># nothing and the socket stays open for as long as the network lets it. The</span>
+    <span class="c1"># ping/pong deadline is the only thing that finds this.</span>
+    <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+        <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">HEARTBEAT_SECONDS</span><span class="p">)</span>       <span class="c1"># must be under the proxy&#39;s idle timeout</span>
+        <span class="n">conn</span><span class="o">.</span><span class="n">last_ping</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span>
+        <span class="k">await</span> <span class="n">conn</span><span class="o">.</span><span class="n">outbox</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">PING</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span> <span class="o">-</span> <span class="n">conn</span><span class="o">.</span><span class="n">last_pong</span> <span class="o">&gt;</span> <span class="n">HEARTBEAT_SECONDS</span> <span class="o">*</span> <span class="mf">2.5</span><span class="p">:</span>
+            <span class="k">await</span> <span class="n">registry</span><span class="o">.</span><span class="n">disconnect</span><span class="p">(</span><span class="n">conn</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">code</span><span class="o">=</span><span class="mi">1001</span><span class="p">)</span>
+            <span class="k">return</span>
+</code></pre></div>
+
+<h2>5. Golden-standard rules</h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Forbidden:</strong> accepting the connection before authenticating it</td>
+<td>An accepted socket is a registered socket, and there is then a window in which it receives broadcasts it should never see.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> the token in the query string</td>
+<td>It lands in access logs, browser history and referrer headers, all of which outlive the session. Use the subprotocol header or a cookie.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> two tasks sending on one socket</td>
+<td>Frames interleave. Most implementations raise; the ones that do not corrupt the stream. One writer per connection, fed by a queue.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> an unbounded send queue</td>
+<td>It converts a slow client into unbounded memory growth, and the process dies for a reason that looks nothing like its cause.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> awaiting each send inside a broadcast</td>
+<td>The room then runs at the speed of its worst connection, which is usually one that has already stopped receiving.</td>
+</tr>
+<tr>
+<td>Cleanup happens in a <code>finally</code></td>
+<td>Removing the connection only on the disconnect exception leaks an entry every time a handler raises for another reason.</td>
+</tr>
+<tr>
+<td>A client that cannot drain its queue is disconnected</td>
+<td>Dropping messages instead leaves it silently out of sync, which is harder to detect than a reconnect.</td>
+</tr>
+<tr>
+<td>Heartbeat interval is below the proxy's idle timeout</td>
+<td>Otherwise the proxy closes connections that both ends believe are healthy, on a schedule nobody connects to the cause.</td>
+</tr>
+<tr>
+<td>A missed heartbeat deadline closes the connection</td>
+<td>TCP will not report a client that vanished. This is the only detection you have.</td>
+</tr>
+<tr>
+<td>Every message carries a type and a version</td>
+<td>A socket outlives a deploy. Both ends must be able to skip a message shape they do not understand.</td>
+</tr>
+<tr>
+<td>Shutdown sends a close frame before exiting</td>
+<td>Otherwise every client reconnects on a timeout, and a rolling deploy becomes a reconnect storm.</td>
+</tr>
+<tr>
+<td>Disconnect is idempotent</td>
+<td>It is called from the receive loop, the writer, the heartbeat and shutdown, sometimes at once.</td>
+</tr>
+</tbody>
+</table>
+<h2>6. Data contracts</h2>
+<div class="hl"><pre><span></span><code><span class="p">{</span><span class="nt">&quot;v&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;order.updated&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;room&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;orders:42&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;01J...&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{}}</span><span class="w"></span>
+</code></pre></div>
+
+<p><code>v</code> and <code>type</code> are what let a client survive a deploy: a message type it does not
+know is skipped rather than fatal. <code>id</code> is what makes reconnection recoverable —
+without a monotonic identifier, a client that reconnects cannot ask for what it
+missed, and "did I miss anything" has no answer.</p>
+<p>The close code is part of the contract too. <code>1000</code> is a normal close and the
+client should not retry immediately; <code>1008</code> is a policy violation and retrying
+with the same token is pointless; <code>1013</code> means try again later. A client that
+treats every close identically reconnects in a tight loop against a server that
+just rejected it.</p>
+<h2>7. Build order</h2>
+<ol>
+<li><strong>Accept, echo, disconnect</strong> — with cleanup in a <code>finally</code> from the first
+   version, because retrofitting it means auditing every exit path.</li>
+<li><strong>Handshake authentication</strong>, with a test that a bad token is rejected before
+   accept.</li>
+<li><strong>Registry and rooms</strong>, with a test that a disconnect removes membership.</li>
+<li><strong>The per-connection writer and queue</strong>, then a test asserting two concurrent
+   broadcasts do not interleave on one socket.</li>
+<li><strong>The slow-client policy</strong>: a test with a client that never reads, asserting it
+   is disconnected and the others still receive.</li>
+<li><strong>Heartbeat</strong>, with a test that a client which stops responding is closed within
+   the deadline.</li>
+<li><strong>Graceful shutdown</strong> sending close frames, and the message envelope with its
+   version.</li>
+</ol>
+<p>Step 5 before step 6 because the slow client is the failure that takes down the
+room, while the missed heartbeat only leaks one entry.</p>
+<h2>8. Blocks to pull in</h2>
+<p>Nothing here is a prerequisite. These are adjacent problems, by name only —
+resolve them separately if they apply.</p>
+<ul>
+<li>WebSocket broadcast with Redis pub/sub — what this needs at the second replica</li>
+<li>JWT access token authentication — the token the handshake verifies</li>
+<li>Redis cache layer — where message history for reconnection would live</li>
+<li>Observability and tracing — connection counts, queue depth and disconnect reasons</li>
+</ul>
+<h2>9. Metrics</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Registry entries for connections that are gone</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Time to detect a client that vanished without closing</td>
+<td>&lt; 2.5 heartbeat intervals</td>
+</tr>
+<tr>
+<td>Send queue depth, p99</td>
+<td>&lt; 10% of the bound</td>
+</tr>
+<tr>
+<td>Broadcast latency to a room of 1000, p99</td>
+<td>&lt; 100 ms, and independent of the slowest client</td>
+</tr>
+<tr>
+<td>Memory per idle connection</td>
+<td>Bounded and measured; it multiplies by the connection count</td>
+</tr>
+<tr>
+<td>Reconnects caused by a deploy that were not preceded by a close frame</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<h2>10. Failure modes</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Users appear online who left hours ago</td>
+<td>The client vanished without a close frame and TCP never reported it</td>
+<td>Heartbeat with a deadline that closes the connection</td>
+</tr>
+<tr>
+<td>A whole room stops receiving updates whenever one user is on a bad network</td>
+<td>The broadcast awaits each send, so it runs at the slowest client's speed</td>
+<td>Per-connection queues; disconnect the client that cannot keep up</td>
+</tr>
+<tr>
+<td>Memory grows steadily with connection count and never returns</td>
+<td>Unbounded send queues, or registry entries never removed</td>
+<td>Bound the queue; clean up in a <code>finally</code></td>
+</tr>
+<tr>
+<td><code>RuntimeError</code> about concurrent sends, under load only</td>
+<td>Two tasks called send on the same socket</td>
+<td>One writer task per connection, fed by a queue</td>
+</tr>
+<tr>
+<td>Connections drop at a suspiciously regular interval</td>
+<td>The proxy's idle timeout is shorter than the heartbeat</td>
+<td>Heartbeat more often than the proxy's timeout</td>
+</tr>
+<tr>
+<td>It works locally and the upgrade fails in production</td>
+<td>The proxy was not configured to forward the upgrade headers</td>
+<td>Configure it; test through the proxy, not around it</td>
+</tr>
+<tr>
+<td>Every deploy causes a reconnect storm that overloads the new instances</td>
+<td>Shutdown killed sockets without close frames, so every client retried on its own timeout</td>
+<td>Send close frames on shutdown; have clients back off with jitter</td>
+</tr>
+<tr>
+<td>A client reconnects in a tight loop against a rejecting server</td>
+<td>It treats every close code the same</td>
+<td>Distinguish the codes: a policy violation must not be retried immediately</td>
+</tr>
+<tr>
+<td>After a deploy, some clients disconnect on an unrecognised message</td>
+<td>The message shape changed without a version, and old clients treat the unknown as fatal</td>
+<td>Version the envelope; skip unknown types</td>
+</tr>
+<tr>
+<td>A user in one room receives another room's messages</td>
+<td>Membership was not cleaned up on disconnect, and the id was reused</td>
+<td>Make disconnect idempotent and remove from every room it holds</td>
+</tr>
+</tbody>
+</table>
+<h2>11. Definition of done</h2>
+<ul>
+<li class="task">A connection with a missing or invalid token is closed before <code>accept()</code>, covered by a test</li>
+<li class="task">The token never appears in a query string, verified by inspecting the client's connect call</li>
+<li class="task">Disconnecting removes the connection from the registry and from every room, covered by a test that inspects both</li>
+<li class="task">A handler raising an unexpected exception still removes the connection, covered by a test</li>
+<li class="task">Exactly one task sends on each socket, verified by a test that triggers two concurrent broadcasts and asserts no interleaving error</li>
+<li class="task">A client that never reads is disconnected once its queue fills, and other clients in the room still receive — covered by one test asserting both</li>
+<li class="task">A client that stops answering heartbeats is closed within the deadline, covered by a test</li>
+<li class="task">The heartbeat interval is shorter than the proxy's idle timeout, with that timeout named in a comment</li>
+<li class="task">Shutdown sends a close frame to every connection before the process exits, covered by a test</li>
+<li class="task">Every message carries a version and a type, and an unknown type is ignored rather than fatal, covered by a test</li>
+<li class="task">Calling disconnect twice for the same connection is harmless, covered by a test</li>
+<li class="task">Memory per connection is measured and recorded, with a figure for the intended maximum connection count</li>
+</ul>
+  </article>
+
+  <aside class="tailpiece">
+    <h2>Use this blueprint</h2>
+    <p>
+      Copy the file into your project and point your agent at it. It works with Claude Code,
+      Cursor, Copilot, ChatGPT and anything else that reads a file — there is nothing to install.
+    </p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/websocket-fastapi" target="_blank" rel="noopener">Open on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Browse all blueprints</a>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p><a href="/">Awesome Blueprints</a> — same request, same architecture, every time.</p>
+    <p class="dim">MIT · awesomeblueprints.com</p>
+  </div>
+</footer>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'neutral' });
+</script>
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const now = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', now);
+    try { localStorage.setItem('ab-theme', now); } catch (e) {}
+    location.reload();   // the diagram is themed at render time
+  });
+</script>
+
+</body>
+</html>

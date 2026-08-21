@@ -1,0 +1,578 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Qdrant Vector Search with Filters — Blueprint for AI Coding Agents | Awesome Blueprints</title>
+<meta name="description" content="Qdrant vector search with filters: collection design, payload indexing, filterable HNSW and quantisation for large filtered workloads." />
+<link rel="canonical" href="https://awesomeblueprints.com/blueprints/qdrant-integration/" />
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="Awesome Blueprints" />
+<meta property="og:url" content="https://awesomeblueprints.com/blueprints/qdrant-integration/" />
+<meta property="og:title" content="Qdrant Vector Search with Filters — Architecture Blueprint" />
+<meta property="og:description" content="Qdrant vector search with filters: collection design, payload indexing, filterable HNSW and quantisation for large filtered workloads." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Qdrant Vector Search with Filters — Architecture Blueprint" />
+<meta name="twitter:description" content="Qdrant vector search with filters: collection design, payload indexing, filterable HNSW and quantisation for large filtered workloads." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/page.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "Qdrant Vector Search with Filters", "description": "Qdrant vector search with filters: collection design, payload indexing, filterable HNSW and quantisation for large filtered workloads.", "url": "https://awesomeblueprints.com/blueprints/qdrant-integration/", "dateModified": "2026-08-19", "keywords": "Vector search", "isAccessibleForFree": true, "license": "https://opensource.org/licenses/MIT", "publisher": {"@type": "Organization", "name": "Awesome Blueprints", "url": "https://awesomeblueprints.com"}}</script>
+<script>
+  (function () {
+    var t;
+    try { t = localStorage.getItem('ab-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">Awesome Blueprints</a>
+    <div class="nav-right">
+      <a class="nav-link" href="/#blueprints">Catalogue</a>
+      <a class="nav-link" href="/#faq">FAQ</a>
+      <a class="nav-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/qdrant-integration" target="_blank" rel="noopener">GitHub ↗</a>
+      <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Switch theme">◑</button>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/">Home</a> <span>/</span> <a href="/#blueprints">Blueprints</a> <span>/</span>
+    <span>Qdrant Vector Search with Filters</span>
+  </nav>
+
+  <header class="page-head">
+    <p class="eyebrow">qdrant-integration</p>
+    <h1>Qdrant Vector Search with Filters</h1>
+    <p class="lede">Qdrant vector search with filters: collection design, payload indexing, filterable HNSW and quantisation for large filtered workloads.</p>
+    <div class="facts"><span>medium</span><span>2–4 days</span><span>Verified 2026-08-19</span></div>
+    <div class="tags"><span class="tag">Vector search</span></div>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/qdrant-integration" target="_blank" rel="noopener">Read it on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Back to the catalogue</a>
+    </div>
+  </header>
+
+  <article class="doc">
+<blockquote>
+<p>A dedicated vector store: one collection with tenants separated by an indexed
+payload key rather than by collection, batch upload that does not outrun the
+server, filtered search that stays accurate, and snapshots you have restored at
+least once.</p>
+</blockquote>
+<p><strong>Complexity:</strong> medium · <strong>Typical build:</strong> 2–4 days · <strong>Verified:</strong> 2026-08-19 (re-check after ~90 days)</p>
+<p><strong>Examples in:</strong> Python. The architecture is language-agnostic: sections 5, 10 and 11 hold wherever you build this. Section 4 is illustrative — if your project is in another language, your agent translates the idioms rather than importing them, and nothing is lost. The collection design, tenancy and upload-rate concerns transfer to any dedicated vector store; the filtering behaviour described here is specific to this one and is the reason to choose it.</p>
+<p><strong>Use when:</strong> the corpus is large, search is filtered by attributes on almost every query, and you want a store built for that rather than a general database extended to do it.</p>
+<p><strong>Not for:</strong> a corpus that comfortably fits in the database you already run. A second stateful service means a second backup story, a second upgrade path and a second thing to be woken up for, and below a few million vectors that cost usually buys nothing. Also not a source of truth: it holds derived data, and treating it as the only copy of anything is how a re-index becomes a data-loss incident.</p>
+<hr />
+<h2>⚙️ INSTRUCTIONS FOR THE AI — READ BEFORE WRITING ANY CODE</h2>
+<p><strong>Do not start coding.</strong></p>
+<p><strong>Step 1 — Refresh.</strong> Verify the server version and the client library's major,
+and confirm they are compatible — the client is versioned independently and a
+mismatch surfaces as a confusing serialisation error rather than a clear one.
+Confirm the current API for creating payload indexes, including the tenant-oriented
+option, since that is what makes the tenancy design in §4 worth doing. Verify how
+quantization and on-disk storage are configured, and confirm the snapshot and
+restore commands <strong>by running a restore</strong>, not by reading about it. Report what you
+verified and what turned out wrong.</p>
+<p><strong>Step 2 — Read the project, then audit what already exists.</strong> Find the embedding
+model and its dimensionality, and whether the distance metric it was trained for
+is recorded anywhere — choosing the wrong one produces a search that works and
+ranks badly. Establish the tenant model: how many tenants, how large the largest,
+and whether any two must never see each other's data. List every field that will
+appear in a filter, because each one needs an index and adding them later means a
+rebuild. Establish where the source of truth lives, since this store must be
+rebuildable from it. Then audit §11 item by item, each marked <em>already true</em>,
+<em>partly true</em> or <em>absent</em>, with the file that decides it, reported before anything
+is proposed.</p>
+<p>Assume the project is right until it demonstrably is not; code satisfying an item
+stays even where its shape differs from §4; replacing something that works needs a
+one-line reason; never delete a working path to make room for the blueprint's
+version. The same holds for language — §4 is illustrative, its idioms get
+translated into the project's language, and §11 is what has to become true rather
+than the syntax.</p>
+<p><strong>Step 3 — Write a plan for the gap only, and get it approved</strong>, including a
+<code>## Proposed stack</code> section, the collection design with the tenancy decision, and
+how the store is rebuilt from source if it is lost. Do not ask open framework
+questions — propose, and ask for confirmation once. Say what you are adding, what
+you are leaving alone, and what you propose to change, and touch nothing else.</p>
+<p><strong>Step 4 — Build in the order in §7.</strong> <strong>Step 5 — §11 is the definition of done.</strong></p>
+<hr />
+<h2>1. The two decisions that are expensive to reverse</h2>
+<p>Most of this is straightforward. Two choices are made on day one and cost a full
+re-index to change.</p>
+<table>
+<thead>
+<tr>
+<th>The obvious setup</th>
+<th>This one</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A collection per tenant, because it feels like isolation</td>
+<td>One collection, tenants separated by an indexed payload key</td>
+</tr>
+<tr>
+<td>Payload fields filtered without being indexed</td>
+<td>Every filtered field indexed, declared with the schema</td>
+</tr>
+<tr>
+<td>Upload as fast as the loop can go</td>
+<td>Batched, with the server's own signal used as the brake</td>
+</tr>
+<tr>
+<td>Snapshots configured and never restored</td>
+<td>A restore performed once, deliberately, and timed</td>
+</tr>
+</tbody>
+</table>
+<p>The first row is the one that looks safest and is not. A collection carries real
+per-collection overhead, and hosted deployments cap how many you may have — a
+limit measured in the low thousands, which is a lot until the day it is not.
+Worse, the migration away is not a configuration change: it is re-uploading
+everything. <strong>One collection with a tenant key in the payload is the design that
+scales, and the isolation it gives is a filter, which is exactly as strong as
+your discipline about applying it.</strong></p>
+<p>The second row is what separates this store from bolting vectors onto a general
+database, and it is the strongest reason to be here at all. Approximate search
+with a filter can be done two ways. The common way runs the search first and
+discards non-matching results afterwards — which means a selective filter throws
+away most of what the index found, and the matches you wanted may never have been
+candidates. This store instead builds the graph so that filtered subsets stay
+traversable, keeping matching neighbours reachable during the search rather than
+removing them after it. <strong>That property is the reason to pay for a second
+service — and it only applies to fields you actually indexed.</strong></p>
+<h2>2. Architecture</h2>
+<pre class="mermaid">%% GENERATED - do not edit by hand.
+%% Edit the source header in architecture.mmd, then rebuild.
+%% One collection, many tenants
+
+flowchart TB
+    client([&quot;Application&quot;])
+    operator([&quot;Operator&quot;])
+    schema[&quot;Collection schema&quot;]
+    payloadix[&quot;Payload indexes including the tenant key&quot;]
+    upload[&quot;Batched upload&quot;]
+    search[&quot;Filtered search&quot;]
+    snapshot[&quot;Snapshots&quot;]
+    collection[(&quot;Single collection&quot;)]
+    source[(&quot;Source of truth&quot;)]
+    other([&quot;Another tenant, never reachable&quot;])
+
+    source --&gt;|&quot;rebuildable from here, always&quot;| upload
+    schema --- collection
+    payloadix --- collection
+    upload --&gt;|&quot;batches sized against server feedback&quot;| collection
+    client --&gt;|&quot;query vector plus tenant&quot;| search
+    search --&gt;|&quot;filter resolved through the index&quot;| payloadix
+    search --&gt;|&quot;graph traversal within the filtered subset&quot;| collection
+    collection --&gt;|&quot;ranked points with payload&quot;| client
+    search -.-&gt;|&quot;blocked by the tenant filter, not by a boundary&quot;| other
+    operator --&gt; snapshot
+    snapshot --&gt;|&quot;restore, practised at least once&quot;| collection
+
+    classDef service fill:#eff6ff,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b;
+    classDef datastore fill:#e9faf3,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b;
+    classDef external fill:#fff4ed,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b;
+    classDef actor fill:#f0eefc,stroke:#4a3aa7,stroke-width:1.5px,color:#0b0b0b;
+    class schema,payloadix,upload,search,snapshot service;
+    class collection,source datastore;
+    class client,operator,other actor;</pre>
+<p>The rule the diagram encodes: <strong>the arrow to another tenant is blocked by a
+filter, not by a wall.</strong> One collection means isolation is something the query
+does, every time. A query that forgets the filter is not rejected by anything —
+which is why §4 puts the filter below the application code rather than beside it.</p>
+<h2>3. Project structure</h2>
+<div class="hl"><pre><span></span><code>app/vectors/
+├── schema.py      the collection definition and every payload index
+├── client.py      the client, its timeouts and its retry policy
+├── upload.py      batching, with the server&#39;s backpressure honoured
+└── search.py      search, where the tenant filter is applied — the only entry point
+ops/
+└── restore.md     the restore procedure, with the date it was last practised
+</code></pre></div>
+
+<p><strong>One rule: nothing calls the client's search directly.</strong> Every query goes through
+one function that takes a tenant and applies the filter itself. With tenancy
+implemented as a filter, a forgotten filter is a data-disclosure bug that looks
+like ordinary code, and the only reliable defence is that there is no way to write
+the query without it.</p>
+<h2>4. Reference implementation</h2>
+<div class="hl"><pre><span></span><code><span class="c1"># app/vectors/schema.py</span>
+<span class="kn">from</span> <span class="nn">qdrant_client</span> <span class="kn">import</span> <span class="n">models</span>
+
+<span class="n">COLLECTION</span> <span class="o">=</span> <span class="s2">&quot;documents&quot;</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">ensure_collection</span><span class="p">(</span><span class="n">client</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">await</span> <span class="n">client</span><span class="o">.</span><span class="n">create_collection</span><span class="p">(</span>
+        <span class="n">collection_name</span><span class="o">=</span><span class="n">COLLECTION</span><span class="p">,</span>
+        <span class="n">vectors_config</span><span class="o">=</span><span class="n">models</span><span class="o">.</span><span class="n">VectorParams</span><span class="p">(</span>
+            <span class="n">size</span><span class="o">=</span><span class="mi">1536</span><span class="p">,</span>
+            <span class="c1"># Must match what the embedding model was trained for. Cosine for</span>
+            <span class="c1"># normalised embeddings, dot product where magnitude carries meaning.</span>
+            <span class="c1"># The wrong choice does not error — it ranks badly, which is much</span>
+            <span class="c1"># harder to notice than a failure.</span>
+            <span class="n">distance</span><span class="o">=</span><span class="n">models</span><span class="o">.</span><span class="n">Distance</span><span class="o">.</span><span class="n">COSINE</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="c1"># Quantization trades a little accuracy for a large drop in memory. Worth</span>
+        <span class="c1"># it above a few million vectors; premature below that, where it costs</span>
+        <span class="c1"># recall for memory you were not short of.</span>
+        <span class="n">quantization_config</span><span class="o">=</span><span class="n">models</span><span class="o">.</span><span class="n">ScalarQuantization</span><span class="p">(</span>
+            <span class="n">scalar</span><span class="o">=</span><span class="n">models</span><span class="o">.</span><span class="n">ScalarQuantizationConfig</span><span class="p">(</span><span class="nb">type</span><span class="o">=</span><span class="n">models</span><span class="o">.</span><span class="n">ScalarType</span><span class="o">.</span><span class="n">INT8</span><span class="p">,</span>
+                                                   <span class="n">always_ram</span><span class="o">=</span><span class="kc">True</span><span class="p">)),</span>
+    <span class="p">)</span>
+
+    <span class="c1"># The tenant key. This flag is not decoration: it tells the server to keep one</span>
+    <span class="c1"># tenant&#39;s vectors together on disk, so a filtered search reads sequentially</span>
+    <span class="c1"># instead of seeking across the whole file. On a large collection that is the</span>
+    <span class="c1"># difference between a fast filtered query and a slow one.</span>
+    <span class="k">await</span> <span class="n">client</span><span class="o">.</span><span class="n">create_payload_index</span><span class="p">(</span>
+        <span class="n">COLLECTION</span><span class="p">,</span> <span class="n">field_name</span><span class="o">=</span><span class="s2">&quot;tenant_id&quot;</span><span class="p">,</span>
+        <span class="n">field_schema</span><span class="o">=</span><span class="n">models</span><span class="o">.</span><span class="n">KeywordIndexParams</span><span class="p">(</span><span class="nb">type</span><span class="o">=</span><span class="s2">&quot;keyword&quot;</span><span class="p">,</span> <span class="n">is_tenant</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+
+    <span class="c1"># Every other field that will ever appear in a filter. Filtering on an</span>
+    <span class="c1"># unindexed field still works, which is the trap — it is simply slow, and</span>
+    <span class="c1"># adding the index later means the collection is re-optimised.</span>
+    <span class="k">for</span> <span class="n">field</span><span class="p">,</span> <span class="n">schema</span> <span class="ow">in</span> <span class="p">((</span><span class="s2">&quot;document_type&quot;</span><span class="p">,</span> <span class="s2">&quot;keyword&quot;</span><span class="p">),</span> <span class="p">(</span><span class="s2">&quot;created_at&quot;</span><span class="p">,</span> <span class="s2">&quot;datetime&quot;</span><span class="p">)):</span>
+        <span class="k">await</span> <span class="n">client</span><span class="o">.</span><span class="n">create_payload_index</span><span class="p">(</span><span class="n">COLLECTION</span><span class="p">,</span> <span class="n">field_name</span><span class="o">=</span><span class="n">field</span><span class="p">,</span>
+                                          <span class="n">field_schema</span><span class="o">=</span><span class="n">schema</span><span class="p">)</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/vectors/upload.py</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">upload</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">points</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">models</span><span class="o">.</span><span class="n">PointStruct</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="n">chunked</span><span class="p">(</span><span class="n">points</span><span class="p">,</span> <span class="n">BATCH_SIZE</span><span class="p">):</span>
+        <span class="c1"># wait=False returns as soon as the write is accepted rather than after it</span>
+        <span class="c1"># is indexed. It is much faster and it means &quot;uploaded&quot; does not yet mean</span>
+        <span class="c1"># &quot;searchable&quot; — so a test that uploads and immediately searches will be</span>
+        <span class="c1"># flaky, and it will be blamed on the search.</span>
+        <span class="k">await</span> <span class="n">client</span><span class="o">.</span><span class="n">upsert</span><span class="p">(</span><span class="n">COLLECTION</span><span class="p">,</span> <span class="n">points</span><span class="o">=</span><span class="n">batch</span><span class="p">,</span> <span class="n">wait</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="k">await</span> <span class="n">_respect_backpressure</span><span class="p">(</span><span class="n">client</span><span class="p">)</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">_respect_backpressure</span><span class="p">(</span><span class="n">client</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="c1"># Uploading as fast as the loop allows outruns indexing: the queue grows, the</span>
+    <span class="c1"># server slows, and eventually it rejects writes. The server&#39;s own optimiser</span>
+    <span class="c1"># status is the signal to pause on — a fixed sleep is either too slow all the</span>
+    <span class="c1"># time or too fast exactly when it matters.</span>
+    <span class="k">while</span> <span class="p">(</span><span class="k">await</span> <span class="n">client</span><span class="o">.</span><span class="n">get_collection</span><span class="p">(</span><span class="n">COLLECTION</span><span class="p">))</span><span class="o">.</span><span class="n">status</span> <span class="o">!=</span> <span class="n">models</span><span class="o">.</span><span class="n">CollectionStatus</span><span class="o">.</span><span class="n">GREEN</span><span class="p">:</span>
+        <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/vectors/search.py</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">search</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">query_vector</span><span class="p">,</span> <span class="n">tenant_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span><span class="p">,</span>
+                 <span class="n">document_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Hit</span><span class="p">]:</span>
+    <span class="sd">&quot;&quot;&quot;The only way to query this collection.</span>
+
+<span class="sd">    The tenant filter is built here, not passed in. With one collection, tenancy</span>
+<span class="sd">    is a filter rather than a boundary — so a caller that could omit it is a</span>
+<span class="sd">    disclosure bug waiting for a distracted afternoon.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">must</span> <span class="o">=</span> <span class="p">[</span><span class="n">models</span><span class="o">.</span><span class="n">FieldCondition</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="s2">&quot;tenant_id&quot;</span><span class="p">,</span>
+                                 <span class="n">match</span><span class="o">=</span><span class="n">models</span><span class="o">.</span><span class="n">MatchValue</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="n">tenant_id</span><span class="p">))]</span>
+    <span class="k">if</span> <span class="n">document_type</span><span class="p">:</span>
+        <span class="n">must</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">models</span><span class="o">.</span><span class="n">FieldCondition</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="s2">&quot;document_type&quot;</span><span class="p">,</span>
+                                          <span class="n">match</span><span class="o">=</span><span class="n">models</span><span class="o">.</span><span class="n">MatchValue</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="n">document_type</span><span class="p">)))</span>
+
+    <span class="k">return</span> <span class="k">await</span> <span class="n">client</span><span class="o">.</span><span class="n">query_points</span><span class="p">(</span>
+        <span class="n">COLLECTION</span><span class="p">,</span> <span class="n">query</span><span class="o">=</span><span class="n">query_vector</span><span class="p">,</span> <span class="n">limit</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
+        <span class="n">query_filter</span><span class="o">=</span><span class="n">models</span><span class="o">.</span><span class="n">Filter</span><span class="p">(</span><span class="n">must</span><span class="o">=</span><span class="n">must</span><span class="p">),</span>
+        <span class="c1"># The filter is resolved through the payload index and the graph traversal</span>
+        <span class="c1"># stays inside the matching subset, so a selective filter does not cost the</span>
+        <span class="c1"># matches. That behaviour is the reason this store is worth a second</span>
+        <span class="c1"># service — and it only applies to fields that were indexed.</span>
+        <span class="n">with_payload</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">search_params</span><span class="o">=</span><span class="n">models</span><span class="o">.</span><span class="n">SearchParams</span><span class="p">(</span><span class="n">hnsw_ef</span><span class="o">=</span><span class="nb">max</span><span class="p">(</span><span class="mi">64</span><span class="p">,</span> <span class="n">k</span> <span class="o">*</span> <span class="mi">8</span><span class="p">)),</span>
+    <span class="p">)</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># tests/test_tenancy.py</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">test_a_tenant_cannot_reach_another_tenants_points</span><span class="p">(</span><span class="n">client</span><span class="p">):</span>
+    <span class="c1"># The one test that must exist. Everything else here is performance; this is</span>
+    <span class="c1"># the difference between a filter and a promise.</span>
+    <span class="k">await</span> <span class="n">upload</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="p">[</span><span class="n">point</span><span class="p">(</span><span class="n">tenant</span><span class="o">=</span><span class="s2">&quot;a&quot;</span><span class="p">,</span> <span class="n">text</span><span class="o">=</span><span class="s2">&quot;secret&quot;</span><span class="p">),</span> <span class="n">point</span><span class="p">(</span><span class="n">tenant</span><span class="o">=</span><span class="s2">&quot;b&quot;</span><span class="p">,</span> <span class="n">text</span><span class="o">=</span><span class="s2">&quot;other&quot;</span><span class="p">)])</span>
+    <span class="n">hits</span> <span class="o">=</span> <span class="k">await</span> <span class="n">search</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">embed</span><span class="p">(</span><span class="s2">&quot;secret&quot;</span><span class="p">),</span> <span class="n">tenant_id</span><span class="o">=</span><span class="s2">&quot;b&quot;</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="nb">all</span><span class="p">(</span><span class="n">h</span><span class="o">.</span><span class="n">payload</span><span class="p">[</span><span class="s2">&quot;tenant_id&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;b&quot;</span> <span class="k">for</span> <span class="n">h</span> <span class="ow">in</span> <span class="n">hits</span><span class="p">)</span>
+</code></pre></div>
+
+<h2>5. Golden-standard rules</h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Forbidden:</strong> a collection per tenant</td>
+<td>Each carries real overhead and hosted deployments cap the count. Migrating away is a full re-upload, not a setting.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> a search path that does not take a tenant</td>
+<td>With one collection, isolation is a filter applied every time. The defence is that the query cannot be written without it.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> filtering on a field with no payload index</td>
+<td>It works, which is the trap — it is simply slow, and adding the index later re-optimises the collection.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> treating this store as a source of truth</td>
+<td>It holds derived data. Without a rebuild path, a re-index is a data-loss incident.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> snapshots that have never been restored</td>
+<td>An untested restore is a plan. The first execution should not be during an outage.</td>
+</tr>
+<tr>
+<td>The distance metric matches what the model was trained for</td>
+<td>The wrong one does not error; it ranks badly, which is far harder to notice.</td>
+</tr>
+<tr>
+<td>Uploads are batched and paced by the server's own signal</td>
+<td>Uploading faster than indexing grows a queue until writes are rejected. A fixed sleep is wrong in both directions.</td>
+</tr>
+<tr>
+<td>Accepted is not the same as searchable</td>
+<td>Fast uploads return before indexing finishes, so a test that uploads then searches is flaky and the search gets blamed.</td>
+</tr>
+<tr>
+<td>Quantization is enabled when memory demands it, not by default</td>
+<td>It trades recall for memory, and below a few million vectors it costs the first without needing the second.</td>
+</tr>
+<tr>
+<td>Point ids are derived from the source, not generated</td>
+<td>Otherwise re-ingesting the same document duplicates it, and nothing reports the duplicate.</td>
+</tr>
+<tr>
+<td>The candidate list size is set per request, from k</td>
+<td>The default is tuned for nothing in particular, and it is the main quality dial at query time.</td>
+</tr>
+<tr>
+<td>Recall is measured, not inferred from the absence of complaints</td>
+<td>Approximate search always returns k results quickly; whether they are the right ones is a separate question.</td>
+</tr>
+</tbody>
+</table>
+<h2>6. Data contracts</h2>
+<div class="hl"><pre><span></span><code><span class="n">PointStruct</span><span class="p">(</span>
+    <span class="nb">id</span><span class="o">=</span><span class="n">stable_id</span><span class="p">(</span><span class="n">document_id</span><span class="p">,</span> <span class="n">chunk_index</span><span class="p">),</span>   <span class="c1"># derived, so re-ingest replaces</span>
+    <span class="n">vector</span><span class="o">=</span><span class="p">[</span><span class="o">...</span><span class="p">],</span>
+    <span class="n">payload</span><span class="o">=</span><span class="p">{</span>
+        <span class="s2">&quot;tenant_id&quot;</span><span class="p">:</span> <span class="s2">&quot;acme&quot;</span><span class="p">,</span>        <span class="c1"># indexed, and required on every search</span>
+        <span class="s2">&quot;document_id&quot;</span><span class="p">:</span> <span class="mi">42</span><span class="p">,</span>
+        <span class="s2">&quot;chunk_index&quot;</span><span class="p">:</span> <span class="mi">3</span><span class="p">,</span>
+        <span class="s2">&quot;document_type&quot;</span><span class="p">:</span> <span class="s2">&quot;policy&quot;</span><span class="p">,</span>  <span class="c1"># indexed, because it is filtered</span>
+        <span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="s2">&quot;...&quot;</span><span class="p">,</span>              <span class="c1"># returned with the hit, so no second lookup</span>
+        <span class="s2">&quot;embedding_model&quot;</span><span class="p">:</span> <span class="s2">&quot;...&quot;</span><span class="p">,</span>   <span class="c1"># which model produced this vector</span>
+    <span class="p">},</span>
+<span class="p">)</span>
+</code></pre></div>
+
+<p>The identifier is the contract that makes ingestion repeatable. Derived from the
+document and the chunk position, re-ingesting a changed document overwrites its
+points; generated randomly, it inserts a second copy of everything and retrieval
+degrades quietly as duplicates crowd the results.</p>
+<p>Storing the text in the payload is a deliberate denormalisation. The alternative
+is a second lookup in the source database for every hit, on the latency-sensitive
+path, and the storage cost is small against that.</p>
+<h2>7. Build order</h2>
+<ol>
+<li><strong>Collection, one point, one search.</strong> Confirm the distance metric and the
+   dimensionality against the model before anything is loaded.</li>
+<li><strong>The payload indexes</strong>, including the tenant key, declared with the schema so
+   they are never a later addition.</li>
+<li><strong>The tenancy test</strong>, written before any real data exists. It is the one that
+   must never fail, and it is cheapest to write now.</li>
+<li><strong>Batched upload with backpressure</strong>, and a load of realistic size — the point
+   where naive uploading first shows itself.</li>
+<li><strong>Filtered search with recall measured</strong>, both filtered and unfiltered.</li>
+<li><strong>Snapshot and a practised restore</strong>, timed and written down.</li>
+<li><strong>Quantization and on-disk settings</strong>, only if the measurements from step 5
+   call for them.</li>
+</ol>
+<p>Step 3 before real data because the tenancy test is the only one here whose
+failure is a disclosure rather than a slowdown, and writing it against an empty
+collection takes minutes.</p>
+<h2>8. Blocks to pull in</h2>
+<p>Nothing here is a prerequisite. These are adjacent problems, by name only —
+resolve them separately if they apply.</p>
+<ul>
+<li>Chunking and embeddings for retrieval — what produces the points this stores</li>
+<li>Hybrid search: keyword and vector with RRF — for queries containing identifiers and exact phrases</li>
+<li>Vector search in Postgres — the alternative when a second service is not worth it</li>
+<li>Docker Compose dev environment — running this locally alongside the application</li>
+<li>LLM eval harness — how to judge whether a retrieval change helped</li>
+</ul>
+<h2>9. Metrics</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Recall at 10 against exact search</td>
+<td>&gt; 0.95, measured filtered and unfiltered</td>
+</tr>
+<tr>
+<td>Filtered search latency, p95</td>
+<td>&lt; 30 ms at production collection size</td>
+</tr>
+<tr>
+<td>Collections</td>
+<td>1 per corpus, not per tenant</td>
+</tr>
+<tr>
+<td>Filtered fields without a payload index</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Duplicate points after re-ingesting an unchanged document</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Time to restore from a snapshot</td>
+<td>Measured, and known before it is needed</td>
+</tr>
+<tr>
+<td>Rejected writes during a bulk load</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<h2>10. Failure modes</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>One tenant sees another's documents</td>
+<td>A search path without the tenant filter</td>
+<td>One entry point that builds the filter itself; the test from §7 step 3</td>
+</tr>
+<tr>
+<td>Filtered searches are slow while unfiltered ones are fast</td>
+<td>The filtered field has no payload index</td>
+<td>Index every field that appears in a filter</td>
+</tr>
+<tr>
+<td>Creating a new tenant fails</td>
+<td>A collection per tenant hit the deployment's collection cap</td>
+<td>One collection with a tenant key; migrating means re-uploading</td>
+</tr>
+<tr>
+<td>Results are plausible and ranking is poor</td>
+<td>The distance metric does not match what the model was trained for</td>
+<td>Match it; this does not error, so it must be checked</td>
+</tr>
+<tr>
+<td>A test uploads and immediately searches, and fails intermittently</td>
+<td>The write was accepted but not yet indexed</td>
+<td>Wait for indexing in tests, or use the synchronous write path there</td>
+</tr>
+<tr>
+<td>Writes start being rejected during a bulk load</td>
+<td>Upload outran indexing and the queue grew until the server pushed back</td>
+<td>Batch, and pace on the server's status rather than on a fixed sleep</td>
+</tr>
+<tr>
+<td>Retrieval quality degrades after a re-ingest</td>
+<td>Point ids were generated, so the corpus now holds two copies of everything</td>
+<td>Derive ids from the document and chunk position</td>
+</tr>
+<tr>
+<td>Memory grows until the process is killed</td>
+<td>Full-precision vectors held in memory past what the host has</td>
+<td>Enable quantization or on-disk storage, then re-measure recall</td>
+</tr>
+<tr>
+<td>Recall dropped after enabling quantization and nobody noticed</td>
+<td>It trades accuracy for memory and nothing reports the trade</td>
+<td>Measure recall before and after, on the same question set</td>
+</tr>
+<tr>
+<td>The store was lost and rebuilding took days</td>
+<td>No rebuild path from the source of truth</td>
+<td>Keep ingestion rerunnable; this store holds derived data only</td>
+</tr>
+<tr>
+<td>The restore did not work when it was needed</td>
+<td>Snapshots were configured and never tested</td>
+<td>Practise a restore; record the date and the duration</td>
+</tr>
+<tr>
+<td>A client upgrade broke with a serialisation error</td>
+<td>Client and server versions are independent and drifted</td>
+<td>Pin both; check compatibility before upgrading either</td>
+</tr>
+</tbody>
+</table>
+<h2>11. Definition of done</h2>
+<ul>
+<li class="task">A test asserts that a search for one tenant never returns another tenant's points</li>
+<li class="task">No code path calls the client's search directly; every query goes through the tenant-aware function, checked by grep in CI</li>
+<li class="task">Every field used in a filter has a payload index, verified against the live collection schema rather than the code</li>
+<li class="task">The tenant field is indexed with the tenant-oriented option, verified against the live schema</li>
+<li class="task">The distance metric matches the embedding model's, with the model named in a comment beside it</li>
+<li class="task">Recall at 10 is measured against exact search, filtered and unfiltered, and both numbers are recorded</li>
+<li class="task">Re-ingesting an unchanged document leaves the point count unchanged, covered by a test</li>
+<li class="task">A bulk load of realistic size completes with no rejected writes, and the pacing uses the server's status</li>
+<li class="task">A snapshot has been restored to an empty instance, the duration recorded, and the date noted in the runbook</li>
+<li class="task">The store can be rebuilt from the source of truth by rerunning ingestion, demonstrated once end to end</li>
+<li class="task">Client and server versions are pinned, and their compatibility is recorded</li>
+<li class="task">If quantization is enabled, recall was measured before and after and both numbers are recorded</li>
+</ul>
+  </article>
+
+  <aside class="tailpiece">
+    <h2>Use this blueprint</h2>
+    <p>
+      Copy the file into your project and point your agent at it. It works with Claude Code,
+      Cursor, Copilot, ChatGPT and anything else that reads a file — there is nothing to install.
+    </p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/qdrant-integration" target="_blank" rel="noopener">Open on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Browse all blueprints</a>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p><a href="/">Awesome Blueprints</a> — same request, same architecture, every time.</p>
+    <p class="dim">MIT · awesomeblueprints.com</p>
+  </div>
+</footer>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'neutral' });
+</script>
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const now = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', now);
+    try { localStorage.setItem('ab-theme', now); } catch (e) {}
+    location.reload();   // the diagram is themed at render time
+  });
+</script>
+
+</body>
+</html>

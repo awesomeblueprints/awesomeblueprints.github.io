@@ -1,0 +1,609 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MCP Client Integration — Blueprint for AI Coding Agents | Awesome Blueprints</title>
+<meta name="description" content="MCP client integration: connecting an agent to Model Context Protocol servers, with tool discovery, result budgets, timeouts and failure isolation." />
+<link rel="canonical" href="https://awesomeblueprints.com/blueprints/mcp-client-integration/" />
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="Awesome Blueprints" />
+<meta property="og:url" content="https://awesomeblueprints.com/blueprints/mcp-client-integration/" />
+<meta property="og:title" content="MCP Client Integration — Architecture Blueprint" />
+<meta property="og:description" content="MCP client integration: connecting an agent to Model Context Protocol servers, with tool discovery, result budgets, timeouts and failure isolation." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="MCP Client Integration — Architecture Blueprint" />
+<meta name="twitter:description" content="MCP client integration: connecting an agent to Model Context Protocol servers, with tool discovery, result budgets, timeouts and failure isolation." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/page.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "MCP Client Integration", "description": "MCP client integration: connecting an agent to Model Context Protocol servers, with tool discovery, result budgets, timeouts and failure isolation.", "url": "https://awesomeblueprints.com/blueprints/mcp-client-integration/", "dateModified": "2026-08-19", "keywords": "MCP, Agents", "isAccessibleForFree": true, "license": "https://opensource.org/licenses/MIT", "publisher": {"@type": "Organization", "name": "Awesome Blueprints", "url": "https://awesomeblueprints.com"}}</script>
+<script>
+  (function () {
+    var t;
+    try { t = localStorage.getItem('ab-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">Awesome Blueprints</a>
+    <div class="nav-right">
+      <a class="nav-link" href="/#blueprints">Catalogue</a>
+      <a class="nav-link" href="/#faq">FAQ</a>
+      <a class="nav-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/mcp-client-integration" target="_blank" rel="noopener">GitHub ↗</a>
+      <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Switch theme">◑</button>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/">Home</a> <span>/</span> <a href="/#blueprints">Blueprints</a> <span>/</span>
+    <span>MCP Client Integration</span>
+  </nav>
+
+  <header class="page-head">
+    <p class="eyebrow">mcp-client-integration</p>
+    <h1>MCP Client Integration</h1>
+    <p class="lede">MCP client integration: connecting an agent to Model Context Protocol servers, with tool discovery, result budgets, timeouts and failure isolation.</p>
+    <div class="facts"><span>medium</span><span>3–5 days</span><span>Verified 2026-08-19</span></div>
+    <div class="tags"><span class="tag">MCP</span><span class="tag">Agents</span></div>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/mcp-client-integration" target="_blank" rel="noopener">Read it on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Back to the catalogue</a>
+    </div>
+  </header>
+
+  <article class="doc">
+<blockquote>
+<p>Connecting external MCP servers as a source of tools for your agent: a
+connection lifecycle that survives a server going away, a tool list you control
+rather than inherit, and a hard limit on what a third party can put into your
+context.</p>
+</blockquote>
+<p><strong>Complexity:</strong> medium-high · <strong>Typical build:</strong> 3–5 days · <strong>Verified:</strong> 2026-08-19 (re-check after ~90 days)</p>
+<p><strong>Examples in:</strong> Python. The architecture is language-agnostic: sections 5, 10 and 11 hold wherever you build this. Section 4 is illustrative — if your project is in another language, your agent translates the idioms rather than importing them, and nothing is lost. The protocol details below are from the specification revision named on the Verified line; the isolation and budget concerns hold regardless of which revision you target.</p>
+<p><strong>Use when:</strong> an agent should use tools that somebody else maintains — a hosted service, a colleague's server, a vendor's integration — instead of you writing and keeping a wrapper for each.</p>
+<p><strong>Not for:</strong> tools you own and deploy alongside the agent. Routing your own function through a protocol and a transport adds a process boundary, a failure mode and a serialisation step to a function call. Also not a substitute for deciding which tools an agent should have: connecting a server with forty tools does not give your agent forty useful tools, it gives it a much harder choice.</p>
+<hr />
+<h2>⚙️ INSTRUCTIONS FOR THE AI — READ BEFORE WRITING ANY CODE</h2>
+<p><strong>Do not start coding.</strong></p>
+<p><strong>Step 1 — Refresh.</strong> Verify the protocol revision each server you intend to
+connect actually implements, because the transport changed substantially in the
+current one and older servers are still common. In the current revision there are
+<strong>no protocol-level sessions</strong>, there is <strong>no <code>initialize</code> handshake</strong> — every
+request carries its protocol version and client capabilities in <code>_meta</code> — there is
+<strong>no GET stream endpoint</strong>, and <strong>SSE streams are not resumable</strong>: a broken stream
+loses the in-flight request and it must be re-issued with a new id. Confirm
+whether the SDK you are using implements the revision you need. Verify the
+required request headers and that their values must match the request body.
+Report what you verified and what turned out wrong.</p>
+<p><strong>Step 2 — Read the project, then audit what already exists.</strong> Find the agent's
+existing tool surface, because everything connected here joins it and the model's
+choice gets harder with each addition. Find whether there is a per-turn context
+budget today, since an external tool result is the least controlled thing that
+will ever enter it. List the servers to connect and, for each, who operates it and
+what it can reach — a server that can write somewhere is a different risk from one
+that only reads. Find how secrets for those servers would be supplied. Then audit
+§11 item by item, each marked <em>already true</em>, <em>partly true</em> or <em>absent</em>, with the
+file that decides it, reported before anything is proposed.</p>
+<p>Assume the project is right until it demonstrably is not; code satisfying an item
+stays even where its shape differs from §4; replacing something that works needs a
+one-line reason; never delete a working path to make room for the blueprint's
+version. The same holds for language — §4 is illustrative, its idioms get
+translated into the project's language, and §11 is what has to become true rather
+than the syntax.</p>
+<p><strong>Step 3 — Write a plan for the gap only, and get it approved</strong>, including a
+<code>## Proposed stack</code> section, the allow-list of tools per server, and what the
+agent does when a server is unreachable. Do not ask open framework questions —
+propose, and ask for confirmation once. Say what you are adding, what you are
+leaving alone, and what you propose to change, and touch nothing else.</p>
+<p><strong>Step 4 — Build in the order in §7.</strong> <strong>Step 5 — §11 is the definition of done.</strong></p>
+<hr />
+<h2>1. What you are actually connecting</h2>
+<p>An MCP server is code you did not write, whose tool descriptions go into your
+prompt and whose results go into your context. The protocol makes it easy to
+connect. The work is in the boundary.</p>
+<table>
+<thead>
+<tr>
+<th>Connecting a server and using its tools</th>
+<th>Treating it as an untrusted dependency</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Every tool the server offers is exposed to the model</td>
+<td>An allow-list, so a server adding tools does not silently expand what your agent can do</td>
+</tr>
+<tr>
+<td>A tool result goes into the context whole</td>
+<td>Results are capped, and the cap is enforced by you, not requested of them</td>
+</tr>
+<tr>
+<td>A server that hangs hangs the turn</td>
+<td>Every call is bounded, and an unreachable server degrades to a missing tool</td>
+</tr>
+<tr>
+<td>Tool descriptions are trusted text</td>
+<td>They are third-party text arriving in your prompt, and they are treated as such</td>
+</tr>
+</tbody>
+</table>
+<p>The first row is the one that changes over time rather than on day one. You
+connect a server with four tools, review them, and ship. Three months later it has
+eleven, and your agent has been using them since the day they appeared —
+including whichever one deletes things. <strong>An allow-list turns that into a
+deliberate change instead of an automatic one.</strong></p>
+<p>The fourth row is the uncomfortable one. Tool names and descriptions are written
+by the server operator and placed directly into your model's prompt. A description
+saying "always call this before answering any question" is instruction text in
+your context that you did not write. This is not hypothetical for servers you do
+not control, and there is no clever parsing that fixes it — the mitigations are
+that you chose the server, you chose which tools, and the tool cannot do more than
+its own permissions allow.</p>
+<p>One protocol detail shapes the code more than any other: <strong>the current revision
+has no sessions and no handshake.</strong> Every request stands alone and carries its own
+protocol version and client capabilities. That makes reconnection cheap — there is
+no state to re-establish — and it means a connection is not a thing you hold so
+much as a place you send requests.</p>
+<h2>2. Architecture</h2>
+<pre class="mermaid">%% GENERATED - do not edit by hand.
+%% Edit the source header in architecture.mmd, then rebuild.
+%% External servers as a controlled tool source
+
+flowchart TB
+    model([&quot;Model&quot;])
+    registry[&quot;Local tool registry&quot;]
+    allow[&quot;Allow list per server&quot;]
+    translate[&quot;Schema translation&quot;]
+    dispatch[&quot;Dispatcher&quot;]
+    budget[&quot;Result budget&quot;]
+    health[&quot;Per server health&quot;]
+    servera{{&quot;External server A&quot;}}
+    serverb{{&quot;External server B&quot;}}
+    cache[&quot;Cached tool list&quot;]
+
+    registry --&gt;|&quot;the tools your agent actually has&quot;| model
+    servera --&gt;|&quot;advertised tools&quot;| translate
+    serverb --&gt; translate
+    translate --&gt;|&quot;only what was approved&quot;| allow
+    allow --&gt; registry
+    translate --&gt;|&quot;list cached with its freshness hint&quot;| cache
+    model --&gt;|&quot;a tool call&quot;| dispatch
+    dispatch --&gt;|&quot;skip a server known to be down&quot;| health
+    dispatch --&gt;|&quot;bounded by a deadline&quot;| servera
+    servera --&gt;|&quot;result&quot;| budget
+    budget --&gt;|&quot;truncated to a stated limit&quot;| model
+    dispatch -.-&gt;|&quot;unreachable becomes a recoverable error&quot;| model
+
+    classDef service fill:#eff6ff,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b;
+    classDef datastore fill:#e9faf3,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b;
+    classDef external fill:#fff4ed,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b;
+    classDef actor fill:#f0eefc,stroke:#4a3aa7,stroke-width:1.5px,color:#0b0b0b;
+    class registry,allow,translate,dispatch,budget,health,cache service;
+    class servera,serverb external;
+    class model actor;</pre>
+<p>The rule the diagram encodes: <strong>nothing goes from a server to the model without
+passing through the allow-list on the way in and the budget on the way back.</strong>
+Those two boxes are the entire boundary. Bypassing either — for a server you
+trust, for a tool that is obviously fine — is how the boundary stops existing.</p>
+<h2>3. Project structure</h2>
+<div class="hl"><pre><span></span><code>app/mcp/
+├── servers.py     which servers, and which of their tools are allowed
+├── connect.py     the connection: headers, deadlines, reconnection
+├── translate.py   MCP tool definitions to your agent&#39;s tool format
+├── dispatch.py    calling a tool, with the deadline and the result budget
+└── health.py      which servers are currently usable
+</code></pre></div>
+
+<p><strong>One rule: the allow-list is code, not configuration discovered at runtime.</strong> A
+list fetched from the server, or defaulting to "everything advertised", is not a
+list — it is the server deciding. Changing what your agent can do should be a
+commit someone reviews.</p>
+<h2>4. Reference implementation</h2>
+<div class="hl"><pre><span></span><code><span class="c1"># app/mcp/servers.py</span>
+<span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
+
+
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span> <span class="nc">ServerConfig</span><span class="p">:</span>
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">url</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="c1"># Named, never a pattern and never empty-means-all. A server that adds a tool</span>
+    <span class="c1"># next month must not gain that capability in your agent silently — and a</span>
+    <span class="c1"># server that renames one should fail loudly rather than quietly lose it.</span>
+    <span class="n">allowed_tools</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>
+    <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">20.0</span>
+    <span class="n">max_result_chars</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">8000</span>
+    <span class="n">required</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>        <span class="c1"># if False, the agent runs without it</span>
+
+
+<span class="n">SERVERS</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="n">ServerConfig</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;docs&quot;</span><span class="p">,</span> <span class="n">url</span><span class="o">=</span><span class="s2">&quot;https://docs.example.com/mcp&quot;</span><span class="p">,</span>
+                 <span class="n">allowed_tools</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;search_docs&quot;</span><span class="p">,</span> <span class="s2">&quot;get_page&quot;</span><span class="p">})),</span>
+    <span class="n">ServerConfig</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;tickets&quot;</span><span class="p">,</span> <span class="n">url</span><span class="o">=</span><span class="s2">&quot;https://tickets.example.com/mcp&quot;</span><span class="p">,</span>
+                 <span class="n">allowed_tools</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;search_tickets&quot;</span><span class="p">}),</span>   <span class="c1"># deliberately not create_ticket</span>
+                 <span class="n">timeout</span><span class="o">=</span><span class="mf">10.0</span><span class="p">),</span>
+<span class="p">]</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/mcp/connect.py</span>
+<span class="kn">import</span> <span class="nn">uuid</span>
+
+<span class="n">PROTOCOL_VERSION</span> <span class="o">=</span> <span class="s2">&quot;2026-07-28&quot;</span>
+
+
+<span class="k">def</span> <span class="nf">_headers</span><span class="p">(</span><span class="n">method</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
+    <span class="c1"># The current revision mirrors body fields into headers so that proxies and</span>
+    <span class="c1"># gateways can route without parsing JSON. The server MUST reject a request</span>
+    <span class="c1"># whose headers disagree with its body, so these are derived from the body</span>
+    <span class="c1"># rather than written twice.</span>
+    <span class="n">headers</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;Content-Type&quot;</span><span class="p">:</span> <span class="s2">&quot;application/json&quot;</span><span class="p">,</span>
+        <span class="c1"># Both are required on every POST: the server may answer with a single</span>
+        <span class="c1"># JSON object or with an SSE stream, and it chooses per request.</span>
+        <span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="s2">&quot;application/json, text/event-stream&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;MCP-Protocol-Version&quot;</span><span class="p">:</span> <span class="n">PROTOCOL_VERSION</span><span class="p">,</span>
+        <span class="s2">&quot;Mcp-Method&quot;</span><span class="p">:</span> <span class="n">method</span><span class="p">,</span>
+    <span class="p">}</span>
+    <span class="k">if</span> <span class="n">name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">headers</span><span class="p">[</span><span class="s2">&quot;Mcp-Name&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_header_safe</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">headers</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">request</span><span class="p">(</span><span class="n">server</span><span class="p">:</span> <span class="n">ServerConfig</span><span class="p">,</span> <span class="n">method</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">params</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
+                 <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+    <span class="n">body</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;jsonrpc&quot;</span><span class="p">:</span> <span class="s2">&quot;2.0&quot;</span><span class="p">,</span> <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">()</span><span class="o">.</span><span class="n">hex</span><span class="p">,</span> <span class="s2">&quot;method&quot;</span><span class="p">:</span> <span class="n">method</span><span class="p">,</span>
+        <span class="s2">&quot;params&quot;</span><span class="p">:</span> <span class="p">{</span><span class="o">**</span><span class="n">params</span><span class="p">,</span> <span class="s2">&quot;_meta&quot;</span><span class="p">:</span> <span class="p">{</span>
+            <span class="c1"># There is no handshake in this revision: every request carries its</span>
+            <span class="c1"># own protocol version and capabilities. That is why reconnection is</span>
+            <span class="c1"># cheap — there is no session state to rebuild.</span>
+            <span class="s2">&quot;io.modelcontextprotocol/protocolVersion&quot;</span><span class="p">:</span> <span class="n">PROTOCOL_VERSION</span><span class="p">,</span>
+            <span class="s2">&quot;io.modelcontextprotocol/clientInfo&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">CLIENT_NAME</span><span class="p">,</span>
+                                                   <span class="s2">&quot;version&quot;</span><span class="p">:</span> <span class="n">CLIENT_VERSION</span><span class="p">},</span>
+            <span class="s2">&quot;io.modelcontextprotocol/clientCapabilities&quot;</span><span class="p">:</span> <span class="p">{},</span>
+        <span class="p">}},</span>
+    <span class="p">}</span>
+    <span class="k">async</span> <span class="k">with</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">timeout</span><span class="p">(</span><span class="n">server</span><span class="o">.</span><span class="n">timeout</span><span class="p">):</span>
+        <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">http</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="n">server</span><span class="o">.</span><span class="n">url</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="n">_headers</span><span class="p">(</span><span class="n">method</span><span class="p">,</span> <span class="n">name</span><span class="p">),</span> <span class="n">json</span><span class="o">=</span><span class="n">body</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">400</span><span class="p">:</span>
+        <span class="c1"># A modern server uses 400 for version mismatch, missing capability and</span>
+        <span class="c1"># header/body disagreement. Read the JSON-RPC error before concluding the</span>
+        <span class="c1"># server is old — the difference decides whether to correct the request or</span>
+        <span class="c1"># to fall back to an older protocol.</span>
+        <span class="k">raise</span> <span class="n">ProtocolError</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;error&quot;</span><span class="p">,</span> <span class="p">{}))</span>
+    <span class="k">return</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/mcp/translate.py</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">load_tools</span><span class="p">(</span><span class="n">server</span><span class="p">:</span> <span class="n">ServerConfig</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Tool</span><span class="p">]:</span>
+    <span class="n">listed</span> <span class="o">=</span> <span class="k">await</span> <span class="n">request</span><span class="p">(</span><span class="n">server</span><span class="p">,</span> <span class="s2">&quot;tools/list&quot;</span><span class="p">,</span> <span class="p">{})</span>
+    <span class="n">tools</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="k">for</span> <span class="n">spec</span> <span class="ow">in</span> <span class="n">listed</span><span class="p">[</span><span class="s2">&quot;result&quot;</span><span class="p">][</span><span class="s2">&quot;tools&quot;</span><span class="p">]:</span>
+        <span class="k">if</span> <span class="n">spec</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">server</span><span class="o">.</span><span class="n">allowed_tools</span><span class="p">:</span>
+            <span class="c1"># Logged, not silently dropped. A server growing new tools is</span>
+            <span class="c1"># information: it may be a feature you want, and it may be a change</span>
+            <span class="c1"># in what that server can do to you.</span>
+            <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;mcp tool not allowed&quot;</span><span class="p">,</span> <span class="n">extra</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;server&quot;</span><span class="p">:</span> <span class="n">server</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+                                                    <span class="s2">&quot;tool&quot;</span><span class="p">:</span> <span class="n">spec</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]})</span>
+            <span class="k">continue</span>
+
+        <span class="n">tools</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">Tool</span><span class="p">(</span>
+            <span class="c1"># Namespaced. Two servers will eventually both offer `search`, and</span>
+            <span class="c1"># without a prefix one silently shadows the other in your registry.</span>
+            <span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">server</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">__</span><span class="si">{</span><span class="n">spec</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+            <span class="c1"># The description is third-party text going straight into your</span>
+            <span class="c1"># prompt. Delimit it so the model can tell where your instructions</span>
+            <span class="c1"># end and a vendor&#39;s begin, and cap it so a long one cannot crowd</span>
+            <span class="c1"># out your system prompt.</span>
+            <span class="n">description</span><span class="o">=</span><span class="n">fence</span><span class="p">(</span><span class="n">spec</span><span class="p">[</span><span class="s2">&quot;description&quot;</span><span class="p">][:</span><span class="n">DESCRIPTION_LIMIT</span><span class="p">]),</span>
+            <span class="n">schema</span><span class="o">=</span><span class="n">spec</span><span class="p">[</span><span class="s2">&quot;inputSchema&quot;</span><span class="p">],</span>
+        <span class="p">))</span>
+
+    <span class="c1"># The list result carries a freshness hint and a cache scope. Honour it:</span>
+    <span class="c1"># calling tools/list on every turn is a network round trip per turn for a</span>
+    <span class="c1"># list that rarely changes.</span>
+    <span class="k">return</span> <span class="n">tools</span><span class="p">,</span> <span class="n">listed</span><span class="p">[</span><span class="s2">&quot;result&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;ttlMs&quot;</span><span class="p">,</span> <span class="n">DEFAULT_TTL_MS</span><span class="p">)</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># app/mcp/dispatch.py</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">call</span><span class="p">(</span><span class="n">server</span><span class="p">:</span> <span class="n">ServerConfig</span><span class="p">,</span> <span class="n">tool</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">arguments</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ToolResult</span><span class="p">:</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">health</span><span class="o">.</span><span class="n">is_up</span><span class="p">(</span><span class="n">server</span><span class="o">.</span><span class="n">name</span><span class="p">):</span>
+        <span class="c1"># A server that is down becomes a missing tool, not a failed turn. The</span>
+        <span class="c1"># agent is told, and can answer without it or say what it cannot do.</span>
+        <span class="k">return</span> <span class="n">ToolResult</span><span class="p">(</span><span class="n">is_error</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                          <span class="n">content</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">server</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> is unavailable right now.&quot;</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">request</span><span class="p">(</span><span class="n">server</span><span class="p">,</span> <span class="s2">&quot;tools/call&quot;</span><span class="p">,</span>
+                               <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">tool</span><span class="p">,</span> <span class="s2">&quot;arguments&quot;</span><span class="p">:</span> <span class="n">arguments</span><span class="p">},</span> <span class="n">name</span><span class="o">=</span><span class="n">tool</span><span class="p">)</span>
+    <span class="k">except</span> <span class="p">(</span><span class="ne">TimeoutError</span><span class="p">,</span> <span class="n">ProtocolError</span><span class="p">,</span> <span class="ne">ConnectionError</span><span class="p">)</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+        <span class="n">health</span><span class="o">.</span><span class="n">record_failure</span><span class="p">(</span><span class="n">server</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+        <span class="c1"># Never the raw error: it can contain the URL, and the URL can contain a</span>
+        <span class="c1"># token. The model gets something it can act on instead.</span>
+        <span class="k">return</span> <span class="n">ToolResult</span><span class="p">(</span><span class="n">is_error</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                          <span class="n">content</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">tool</span><span class="si">}</span><span class="s2"> failed on </span><span class="si">{</span><span class="n">server</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">. Try another approach.&quot;</span><span class="p">)</span>
+
+    <span class="n">text</span> <span class="o">=</span> <span class="n">render</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">text</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">server</span><span class="o">.</span><span class="n">max_result_chars</span><span class="p">:</span>
+        <span class="c1"># The cap you enforce, not the one they promise. This is the only control</span>
+        <span class="c1"># you have over how much of your context a third party consumes, and an</span>
+        <span class="c1"># unbounded result is a context-window failure with a delay on it.</span>
+        <span class="n">text</span> <span class="o">=</span> <span class="n">text</span><span class="p">[:</span><span class="n">server</span><span class="o">.</span><span class="n">max_result_chars</span><span class="p">]</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">[truncated by the client]&quot;</span>
+    <span class="n">health</span><span class="o">.</span><span class="n">record_success</span><span class="p">(</span><span class="n">server</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">ToolResult</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="n">text</span><span class="p">)</span>
+</code></pre></div>
+
+<h2>5. Golden-standard rules</h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Forbidden:</strong> exposing every tool a server advertises</td>
+<td>The set changes without you. An allow-list makes new capability a reviewed commit instead of an automatic one.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> an unbounded external result</td>
+<td>It is the least controlled thing entering your context, and a large one truncates the conversation from the front later.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> an unbounded call to an external server</td>
+<td>One unreachable third party otherwise hangs the whole turn.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> returning a transport error verbatim to the model</td>
+<td>It can contain the server URL, and the URL can contain a credential.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> treating a tool description as your own text</td>
+<td>It is written by the server operator and lands in your prompt. Delimit it, cap it, and choose the servers deliberately.</td>
+</tr>
+<tr>
+<td>Tool names are namespaced by server</td>
+<td>Two servers will both offer <code>search</code>, and without a prefix one shadows the other with no warning.</td>
+</tr>
+<tr>
+<td>A server being down degrades to a missing tool</td>
+<td>The agent should be able to answer without it, or say what it cannot do.</td>
+</tr>
+<tr>
+<td>Tool lists are cached, honouring the freshness hint</td>
+<td>Otherwise it is a round trip per turn for a list that changes monthly.</td>
+</tr>
+<tr>
+<td>Header values are derived from the body, never written twice</td>
+<td>The server rejects a mismatch, and two sources of the same value drift.</td>
+</tr>
+<tr>
+<td>A blank connection is assumed to be cheap, because it is</td>
+<td>There is no handshake and no session in the current revision, so reconnection is a new request rather than a re-established state.</td>
+</tr>
+<tr>
+<td>Streams are not resumable — a broken one is re-issued as a new request</td>
+<td>Resumability was removed; a client that waits to resume waits forever.</td>
+</tr>
+<tr>
+<td>Every server's operator and reach are written down</td>
+<td>"Which third parties can this agent's tools touch" is a question you will be asked, and it should not require reading code.</td>
+</tr>
+</tbody>
+</table>
+<h2>6. Data contracts</h2>
+<div class="hl"><pre><span></span><code><span class="err">POST /mcp</span>
+<span class="err">Accept: application/json, text/event-stream</span>
+<span class="err">MCP-Protocol-Version: 2026-07-28</span>
+<span class="err">Mcp-Method: tools/call</span>
+<span class="err">Mcp-Name: search_docs</span>
+</code></pre></div>
+
+<p>Headers mirror the body, and the server must reject any disagreement — so they are
+computed from the body rather than written alongside it. The reason is worth
+understanding: a load balancer may route on the header while the server executes
+on the body, and if those differ, the routing decision and the work happen on
+different values.</p>
+<p>Two protocol properties shape everything above them:</p>
+<div class="hl"><pre><span></span><code>no sessions      every request stands alone and carries its own version and
+                 capabilities; reconnection has no state to rebuild
+no resumption    a broken stream loses its request; re-issue with a new id
+</code></pre></div>
+
+<h2>7. Build order</h2>
+<ol>
+<li><strong>One server, one tool, one call.</strong> Confirm the protocol revision it actually
+   speaks before writing anything around it.</li>
+<li><strong>The allow-list</strong>, before a second tool is exposed — it is trivial now and a
+   retrofit once the agent depends on tools nobody chose.</li>
+<li><strong>Deadlines and the result budget</strong>, with a test using a deliberately slow
+   server and one returning far too much.</li>
+<li><strong>Namespacing and translation</strong>, with a test that two servers offering the same
+   tool name both remain reachable.</li>
+<li><strong>Health tracking and degradation</strong>, with a test that an unreachable server
+   leaves the agent able to answer.</li>
+<li><strong>Tool-list caching</strong>, honouring the freshness hint.</li>
+<li><strong>A second real server</strong>, which is where the assumptions from the first one
+   show up.</li>
+</ol>
+<p>Step 2 that early because the allow-list is the only control here that gets harder
+to add as the agent becomes useful. Everything else can be tightened later.</p>
+<h2>8. Blocks to pull in</h2>
+<p>Nothing here is a prerequisite. These are adjacent problems, by name only —
+resolve them separately if they apply.</p>
+<ul>
+<li>LLM tool registry and dispatcher — the local registry these tools join</li>
+<li>LLM tool design — what a good tool looks like, which is what you are judging when choosing servers</li>
+<li>MCP server over stdio, and MCP server over HTTP — the other side of this protocol</li>
+<li>LLM observability and tracing — per-server latency, error rate and truncation counts</li>
+<li>Context engineering for agents — the budget these results are spending</li>
+</ul>
+<h2>9. Metrics</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Tools reachable by the agent that are not on an allow-list</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Turns held up by an unreachable server</td>
+<td>0</td>
+</tr>
+<tr>
+<td>External results exceeding the client-side cap</td>
+<td>0 — capped, and counted</td>
+</tr>
+<tr>
+<td><code>tools/list</code> calls per turn</td>
+<td>~0 with a warm cache</td>
+</tr>
+<tr>
+<td>Tool-name collisions between servers</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Time from a server going down to it being skipped</td>
+<td>&lt; 1 call</td>
+</tr>
+<tr>
+<td>Share of context consumed by external tool descriptions</td>
+<td>Measured, and bounded</td>
+</tr>
+</tbody>
+</table>
+<h2>10. Failure modes</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The agent used a tool nobody knew it had</td>
+<td>The server added tools and everything advertised is exposed</td>
+<td>An allow-list in code</td>
+</tr>
+<tr>
+<td>The agent forgets its instructions after using an external tool</td>
+<td>An unbounded result filled the context and the history was truncated</td>
+<td>Cap results client-side</td>
+</tr>
+<tr>
+<td>A turn hangs and then times out at the outer layer</td>
+<td>The call to an external server had no deadline of its own</td>
+<td>Bound every call; degrade to a missing tool</td>
+</tr>
+<tr>
+<td>A server URL with a token in it appears in the conversation</td>
+<td>A transport error was returned to the model verbatim</td>
+<td>Log the error; return a fixed message</td>
+</tr>
+<tr>
+<td>Two servers' tools conflict and one stops being called</td>
+<td>Both advertise the same tool name and the registry has one key</td>
+<td>Namespace by server</td>
+</tr>
+<tr>
+<td>The model starts behaving oddly after connecting a server</td>
+<td>A tool description contains instruction-like text now sitting in your prompt</td>
+<td>Delimit and cap descriptions; reconsider the server</td>
+</tr>
+<tr>
+<td>Every turn is slower after connecting servers</td>
+<td><code>tools/list</code> runs per turn</td>
+<td>Cache the list and honour its freshness hint</td>
+</tr>
+<tr>
+<td>A request is rejected with a header-mismatch error</td>
+<td>Headers were written separately from the body and drifted</td>
+<td>Derive headers from the body</td>
+</tr>
+<tr>
+<td>A client waits forever after a dropped stream</td>
+<td>It expected to resume; resumability was removed from the transport</td>
+<td>Re-issue as a new request</td>
+</tr>
+<tr>
+<td>A server rejects everything with 400</td>
+<td>The protocol version is not one it supports, or a required header is missing</td>
+<td>Read the JSON-RPC error body; it names the supported versions</td>
+</tr>
+<tr>
+<td>An old server does not respond as expected to a modern request</td>
+<td>It predates the current revision, which removed sessions and the handshake</td>
+<td>Detect the era from the error body and fall back deliberately</td>
+</tr>
+</tbody>
+</table>
+<h2>11. Definition of done</h2>
+<ul>
+<li class="task">Every exposed tool appears in an allow-list in code, and a test asserts a server advertising an unlisted tool does not expose it</li>
+<li class="task">Every external call has a deadline; a test with a slow server asserts a recoverable error rather than a hang</li>
+<li class="task">Every external result is capped client-side, with a test using an oversized result</li>
+<li class="task">No transport error text reaches the model, covered by a test that fails a call with a credential in the URL and asserts its absence</li>
+<li class="task">Tool names are namespaced by server, and a test connects two servers offering the same tool name and reaches both</li>
+<li class="task">An unreachable server leaves the agent able to complete a turn, covered by a test</li>
+<li class="task">Tool lists are cached and the server's freshness hint is honoured, verified by counting requests across turns</li>
+<li class="task">Request headers are derived from the request body, and a test asserts they match</li>
+<li class="task">Tool descriptions are delimited and length-capped before entering the prompt, covered by a test</li>
+<li class="task">The protocol revision each server speaks is recorded, and an unsupported one fails at start-up rather than at first use</li>
+<li class="task">For each server, its operator and what it can reach are written in the repository beside its configuration</li>
+</ul>
+  </article>
+
+  <aside class="tailpiece">
+    <h2>Use this blueprint</h2>
+    <p>
+      Copy the file into your project and point your agent at it. It works with Claude Code,
+      Cursor, Copilot, ChatGPT and anything else that reads a file — there is nothing to install.
+    </p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/mcp-client-integration" target="_blank" rel="noopener">Open on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Browse all blueprints</a>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p><a href="/">Awesome Blueprints</a> — same request, same architecture, every time.</p>
+    <p class="dim">MIT · awesomeblueprints.com</p>
+  </div>
+</footer>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'neutral' });
+</script>
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const now = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', now);
+    try { localStorage.setItem('ab-theme', now); } catch (e) {}
+    location.reload();   // the diagram is themed at render time
+  });
+</script>
+
+</body>
+</html>

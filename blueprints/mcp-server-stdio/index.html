@@ -1,0 +1,564 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MCP Server over stdio — Blueprint for AI Coding Agents | Awesome Blueprints</title>
+<meta name="description" content="An MCP server over stdio: exposing local tools, files and commands to a developer&#x27;s own agent, with the process model and limits it implies." />
+<link rel="canonical" href="https://awesomeblueprints.com/blueprints/mcp-server-stdio/" />
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="Awesome Blueprints" />
+<meta property="og:url" content="https://awesomeblueprints.com/blueprints/mcp-server-stdio/" />
+<meta property="og:title" content="MCP Server over stdio — Architecture Blueprint" />
+<meta property="og:description" content="An MCP server over stdio: exposing local tools, files and commands to a developer&#x27;s own agent, with the process model and limits it implies." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="MCP Server over stdio — Architecture Blueprint" />
+<meta name="twitter:description" content="An MCP server over stdio: exposing local tools, files and commands to a developer&#x27;s own agent, with the process model and limits it implies." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/page.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "MCP Server over stdio", "description": "An MCP server over stdio: exposing local tools, files and commands to a developer's own agent, with the process model and limits it implies.", "url": "https://awesomeblueprints.com/blueprints/mcp-server-stdio/", "dateModified": "2026-08-19", "keywords": "MCP, Agents", "isAccessibleForFree": true, "license": "https://opensource.org/licenses/MIT", "publisher": {"@type": "Organization", "name": "Awesome Blueprints", "url": "https://awesomeblueprints.com"}}</script>
+<script>
+  (function () {
+    var t;
+    try { t = localStorage.getItem('ab-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">Awesome Blueprints</a>
+    <div class="nav-right">
+      <a class="nav-link" href="/#blueprints">Catalogue</a>
+      <a class="nav-link" href="/#faq">FAQ</a>
+      <a class="nav-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/mcp-server-stdio" target="_blank" rel="noopener">GitHub ↗</a>
+      <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Switch theme">◑</button>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/">Home</a> <span>/</span> <a href="/#blueprints">Blueprints</a> <span>/</span>
+    <span>MCP Server over stdio</span>
+  </nav>
+
+  <header class="page-head">
+    <p class="eyebrow">mcp-server-stdio</p>
+    <h1>MCP Server over stdio</h1>
+    <p class="lede">An MCP server over stdio: exposing local tools, files and commands to a developer&#x27;s own agent, with the process model and limits it implies.</p>
+    <div class="facts"><span>low</span><span>1–2 days</span><span>Verified 2026-08-19</span></div>
+    <div class="tags"><span class="tag">MCP</span><span class="tag">Agents</span></div>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/mcp-server-stdio" target="_blank" rel="noopener">Read it on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Back to the catalogue</a>
+    </div>
+  </header>
+
+  <article class="doc">
+<blockquote>
+<p>A local MCP server that exposes your own tools to a coding agent: a skeleton
+that starts in one command, errors an agent can act on, results that respect the
+context they land in, and an installation entry someone else can copy.</p>
+</blockquote>
+<p><strong>Complexity:</strong> low · <strong>Typical build:</strong> 1–2 days · <strong>Verified:</strong> 2026-08-19 (re-check after ~90 days)</p>
+<p><strong>Examples in:</strong> Python. The architecture is language-agnostic: sections 5, 10 and 11 hold wherever you build this. Section 4 is illustrative — if your project is in another language, your agent translates the idioms rather than importing them, and nothing is lost. The protocol details below are from the specification revision named on the Verified line.</p>
+<p><strong>Use when:</strong> something on a developer's own machine should be available to their agent — a project's build system, an internal command-line tool, a local database, a scratch directory — and it runs as the same user with the same permissions they already have.</p>
+<p><strong>Not for:</strong> anything reached over a network or used by more than one person. That is a different product: it needs authorization, tenant isolation, rate limits and a deployment, and none of those exist here — a stdio server has exactly the permissions of the process that spawned it, and that is the whole of its security model.</p>
+<hr />
+<h2>⚙️ INSTRUCTIONS FOR THE AI — READ BEFORE WRITING ANY CODE</h2>
+<p><strong>Do not start coding.</strong></p>
+<p><strong>Step 1 — Refresh.</strong> Verify the SDK and the protocol revision it implements.
+Several things were removed in the current revision that older examples still
+show: the <code>initialize</code> handshake is gone — each request carries its protocol
+version and client capabilities in <code>_meta</code> — and <code>ping</code>, <code>logging/setLevel</code> and
+the roots-list-changed notification no longer exist. <strong>Roots, Sampling and Logging
+are deprecated</strong>, so do not build on them in new work; log to standard error
+instead of using the logging feature. Confirm that <code>server/discover</code> is required
+and what it must advertise. Confirm the client's configuration format for
+registering a local server, since that is what a user copies. Report what you
+verified and what turned out wrong.</p>
+<p><strong>Step 2 — Read the project, then audit what already exists.</strong> Find what the
+server will actually expose and, for each candidate, whether it is safe to run
+without a person watching — a stdio server inherits the user's permissions, so
+"delete a branch" runs with the same authority as the user typing it. Find whether
+any of the underlying commands write to standard output, because that is the
+transport and anything printed there corrupts the protocol. Establish how the
+server will be launched: an installed executable, a script in a repository, a
+package runner. Then audit §11 item by item, each marked <em>already true</em>, <em>partly
+true</em> or <em>absent</em>, with the file that decides it, reported before anything is
+proposed.</p>
+<p>Assume the project is right until it demonstrably is not; code satisfying an item
+stays even where its shape differs from §4; replacing something that works needs a
+one-line reason; never delete a working path to make room for the blueprint's
+version. The same holds for language — §4 is illustrative, its idioms get
+translated into the project's language, and §11 is what has to become true rather
+than the syntax.</p>
+<p><strong>Step 3 — Write a plan for the gap only, and get it approved</strong>, including a
+<code>## Proposed stack</code> section, the tool list with what each can reach, and the
+configuration snippet a user will copy. Do not ask open framework questions —
+propose, and ask for confirmation once. Say what you are adding, what you are
+leaving alone, and what you propose to change, and touch nothing else.</p>
+<p><strong>Step 4 — Build in the order in §7.</strong> <strong>Step 5 — §11 is the definition of done.</strong></p>
+<hr />
+<h2>1. Why a working server is still a bad one</h2>
+<p>The skeleton takes an hour. What separates a server people keep from one they
+disable is entirely in what it sends back.</p>
+<table>
+<thead>
+<tr>
+<th>The server that works</th>
+<th>The server that stays installed</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A failure is a stack trace, or nothing</td>
+<td>A failure is a sentence saying what to do instead</td>
+</tr>
+<tr>
+<td>A tool returns everything it found</td>
+<td>It returns what fits, and says what it truncated</td>
+</tr>
+<tr>
+<td>Descriptions describe the implementation</td>
+<td>They describe when to use the tool, because that is what the model is choosing on</td>
+</tr>
+<tr>
+<td>Something prints a diagnostic to standard output</td>
+<td>Nothing does, because standard output is the wire</td>
+</tr>
+</tbody>
+</table>
+<p>The last row is the failure unique to this transport and it is absolute. <strong>Standard
+output is the protocol.</strong> A stray <code>print</code>, a library that logs to stdout, a
+progress bar from a subprocess — any of it lands in the middle of a JSON-RPC
+message and the client sees a parse error, usually with no indication of where it
+came from. Everything diagnostic goes to standard error, and this has to be true
+of every library you call, not only of your own code.</p>
+<p>The first row is what makes the difference in use. An agent cannot debug you. Told
+"error: 2", it retries the same call. Told "no repository at that path; pass an
+absolute path to a directory containing .git", it fixes the call and moves on.
+<strong>Error messages here are part of the interface, not diagnostics</strong> — they are read
+by something that will act on them immediately.</p>
+<p>The second row is a cost you impose on your users. Everything you return occupies
+the agent's context, and a tool that returns a whole file for a question about one
+function has spent the user's budget on your behalf. Returning less, and saying
+what was left out, is a feature.</p>
+<h2>2. Architecture</h2>
+<pre class="mermaid">%% GENERATED - do not edit by hand.
+%% Edit the source header in architecture.mmd, then rebuild.
+%% A local server on the standard streams
+
+flowchart TB
+    agent([&quot;Coding agent&quot;])
+    launch[&quot;Launched as a subprocess&quot;]
+    discover[&quot;Discover, version and capabilities&quot;]
+    tools[&quot;Tool handlers&quot;]
+    resources[&quot;Resources&quot;]
+    prompts[&quot;Prompts&quot;]
+    trim[&quot;Result budget&quot;]
+    errs[&quot;Actionable errors&quot;]
+    stderr[&quot;Diagnostics to standard error&quot;]
+    local{{&quot;Local system, the user&#x27;s own permissions&quot;}}
+
+    agent --&gt;|&quot;spawns, speaks over the standard streams&quot;| launch
+    launch --&gt;|&quot;supported versions and identity&quot;| discover
+    agent --&gt;|&quot;tools call&quot;| tools
+    tools --&gt;|&quot;with the permissions of the user who launched it&quot;| local
+    tools --&gt; trim
+    trim --&gt;|&quot;bounded result&quot;| agent
+    tools -.-&gt;|&quot;failure&quot;| errs
+    errs --&gt;|&quot;what to do instead&quot;| agent
+    agent --&gt;|&quot;read&quot;| resources
+    agent --&gt;|&quot;get&quot;| prompts
+    tools -.-&gt;|&quot;never to standard output, which is the wire&quot;| stderr
+
+    classDef service fill:#eff6ff,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b;
+    classDef datastore fill:#e9faf3,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b;
+    classDef external fill:#fff4ed,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b;
+    classDef actor fill:#f0eefc,stroke:#4a3aa7,stroke-width:1.5px,color:#0b0b0b;
+    class launch,discover,tools,resources,prompts,trim,errs,stderr service;
+    class local external;
+    class agent actor;</pre>
+<p>The rule the diagram encodes: <strong>there is exactly one arrow to standard output and
+it carries the protocol.</strong> Every other outbound arrow — logs, warnings, progress,
+a subprocess's chatter — goes to standard error. This is not a style preference;
+it is what makes the transport work.</p>
+<h2>3. Project structure</h2>
+<div class="hl"><pre><span></span><code>src/myserver/
+├── __main__.py     the entry point, so `python -m myserver` starts it
+├── server.py       the server, its identity and its version
+├── tools/
+│   └── repo.py     one module per group of tools
+├── resources.py    read-only data the agent may fetch
+└── limits.py       the result budget, in one place
+README.md           the configuration snippet a user copies, and what it can reach
+</code></pre></div>
+
+<p><strong>One rule: the README carries a working configuration entry.</strong> Not instructions
+for writing one — the JSON itself, with the command and arguments filled in. It is
+what someone pastes, and it is the difference between a server people install and
+one they mean to get around to.</p>
+<h2>4. Reference implementation</h2>
+<div class="hl"><pre><span></span><code><span class="c1"># src/myserver/server.py</span>
+<span class="kn">import</span> <span class="nn">logging</span><span class="o">,</span> <span class="nn">sys</span>
+<span class="kn">from</span> <span class="nn">mcp.server</span> <span class="kn">import</span> <span class="n">Server</span>
+
+<span class="c1"># stderr, always. Standard output is the transport: one line printed there lands</span>
+<span class="c1"># in the middle of a JSON-RPC message and the client reports a parse error with</span>
+<span class="c1"># no hint about where it came from. This applies to every library you call, not</span>
+<span class="c1"># only to your own code.</span>
+<span class="n">logging</span><span class="o">.</span><span class="n">basicConfig</span><span class="p">(</span><span class="n">stream</span><span class="o">=</span><span class="n">sys</span><span class="o">.</span><span class="n">stderr</span><span class="p">,</span> <span class="n">level</span><span class="o">=</span><span class="n">logging</span><span class="o">.</span><span class="n">INFO</span><span class="p">)</span>
+
+<span class="n">server</span> <span class="o">=</span> <span class="n">Server</span><span class="p">(</span><span class="s2">&quot;myserver&quot;</span><span class="p">,</span> <span class="n">version</span><span class="o">=</span><span class="n">__version__</span><span class="p">)</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># src/myserver/tools/repo.py</span>
+<span class="n">MAX_RESULT_CHARS</span> <span class="o">=</span> <span class="mi">8000</span>
+
+
+<span class="nd">@server</span><span class="o">.</span><span class="n">tool</span><span class="p">()</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">find_symbol</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;.&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Find where a symbol is defined in this repository.</span>
+
+<span class="sd">    Use this when you need the definition of a function, class or constant and do</span>
+<span class="sd">    not know which file it is in. Returns the file, the line and the signature —</span>
+<span class="sd">    not the body; read the file for that.</span>
+
+<span class="sd">    The description is what the model chooses on, so it says *when to use this*</span>
+<span class="sd">    and what comes back. Describing the implementation instead is the most common</span>
+<span class="sd">    reason a good tool never gets called.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">root</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">root</span> <span class="o">/</span> <span class="s2">&quot;.git&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+        <span class="c1"># An agent cannot debug you. &quot;error: 2&quot; gets retried unchanged; this gets</span>
+        <span class="c1"># corrected and the turn continues. Error text here is interface, not</span>
+        <span class="c1"># diagnostics.</span>
+        <span class="k">raise</span> <span class="n">ToolError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;No repository at </span><span class="si">{</span><span class="n">root</span><span class="si">}</span><span class="s2">. Pass an absolute path to a directory &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;containing a .git folder.&quot;</span><span class="p">)</span>
+
+    <span class="n">matches</span> <span class="o">=</span> <span class="k">await</span> <span class="n">search</span><span class="p">(</span><span class="n">root</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">matches</span><span class="p">:</span>
+        <span class="c1"># A dead end that says what to try next. &quot;Not found&quot; alone makes the</span>
+        <span class="c1"># agent guess; naming the next move usually ends the loop.</span>
+        <span class="k">return</span> <span class="p">(</span><span class="sa">f</span><span class="s2">&quot;No definition of </span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> found under </span><span class="si">{</span><span class="n">root</span><span class="si">}</span><span class="s2">. &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Check the spelling, or search for a partial name.&quot;</span><span class="p">)</span>
+
+    <span class="n">rendered</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">m</span><span class="o">.</span><span class="n">file</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">m</span><span class="o">.</span><span class="n">line</span><span class="si">}</span><span class="s2">  </span><span class="si">{</span><span class="n">m</span><span class="o">.</span><span class="n">signature</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">matches</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">rendered</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">MAX_RESULT_CHARS</span><span class="p">:</span>
+        <span class="c1"># Everything returned occupies the user&#39;s context. Returning less, and</span>
+        <span class="c1"># saying so, is a feature — an unbounded result spends a budget that is</span>
+        <span class="c1"># not yours on data nobody asked for.</span>
+        <span class="n">kept</span> <span class="o">=</span> <span class="n">rendered</span><span class="p">[:</span><span class="n">MAX_RESULT_CHARS</span><span class="p">]</span><span class="o">.</span><span class="n">rsplit</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">return</span> <span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">kept</span><span class="si">}</span><span class="se">\n\n</span><span class="s2">[</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">matches</span><span class="p">)</span><span class="si">}</span><span class="s2"> matches; showing the first few. &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Narrow the search with a more specific name.]&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">rendered</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># src/myserver/resources.py</span>
+<span class="nd">@server</span><span class="o">.</span><span class="n">resource</span><span class="p">(</span><span class="s2">&quot;repo://conventions&quot;</span><span class="p">)</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">conventions</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Content the agent may read, addressed by URI rather than called.</span>
+
+<span class="sd">    Resources suit stable reference material — conventions, schemas, a changelog.</span>
+<span class="sd">    The distinction that matters in practice: a tool is something the model</span>
+<span class="sd">    decides to do, a resource is something it or the user can pull in. Modelling</span>
+<span class="sd">    reference text as a tool makes the model choose whether to read it; modelling</span>
+<span class="sd">    an action as a resource hides it from the decision.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">Path</span><span class="o">.</span><span class="n">cwd</span><span class="p">()</span> <span class="o">/</span> <span class="s2">&quot;CONVENTIONS.md&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">read_text</span><span class="p">()</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1"># src/myserver/__main__.py</span>
+<span class="k">def</span> <span class="nf">main</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="c1"># A module entry point, so the configuration line is stable and does not</span>
+    <span class="c1"># depend on where a script happens to be installed.</span>
+    <span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">server</span><span class="o">.</span><span class="n">run_stdio</span><span class="p">())</span>
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="n">main</span><span class="p">()</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code>&lt;!-- README.md --&gt;
+<span class="gu">## Install</span>
+
+Add this to your client&#39;s MCP configuration:
+
+<span class="sb">```json</span>
+<span class="p">{</span><span class="w"></span>
+<span class="w">  </span><span class="nt">&quot;mcpServers&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="nt">&quot;myserver&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">      </span><span class="nt">&quot;command&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;uvx&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="nt">&quot;args&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;--from&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;myserver&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;python&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;-m&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;myserver&quot;</span><span class="p">],</span><span class="w"></span>
+<span class="w">      </span><span class="nt">&quot;env&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{}</span><span class="w"></span>
+<span class="w">    </span><span class="p">}</span><span class="w"></span>
+<span class="w">  </span><span class="p">}</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+<span class="sb">```</span>
+
+This server runs as you, with your permissions. It reads files under the
+directory it is started in and runs no commands that write.
+</code></pre></div>
+
+<h2>5. Golden-standard rules</h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Forbidden:</strong> writing anything but protocol messages to standard output</td>
+<td>It is the wire. One stray line corrupts a message and the client reports a parse error with no clue where it came from.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> an unbounded tool result</td>
+<td>It spends the user's context budget, which is not yours to spend, on data nobody asked for.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> an error message that does not say what to do next</td>
+<td>The agent cannot debug you. An unactionable error is retried unchanged until the turn is wasted.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> building new work on deprecated features</td>
+<td>Roots, Sampling and Logging are deprecated in the current revision. Log to standard error and take paths as parameters.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> a tool that acts destructively without saying so in its description</td>
+<td>This server has the user's own permissions; the description is the only warning anything gets.</td>
+</tr>
+<tr>
+<td>Descriptions say when to use the tool, not how it works</td>
+<td>The model is choosing, and it chooses on the description. This is the most common reason a good tool is never called.</td>
+</tr>
+<tr>
+<td>A dead end names the next thing to try</td>
+<td>"Not found" makes the agent guess; "not found, try a partial name" usually ends the loop.</td>
+</tr>
+<tr>
+<td>Truncation is stated, never silent</td>
+<td>An agent that cannot tell a partial result from a complete one draws confident conclusions from half the data.</td>
+</tr>
+<tr>
+<td>The README carries a paste-ready configuration entry</td>
+<td>It is the difference between a server people install and one they mean to.</td>
+</tr>
+<tr>
+<td>The entry point is a module, not a path to a script</td>
+<td>Paths differ per machine; a module entry point is the same line for everyone.</td>
+</tr>
+<tr>
+<td>Tools are tested by calling them directly, not only through a client</td>
+<td>Most of what can be wrong here — errors, truncation, descriptions — is testable without a transport.</td>
+</tr>
+<tr>
+<td>What the server can reach is written in the README</td>
+<td>Someone installs this on a machine with their credentials on it, and they are entitled to know.</td>
+</tr>
+</tbody>
+</table>
+<h2>6. Data contracts</h2>
+<div class="hl"><pre><span></span><code>tool      a thing the model decides to do; chosen by its description
+resource  content addressed by a URI, pulled in rather than invoked
+prompt    a reusable template the user can select
+</code></pre></div>
+
+<p>The distinction between the first two decides how a capability appears. A tool
+enters the model's decision; a resource does not, and is fetched when something
+asks for it. Reference material modelled as a tool makes the model choose whether
+to read it, and it will sometimes choose wrong. An action modelled as a resource
+disappears from the decision entirely.</p>
+<p>Every result is text going into a context window someone else is paying for. The
+budget is part of the contract: a bounded result with a note about what was left
+out is more useful than a complete one that pushes the conversation's earlier
+turns out of the window.</p>
+<h2>7. Build order</h2>
+<ol>
+<li><strong>The skeleton with one tool, launched from a real client.</strong> Confirm the
+   transport works before anything depends on it.</li>
+<li><strong>Standard-error logging, and a check that nothing writes to standard
+   output</strong> — including anything a subprocess prints.</li>
+<li><strong>Actionable errors</strong>, with a test asserting each failure path names a next
+   step.</li>
+<li><strong>The result budget</strong>, with a test on an input that produces far too much.</li>
+<li><strong>Descriptions rewritten as selection criteria</strong>, then a real session to see
+   whether the right tool gets chosen.</li>
+<li><strong>Resources and prompts</strong>, only where the distinction in §6 actually applies.</li>
+<li><strong>The README with a paste-ready entry</strong>, tested by installing on a second
+   machine.</li>
+</ol>
+<p>Step 2 second because a stdout leak breaks the protocol in a way that looks like
+an SDK bug, and it is much cheaper to prevent than to find later.</p>
+<h2>8. Blocks to pull in</h2>
+<p>Nothing here is a prerequisite. These are adjacent problems, by name only —
+resolve them separately if they apply.</p>
+<ul>
+<li>MCP server over HTTP — the version with authorization, tenancy and a deployment</li>
+<li>MCP client integration — connecting somebody else's server to your own agent</li>
+<li>LLM tool design — what a good tool looks like from the model's side</li>
+<li>LLM tool registry and dispatcher — the same result-budget and error problems inside an agent</li>
+</ul>
+<h2>9. Metrics</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Bytes written to standard output that are not protocol messages</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Tool results exceeding the stated budget</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Error paths that do not name a next step</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Time from installing to the first successful tool call</td>
+<td>&lt; 2 minutes</td>
+</tr>
+<tr>
+<td>Tools never chosen in a week of real use</td>
+<td>0 — each is context spent on every turn</td>
+</tr>
+<tr>
+<td>Truncated results not marked as truncated</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<h2>10. Failure modes</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The client reports a parse error and the server looks fine</td>
+<td>Something wrote to standard output — your code, a library, or a subprocess</td>
+<td>Route all diagnostics to standard error; capture subprocess output</td>
+</tr>
+<tr>
+<td>The agent retries the same failing call until the turn ends</td>
+<td>The error text says what went wrong but not what to do</td>
+<td>Rewrite errors as instructions</td>
+</tr>
+<tr>
+<td>The agent's earlier context disappears after using this server</td>
+<td>An unbounded result filled the window</td>
+<td>Cap results and say what was cut</td>
+</tr>
+<tr>
+<td>The agent draws a confident wrong conclusion from a partial list</td>
+<td>Truncation was silent</td>
+<td>Always mark it</td>
+</tr>
+<tr>
+<td>A useful tool is never chosen</td>
+<td>The description describes the implementation instead of the situation</td>
+<td>Rewrite it as when-to-use</td>
+</tr>
+<tr>
+<td>The server works for you and not for a colleague</td>
+<td>The configuration entry points at a path that exists only on your machine</td>
+<td>A module entry point; a paste-ready README snippet</td>
+</tr>
+<tr>
+<td>An example from the documentation does not work</td>
+<td>It predates the current revision, which removed the handshake and several methods</td>
+<td>Check the revision the SDK implements</td>
+</tr>
+<tr>
+<td>A feature works now and warns about deprecation</td>
+<td>Roots, Sampling or Logging</td>
+<td>Use parameters and standard error instead</td>
+</tr>
+<tr>
+<td>A tool did something destructive nobody expected</td>
+<td>It runs with the user's permissions and its description did not say what it does</td>
+<td>Say so in the description; consider not shipping it</td>
+</tr>
+<tr>
+<td>Every turn is slower after installing this server</td>
+<td>Descriptions are long, and they are re-sent on every turn</td>
+<td>Shorten them; fewer, better tools</td>
+</tr>
+<tr>
+<td>The server dies silently mid-session</td>
+<td>An unhandled exception reached the top level and the process exited</td>
+<td>Handle at the boundary; return an error result and stay alive</td>
+</tr>
+</tbody>
+</table>
+<h2>11. Definition of done</h2>
+<ul>
+<li class="task">A test asserts that a full session produces no non-protocol bytes on standard output, including from any subprocess the tools run</li>
+<li class="task">Every tool has a result budget, and a test with an oversized input asserts truncation and its notice</li>
+<li class="task">Every error path returns a message naming a next action, covered by one test per path</li>
+<li class="task">Every tool description states when to use the tool and what it returns, reviewed by reading them as a group</li>
+<li class="task">The README contains a configuration entry that works when pasted, verified on a machine that has never run this server</li>
+<li class="task">The entry point is a module, so the configuration line contains no machine-specific path</li>
+<li class="task">Every tool is callable directly in tests, without a client or a transport</li>
+<li class="task">No deprecated protocol feature is used, checked against the revision the SDK implements</li>
+<li class="task">An unhandled exception in a tool returns an error result and leaves the server running, covered by a test</li>
+<li class="task">The README states what the server can read, what it can write, and with whose permissions it runs</li>
+<li class="task">Every tool has been chosen at least once in a real session, or removed</li>
+</ul>
+  </article>
+
+  <aside class="tailpiece">
+    <h2>Use this blueprint</h2>
+    <p>
+      Copy the file into your project and point your agent at it. It works with Claude Code,
+      Cursor, Copilot, ChatGPT and anything else that reads a file — there is nothing to install.
+    </p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/mcp-server-stdio" target="_blank" rel="noopener">Open on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Browse all blueprints</a>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p><a href="/">Awesome Blueprints</a> — same request, same architecture, every time.</p>
+    <p class="dim">MIT · awesomeblueprints.com</p>
+  </div>
+</footer>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'neutral' });
+</script>
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const now = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', now);
+    try { localStorage.setItem('ab-theme', now); } catch (e) {}
+    location.reload();   // the diagram is themed at render time
+  });
+</script>
+
+</body>
+</html>

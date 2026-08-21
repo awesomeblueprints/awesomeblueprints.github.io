@@ -1,0 +1,620 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Streaming LLM Output in the Browser — Blueprint for AI Coding Agents | Awesome Blueprints</title>
+<meta name="description" content="Streaming LLM output in the browser: consuming SSE, incremental rendering, cancellation, reconnects and partial UTF-8 decoding done right." />
+<link rel="canonical" href="https://awesomeblueprints.com/blueprints/llm-streaming-client/" />
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="Awesome Blueprints" />
+<meta property="og:url" content="https://awesomeblueprints.com/blueprints/llm-streaming-client/" />
+<meta property="og:title" content="Streaming LLM Output in the Browser — Architecture Blueprint" />
+<meta property="og:description" content="Streaming LLM output in the browser: consuming SSE, incremental rendering, cancellation, reconnects and partial UTF-8 decoding done right." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Streaming LLM Output in the Browser — Architecture Blueprint" />
+<meta name="twitter:description" content="Streaming LLM output in the browser: consuming SSE, incremental rendering, cancellation, reconnects and partial UTF-8 decoding done right." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/page.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "Streaming LLM Output in the Browser", "description": "Streaming LLM output in the browser: consuming SSE, incremental rendering, cancellation, reconnects and partial UTF-8 decoding done right.", "url": "https://awesomeblueprints.com/blueprints/llm-streaming-client/", "dateModified": "2026-08-19", "keywords": "Streaming", "isAccessibleForFree": true, "license": "https://opensource.org/licenses/MIT", "publisher": {"@type": "Organization", "name": "Awesome Blueprints", "url": "https://awesomeblueprints.com"}}</script>
+<script>
+  (function () {
+    var t;
+    try { t = localStorage.getItem('ab-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">Awesome Blueprints</a>
+    <div class="nav-right">
+      <a class="nav-link" href="/#blueprints">Catalogue</a>
+      <a class="nav-link" href="/#faq">FAQ</a>
+      <a class="nav-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/llm-streaming-client" target="_blank" rel="noopener">GitHub ↗</a>
+      <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Switch theme">◑</button>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/">Home</a> <span>/</span> <a href="/#blueprints">Blueprints</a> <span>/</span>
+    <span>Streaming LLM Output in the Browser</span>
+  </nav>
+
+  <header class="page-head">
+    <p class="eyebrow">llm-streaming-client</p>
+    <h1>Streaming LLM Output in the Browser</h1>
+    <p class="lede">Streaming LLM output in the browser: consuming SSE, incremental rendering, cancellation, reconnects and partial UTF-8 decoding done right.</p>
+    <div class="facts"><span>medium</span><span>2–4 days</span><span>Verified 2026-08-19</span></div>
+    <div class="tags"><span class="tag">Streaming</span></div>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/llm-streaming-client" target="_blank" rel="noopener">Read it on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Back to the catalogue</a>
+    </div>
+  </header>
+
+  <article class="doc">
+<blockquote>
+<p>Receiving and rendering a token stream: decoding that survives a character split
+across two chunks, state that survives a second request arriving before the
+first finished, scrolling that respects the user, and a stop button that
+actually stops the meter.</p>
+</blockquote>
+<p><strong>Complexity:</strong> medium · <strong>Typical build:</strong> 2–4 days · <strong>Verified:</strong> 2026-08-19 (re-check after ~90 days)</p>
+<p><strong>Examples in:</strong> TypeScript, with React and the fetch streams API. The architecture is language-agnostic: sections 5, 10 and 11 hold wherever you build this. Section 4 is illustrative — if your project is in another framework, your agent translates the idioms rather than importing them, and nothing is lost. The decoding, cancellation and identity concerns are identical in Vue, Svelte, SwiftUI and Kotlin; only the state primitive changes.</p>
+<p><strong>Use when:</strong> a backend already streams and the interface has to show it — a chat, a generated document, anything where the user watches text arrive.</p>
+<p><strong>Not for:</strong> a page that renders a completed response. Adding streaming to a client whose server does not stream produces a typewriter animation over an answer that was already whole, which costs complexity and buys the appearance of speed rather than speed. Also not for a client that only needs to know when the work is done — poll a status endpoint.</p>
+<hr />
+<h2>⚙️ INSTRUCTIONS FOR THE AI — READ BEFORE WRITING ANY CODE</h2>
+<p><strong>Do not start coding.</strong></p>
+<p><strong>Step 1 — Refresh.</strong> Verify how the client will authenticate. <code>EventSource</code> is
+the obvious SSE API and it cannot send an <code>Authorization</code> header or a request
+body — it is GET-only — which rules it out for most authenticated chat endpoints;
+confirm whether that is still true before building around it, and expect to use
+<code>fetch</code> with a readable stream instead. Verify the streaming-text decoding API and
+its incremental mode. Verify the cancellation primitive and that it actually
+aborts the request in flight rather than only ignoring the result. Report what you
+verified and what turned out wrong.</p>
+<p><strong>Step 2 — Read the project, then audit what already exists.</strong> Find the server's
+event contract: the event names, whether there is a sequence number, and what the
+terminal events are. If any of those are missing, that is a server change, not a
+client workaround. Find the existing state management and whether two requests can
+be in flight at once — a chat where the user can send again before the first
+answer completes is the common case and the source of the worst bug here. Find how
+markdown is currently rendered. Then audit §11 item by item, each marked <em>already
+true</em>, <em>partly true</em> or <em>absent</em>, with the file that decides it, reported before
+anything is proposed.</p>
+<p>Assume the project is right until it demonstrably is not; code satisfying an item
+stays even where its shape differs from §4; replacing something that works needs a
+one-line reason; never delete a working path to make room for the blueprint's
+version. The same holds for language — §4 is illustrative, its idioms get
+translated into the project's language, and §11 is what has to become true rather
+than the syntax.</p>
+<p><strong>Step 3 — Write a plan for the gap only, and get it approved</strong>, including a
+<code>## Proposed stack</code> section and, explicitly, what the interface does when a stream
+drops halfway. Do not ask open framework questions — propose, and ask for
+confirmation once. Say what you are adding, what you are leaving alone, and what
+you propose to change, and touch nothing else.</p>
+<p><strong>Step 4 — Build in the order in §7.</strong> <strong>Step 5 — §11 is the definition of done.</strong></p>
+<hr />
+<h2>1. Half the streaming failures are on this side</h2>
+<p>The naive client reads chunks, converts them to text, and appends. Four things
+break, and none of them break in English on a fast connection.</p>
+<table>
+<thead>
+<tr>
+<th>The obvious client</th>
+<th>This one</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Decodes each chunk independently</td>
+<td>Decodes incrementally, so a character split across two chunks survives</td>
+</tr>
+<tr>
+<td>Appends to whichever message the callback closed over</td>
+<td>Every stream carries an id, and a callback that is no longer current is discarded</td>
+</tr>
+<tr>
+<td>Scrolls to the bottom on every token</td>
+<td>Follows only while the user is at the bottom</td>
+</tr>
+<tr>
+<td>Stopping hides the response</td>
+<td>Stopping aborts the request, so the server stops generating and the meter stops</td>
+</tr>
+</tbody>
+</table>
+<p>The first row is invisible until it is not. A UTF-8 character is one to four
+bytes, chunk boundaries fall wherever the network puts them, and decoding a chunk
+that ends mid-character produces a replacement character. In English this almost
+never happens; in Russian, Greek, Japanese or with an emoji it happens constantly.
+<strong>The fix is one argument</strong> — decode in incremental mode so the decoder holds the
+partial bytes until the rest arrives — and it is the single highest-value line in
+this document.</p>
+<p>The second row is the one that produces bug reports nobody can reproduce. A user
+sends a message, then sends another before the first finishes. Two streams are now
+running, both holding a reference to the message they were started for, and their
+updates interleave. Tokens from one answer land in the other, or a completed
+answer is overwritten by a stale write. <strong>Aborting the first request is not
+enough</strong> — abort stops the transport, and a callback already scheduled still runs.
+The state update itself has to check whether it is still the current stream.</p>
+<h2>2. Architecture</h2>
+<pre class="mermaid">%% GENERATED - do not edit by hand.
+%% Edit the source header in architecture.mmd, then rebuild.
+%% Receiving and rendering a stream
+
+flowchart TB
+    user([&quot;User&quot;])
+    send[&quot;Send action&quot;]
+    controller[&quot;Abort controller&quot;]
+    reader[&quot;Stream reader&quot;]
+    decoder[&quot;Incremental decoder&quot;]
+    parser[&quot;Event parser&quot;]
+    guard[&quot;Stream identity guard&quot;]
+    state[&quot;Message state&quot;]
+    render[&quot;Incremental renderer&quot;]
+    scroll[&quot;Scroll follower&quot;]
+    resume[&quot;Resume after a drop&quot;]
+    api{{&quot;Streaming endpoint&quot;}}
+
+    user --&gt;|&quot;submits, or submits again&quot;| send
+    send --&gt;|&quot;aborts the previous stream&quot;| controller
+    send --&gt;|&quot;fetch with the auth header&quot;| api
+    api -.-&gt;|&quot;bytes&quot;| reader
+    reader --&gt;|&quot;chunks, boundaries arbitrary&quot;| decoder
+    decoder --&gt;|&quot;complete text only&quot;| parser
+    parser --&gt;|&quot;one parsed event&quot;| guard
+    guard --&gt;|&quot;applied only if this stream is still current&quot;| state
+    guard -.-&gt;|&quot;dropped before a terminal event&quot;| resume
+    resume --&gt;|&quot;reconnect from the last sequence&quot;| api
+    state --&gt; render
+    render --&gt; scroll
+    scroll -.-&gt;|&quot;follows only while the user is at the bottom&quot;| user
+    user --&gt;|&quot;stop&quot;| controller
+    controller -.-&gt;|&quot;request aborted, generation stops&quot;| api
+
+    classDef service fill:#eff6ff,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b;
+    classDef datastore fill:#e9faf3,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b;
+    classDef external fill:#fff4ed,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b;
+    classDef actor fill:#f0eefc,stroke:#4a3aa7,stroke-width:1.5px,color:#0b0b0b;
+    class send,controller,reader,decoder,parser,guard,state,render,scroll,resume service;
+    class api external;
+    class user actor;</pre>
+<p>The rule the diagram encodes: <strong>the identity guard sits between parsing and
+state, and nothing bypasses it.</strong> Every path that writes a message — a delta, a
+completion, an error, a resume — goes through the same check. A single write that
+skips it reintroduces the interleaving bug, and it will be found by a user rather
+than by a test.</p>
+<h2>3. Project structure</h2>
+<div class="hl"><pre><span></span><code>src/streaming/
+├── decode.ts      bytes to events: incremental decoding and frame parsing
+├── useStream.ts   the hook: identity, abort, resume
+├── render.tsx     incremental markdown rendering
+└── scroll.ts      the follow-while-at-the-bottom behaviour
+</code></pre></div>
+
+<p><strong>One rule: nothing outside <code>useStream</code> writes streamed text into state.</strong> A
+component that appends a token directly has bypassed the identity guard, and the
+bug it creates only appears when a user is fast enough to send twice.</p>
+<h2>4. Reference implementation</h2>
+<div class="hl"><pre><span></span><code><span class="c1">// src/streaming/decode.ts</span>
+<span class="k">export</span> <span class="k">async</span> <span class="kd">function</span><span class="o">*</span> <span class="nx">readEvents</span><span class="p">(</span>
+  <span class="nx">body</span>: <span class="kt">ReadableStream</span><span class="o">&lt;</span><span class="nb">Uint8Array</span><span class="o">&gt;</span><span class="p">,</span>
+  <span class="nx">signal</span>: <span class="kt">AbortSignal</span><span class="p">,</span>
+<span class="p">)</span><span class="o">:</span> <span class="nx">AsyncGenerator</span><span class="o">&lt;</span><span class="nx">StreamEvent</span><span class="o">&gt;</span> <span class="p">{</span>
+  <span class="kd">const</span> <span class="nx">reader</span> <span class="o">=</span> <span class="nx">body</span><span class="p">.</span><span class="nx">getReader</span><span class="p">();</span>
+  <span class="c1">// stream: true is the whole point. Without it, a chunk ending mid-character is</span>
+  <span class="c1">// decoded on its own and the trailing bytes become U+FFFD. With it, the decoder</span>
+  <span class="c1">// keeps the partial sequence until the next chunk completes it. In English this</span>
+  <span class="c1">// is rare; in Cyrillic, Greek, CJK or anything with an emoji it is constant.</span>
+  <span class="kd">const</span> <span class="nx">decoder</span> <span class="o">=</span> <span class="ow">new</span> <span class="nx">TextDecoder</span><span class="p">(</span><span class="s2">&quot;utf-8&quot;</span><span class="p">);</span>
+  <span class="kd">let</span> <span class="nx">buffer</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">;</span>
+
+  <span class="k">try</span> <span class="p">{</span>
+    <span class="k">while</span> <span class="p">(</span><span class="kc">true</span><span class="p">)</span> <span class="p">{</span>
+      <span class="kd">const</span> <span class="p">{</span> <span class="nx">done</span><span class="p">,</span> <span class="nx">value</span> <span class="p">}</span> <span class="o">=</span> <span class="k">await</span> <span class="nx">reader</span><span class="p">.</span><span class="nx">read</span><span class="p">();</span>
+      <span class="k">if</span> <span class="p">(</span><span class="nx">done</span><span class="p">)</span> <span class="k">break</span><span class="p">;</span>
+      <span class="nx">buffer</span> <span class="o">+=</span> <span class="nx">decoder</span><span class="p">.</span><span class="nx">decode</span><span class="p">(</span><span class="nx">value</span><span class="p">,</span> <span class="p">{</span> <span class="nx">stream</span>: <span class="kt">true</span> <span class="p">});</span>
+
+      <span class="c1">// Frames are separated by a blank line, and a frame can span chunks. Keep</span>
+      <span class="c1">// the tail: it is a partial frame, not a complete one that happens to be short.</span>
+      <span class="kd">const</span> <span class="nx">frames</span> <span class="o">=</span> <span class="nx">buffer</span><span class="p">.</span><span class="nx">split</span><span class="p">(</span><span class="s2">&quot;\n\n&quot;</span><span class="p">);</span>
+      <span class="nx">buffer</span> <span class="o">=</span> <span class="nx">frames</span><span class="p">.</span><span class="nx">pop</span><span class="p">()</span> <span class="o">??</span> <span class="s2">&quot;&quot;</span><span class="p">;</span>
+
+      <span class="k">for</span> <span class="p">(</span><span class="kd">const</span> <span class="nx">frame</span> <span class="k">of</span> <span class="nx">frames</span><span class="p">)</span> <span class="p">{</span>
+        <span class="kd">const</span> <span class="nx">event</span> <span class="o">=</span> <span class="nx">parseFrame</span><span class="p">(</span><span class="nx">frame</span><span class="p">);</span>
+        <span class="k">if</span> <span class="p">(</span><span class="nx">event</span><span class="p">)</span> <span class="k">yield</span> <span class="nx">event</span><span class="p">;</span>
+      <span class="p">}</span>
+    <span class="p">}</span>
+    <span class="nx">buffer</span> <span class="o">+=</span> <span class="nx">decoder</span><span class="p">.</span><span class="nx">decode</span><span class="p">();</span>      <span class="c1">// flush anything the decoder still holds</span>
+  <span class="p">}</span> <span class="k">finally</span> <span class="p">{</span>
+    <span class="c1">// Releasing the lock matters on the abort path: without it the stream stays</span>
+    <span class="c1">// locked and the connection is not released to the browser&#39;s pool.</span>
+    <span class="nx">reader</span><span class="p">.</span><span class="nx">releaseLock</span><span class="p">();</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kd">function</span> <span class="nx">parseFrame</span><span class="p">(</span><span class="nx">frame</span>: <span class="kt">string</span><span class="p">)</span><span class="o">:</span> <span class="nx">StreamEvent</span> <span class="o">|</span> <span class="kc">null</span> <span class="p">{</span>
+  <span class="kd">let</span> <span class="nx">name</span> <span class="o">=</span> <span class="s2">&quot;message&quot;</span><span class="p">,</span> <span class="nx">data</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">;</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kd">const</span> <span class="nx">line</span> <span class="k">of</span> <span class="nx">frame</span><span class="p">.</span><span class="nx">split</span><span class="p">(</span><span class="s2">&quot;\n&quot;</span><span class="p">))</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="nx">line</span><span class="p">.</span><span class="nx">startsWith</span><span class="p">(</span><span class="s2">&quot;:&quot;</span><span class="p">))</span> <span class="k">continue</span><span class="p">;</span>              <span class="c1">// keepalive comment</span>
+    <span class="k">if</span> <span class="p">(</span><span class="nx">line</span><span class="p">.</span><span class="nx">startsWith</span><span class="p">(</span><span class="s2">&quot;event:&quot;</span><span class="p">))</span> <span class="nx">name</span> <span class="o">=</span> <span class="nx">line</span><span class="p">.</span><span class="nx">slice</span><span class="p">(</span><span class="mf">6</span><span class="p">).</span><span class="nx">trim</span><span class="p">();</span>
+    <span class="k">if</span> <span class="p">(</span><span class="nx">line</span><span class="p">.</span><span class="nx">startsWith</span><span class="p">(</span><span class="s2">&quot;data:&quot;</span><span class="p">))</span> <span class="nx">data</span> <span class="o">+=</span> <span class="nx">line</span><span class="p">.</span><span class="nx">slice</span><span class="p">(</span><span class="mf">5</span><span class="p">).</span><span class="nx">trim</span><span class="p">();</span>
+  <span class="p">}</span>
+  <span class="k">return</span> <span class="nx">data</span> <span class="o">?</span> <span class="p">{</span> <span class="nx">name</span><span class="p">,</span> <span class="nx">data</span>: <span class="kt">JSON.parse</span><span class="p">(</span><span class="nx">data</span><span class="p">)</span> <span class="p">}</span> <span class="o">:</span> <span class="kc">null</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1">// src/streaming/useStream.ts</span>
+<span class="k">export</span> <span class="kd">function</span> <span class="nx">useStream</span><span class="p">()</span> <span class="p">{</span>
+  <span class="kd">const</span> <span class="nx">currentId</span> <span class="o">=</span> <span class="nx">useRef</span><span class="o">&lt;</span><span class="kt">string</span> <span class="o">|</span> <span class="kc">null</span><span class="o">&gt;</span><span class="p">(</span><span class="kc">null</span><span class="p">);</span>
+  <span class="kd">const</span> <span class="nx">controller</span> <span class="o">=</span> <span class="nx">useRef</span><span class="o">&lt;</span><span class="nx">AbortController</span> <span class="o">|</span> <span class="kc">null</span><span class="o">&gt;</span><span class="p">(</span><span class="kc">null</span><span class="p">);</span>
+
+  <span class="kd">const</span> <span class="nx">send</span> <span class="o">=</span> <span class="nx">useCallback</span><span class="p">(</span><span class="k">async</span> <span class="p">(</span><span class="nx">text</span>: <span class="kt">string</span><span class="p">)</span> <span class="p">=&gt;</span> <span class="p">{</span>
+    <span class="c1">// A second send while the first is running: abort the transport, then take a</span>
+    <span class="c1">// new identity. Abort alone is not enough — a callback already scheduled will</span>
+    <span class="c1">// still run and write into the wrong message.</span>
+    <span class="nx">controller</span><span class="p">.</span><span class="nx">current</span><span class="o">?</span><span class="p">.</span><span class="nx">abort</span><span class="p">();</span>
+    <span class="kd">const</span> <span class="nx">streamId</span> <span class="o">=</span> <span class="nx">crypto</span><span class="p">.</span><span class="nx">randomUUID</span><span class="p">();</span>
+    <span class="nx">currentId</span><span class="p">.</span><span class="nx">current</span> <span class="o">=</span> <span class="nx">streamId</span><span class="p">;</span>
+    <span class="kd">const</span> <span class="nx">ctrl</span> <span class="o">=</span> <span class="ow">new</span> <span class="nx">AbortController</span><span class="p">();</span>
+    <span class="nx">controller</span><span class="p">.</span><span class="nx">current</span> <span class="o">=</span> <span class="nx">ctrl</span><span class="p">;</span>
+
+    <span class="kd">let</span> <span class="nx">lastSeq</span> <span class="o">=</span> <span class="mf">0</span><span class="p">;</span>
+
+    <span class="k">try</span> <span class="p">{</span>
+      <span class="c1">// fetch, not EventSource: EventSource is GET-only and cannot set an</span>
+      <span class="c1">// Authorization header, which rules it out for an authenticated endpoint</span>
+      <span class="c1">// with a request body.</span>
+      <span class="kd">const</span> <span class="nx">response</span> <span class="o">=</span> <span class="k">await</span> <span class="nx">fetch</span><span class="p">(</span><span class="s2">&quot;/chat/stream&quot;</span><span class="p">,</span> <span class="p">{</span>
+        <span class="nx">method</span><span class="o">:</span> <span class="s2">&quot;POST&quot;</span><span class="p">,</span>
+        <span class="nx">headers</span><span class="o">:</span> <span class="p">{</span> <span class="s2">&quot;Content-Type&quot;</span><span class="o">:</span> <span class="s2">&quot;application/json&quot;</span><span class="p">,</span> <span class="nx">Authorization</span><span class="o">:</span> <span class="sb">`Bearer </span><span class="si">${</span><span class="nx">token</span><span class="si">}</span><span class="sb">`</span> <span class="p">},</span>
+        <span class="nx">body</span>: <span class="kt">JSON.stringify</span><span class="p">({</span> <span class="nx">text</span><span class="p">,</span> <span class="nx">after_seq</span>: <span class="kt">lastSeq</span> <span class="o">||</span> <span class="kc">undefined</span> <span class="p">}),</span>
+        <span class="nx">signal</span>: <span class="kt">ctrl.signal</span><span class="p">,</span>
+      <span class="p">});</span>
+
+      <span class="c1">// The status is only meaningful before the body starts. A rejection here is</span>
+      <span class="c1">// a real code; anything after this point arrives as an error event.</span>
+      <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">response</span><span class="p">.</span><span class="nx">ok</span><span class="p">)</span> <span class="p">{</span> <span class="nx">showError</span><span class="p">(</span><span class="k">await</span> <span class="nx">response</span><span class="p">.</span><span class="nx">json</span><span class="p">());</span> <span class="k">return</span><span class="p">;</span> <span class="p">}</span>
+
+      <span class="kd">let</span> <span class="nx">sawTerminal</span> <span class="o">=</span> <span class="kc">false</span><span class="p">;</span>
+
+      <span class="k">for</span> <span class="k">await</span> <span class="p">(</span><span class="kd">const</span> <span class="nx">event</span> <span class="k">of</span> <span class="nx">readEvents</span><span class="p">(</span><span class="nx">response</span><span class="p">.</span><span class="nx">body</span><span class="o">!</span><span class="p">,</span> <span class="nx">ctrl</span><span class="p">.</span><span class="nx">signal</span><span class="p">))</span> <span class="p">{</span>
+        <span class="c1">// The guard. Every write goes through it, so a stale stream that has not</span>
+        <span class="c1">// noticed its abort yet cannot touch state that now belongs to another.</span>
+        <span class="k">if</span> <span class="p">(</span><span class="nx">currentId</span><span class="p">.</span><span class="nx">current</span> <span class="o">!==</span> <span class="nx">streamId</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+
+        <span class="k">if</span> <span class="p">(</span><span class="nx">event</span><span class="p">.</span><span class="nx">name</span> <span class="o">===</span> <span class="s2">&quot;delta&quot;</span><span class="p">)</span> <span class="p">{</span>
+          <span class="nx">lastSeq</span> <span class="o">=</span> <span class="nx">event</span><span class="p">.</span><span class="nx">data</span><span class="p">.</span><span class="nx">seq</span><span class="p">;</span>
+          <span class="nx">appendToMessage</span><span class="p">(</span><span class="nx">streamId</span><span class="p">,</span> <span class="nx">event</span><span class="p">.</span><span class="nx">data</span><span class="p">.</span><span class="nx">text</span><span class="p">);</span>
+        <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="nx">event</span><span class="p">.</span><span class="nx">name</span> <span class="o">===</span> <span class="s2">&quot;done&quot;</span><span class="p">)</span> <span class="p">{</span>
+          <span class="nx">sawTerminal</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+          <span class="nx">finishMessage</span><span class="p">(</span><span class="nx">streamId</span><span class="p">,</span> <span class="nx">event</span><span class="p">.</span><span class="nx">data</span><span class="p">.</span><span class="nx">finish_reason</span><span class="p">);</span>
+        <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="nx">event</span><span class="p">.</span><span class="nx">name</span> <span class="o">===</span> <span class="s2">&quot;error&quot;</span><span class="p">)</span> <span class="p">{</span>
+          <span class="nx">sawTerminal</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+          <span class="c1">// Mid-answer failure: keep the text already shown. Discarding it throws</span>
+          <span class="c1">// away work the user already read and was already billed for.</span>
+          <span class="nx">failMessage</span><span class="p">(</span><span class="nx">streamId</span><span class="p">,</span> <span class="nx">event</span><span class="p">.</span><span class="nx">data</span><span class="p">.</span><span class="nx">code</span><span class="p">,</span> <span class="p">{</span> <span class="nx">keepPartial</span>: <span class="kt">true</span> <span class="p">});</span>
+        <span class="p">}</span>
+      <span class="p">}</span>
+
+      <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">sawTerminal</span> <span class="o">&amp;&amp;</span> <span class="nx">currentId</span><span class="p">.</span><span class="nx">current</span> <span class="o">===</span> <span class="nx">streamId</span><span class="p">)</span> <span class="p">{</span>
+        <span class="c1">// The stream ended without saying so — a dropped connection, or a mobile</span>
+        <span class="c1">// OS suspending the tab. Resume from the last sequence rather than</span>
+        <span class="c1">// regenerating: the server already produced those tokens and you paid.</span>
+        <span class="k">await</span> <span class="nx">resumeFrom</span><span class="p">(</span><span class="nx">streamId</span><span class="p">,</span> <span class="nx">lastSeq</span><span class="p">);</span>
+      <span class="p">}</span>
+    <span class="p">}</span> <span class="k">catch</span> <span class="p">(</span><span class="nx">err</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">if</span> <span class="p">((</span><span class="nx">err</span> <span class="kr">as</span> <span class="ne">Error</span><span class="p">).</span><span class="nx">name</span> <span class="o">===</span> <span class="s2">&quot;AbortError&quot;</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>   <span class="c1">// deliberate, not a failure</span>
+      <span class="k">if</span> <span class="p">(</span><span class="nx">currentId</span><span class="p">.</span><span class="nx">current</span> <span class="o">===</span> <span class="nx">streamId</span><span class="p">)</span> <span class="nx">failMessage</span><span class="p">(</span><span class="nx">streamId</span><span class="p">,</span> <span class="s2">&quot;network&quot;</span><span class="p">,</span> <span class="p">{</span> <span class="nx">keepPartial</span>: <span class="kt">true</span> <span class="p">});</span>
+    <span class="p">}</span>
+  <span class="p">},</span> <span class="p">[]);</span>
+
+  <span class="kd">const</span> <span class="nx">stop</span> <span class="o">=</span> <span class="nx">useCallback</span><span class="p">(()</span> <span class="p">=&gt;</span> <span class="p">{</span>
+    <span class="c1">// Abort the request, not just the rendering. Hiding the output leaves the</span>
+    <span class="c1">// server generating to completion and you are billed for all of it.</span>
+    <span class="nx">controller</span><span class="p">.</span><span class="nx">current</span><span class="o">?</span><span class="p">.</span><span class="nx">abort</span><span class="p">();</span>
+    <span class="nx">currentId</span><span class="p">.</span><span class="nx">current</span> <span class="o">=</span> <span class="kc">null</span><span class="p">;</span>
+  <span class="p">},</span> <span class="p">[]);</span>
+
+  <span class="k">return</span> <span class="p">{</span> <span class="nx">send</span><span class="p">,</span> <span class="nx">stop</span> <span class="p">};</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<div class="hl"><pre><span></span><code><span class="c1">// src/streaming/scroll.ts</span>
+<span class="k">export</span> <span class="kd">function</span> <span class="nx">useFollowOutput</span><span class="p">(</span><span class="nx">ref</span>: <span class="kt">RefObject</span><span class="o">&lt;</span><span class="nx">HTMLElement</span><span class="o">&gt;</span><span class="p">,</span> <span class="nx">deps</span>: <span class="kt">unknown</span><span class="p">[])</span> <span class="p">{</span>
+  <span class="kd">const</span> <span class="nx">following</span> <span class="o">=</span> <span class="nx">useRef</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span>
+
+  <span class="nx">useEffect</span><span class="p">(()</span> <span class="p">=&gt;</span> <span class="p">{</span>
+    <span class="kd">const</span> <span class="nx">el</span> <span class="o">=</span> <span class="nx">ref</span><span class="p">.</span><span class="nx">current</span><span class="p">;</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">el</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+    <span class="kd">const</span> <span class="nx">onScroll</span> <span class="o">=</span> <span class="p">()</span> <span class="p">=&gt;</span> <span class="p">{</span>
+      <span class="c1">// A threshold, not equality: sub-pixel layout and zoom mean scrollTop rarely</span>
+      <span class="c1">// lands exactly at the bottom, and an exact check makes the view stop</span>
+      <span class="c1">// following for reasons the user cannot see.</span>
+      <span class="nx">following</span><span class="p">.</span><span class="nx">current</span> <span class="o">=</span> <span class="nx">el</span><span class="p">.</span><span class="nx">scrollHeight</span> <span class="o">-</span> <span class="nx">el</span><span class="p">.</span><span class="nx">scrollTop</span> <span class="o">-</span> <span class="nx">el</span><span class="p">.</span><span class="nx">clientHeight</span> <span class="o">&lt;</span> <span class="mf">40</span><span class="p">;</span>
+    <span class="p">};</span>
+    <span class="nx">el</span><span class="p">.</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s2">&quot;scroll&quot;</span><span class="p">,</span> <span class="nx">onScroll</span><span class="p">,</span> <span class="p">{</span> <span class="nx">passive</span>: <span class="kt">true</span> <span class="p">});</span>
+    <span class="k">return</span> <span class="p">()</span> <span class="p">=&gt;</span> <span class="nx">el</span><span class="p">.</span><span class="nx">removeEventListener</span><span class="p">(</span><span class="s2">&quot;scroll&quot;</span><span class="p">,</span> <span class="nx">onScroll</span><span class="p">);</span>
+  <span class="p">},</span> <span class="p">[</span><span class="nx">ref</span><span class="p">]);</span>
+
+  <span class="nx">useEffect</span><span class="p">(()</span> <span class="p">=&gt;</span> <span class="p">{</span>
+    <span class="c1">// Follow only while the user has not scrolled up. Forcing the scroll on every</span>
+    <span class="c1">// token makes it impossible to read what has already arrived — the single most</span>
+    <span class="c1">// common complaint about streaming interfaces.</span>
+    <span class="k">if</span> <span class="p">(</span><span class="nx">following</span><span class="p">.</span><span class="nx">current</span><span class="p">)</span> <span class="nx">ref</span><span class="p">.</span><span class="nx">current</span><span class="o">?</span><span class="p">.</span><span class="nx">scrollTo</span><span class="p">({</span> <span class="nx">top</span>: <span class="kt">ref.current.scrollHeight</span> <span class="p">});</span>
+  <span class="p">},</span> <span class="nx">deps</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<h2>5. Golden-standard rules</h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Forbidden:</strong> decoding chunks without incremental mode</td>
+<td>A character split across a chunk boundary becomes a replacement character. Invisible in English, constant in most other scripts.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> writing streamed text to state without checking the stream is current</td>
+<td>Aborting stops the transport, not a callback already scheduled. Two answers then interleave, and nobody can reproduce it.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> treating a stopped stream as a rendering concern</td>
+<td>Hiding output leaves the server generating and billing. Stop means abort the request.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> assuming a frame arrives whole in one chunk</td>
+<td>Frame boundaries and chunk boundaries are unrelated. Buffer the tail.</td>
+</tr>
+<tr>
+<td><strong>Forbidden:</strong> discarding partial text when a stream fails</td>
+<td>The user read it and you paid for it. Keep it and mark the failure.</td>
+</tr>
+<tr>
+<td>Scrolling follows only while the user is at the bottom</td>
+<td>Forcing it on every token makes reading what already arrived impossible.</td>
+</tr>
+<tr>
+<td>A stream that ends without a terminal event is a drop, not a completion</td>
+<td>Otherwise a truncated answer is presented as finished, which is worse than an error.</td>
+</tr>
+<tr>
+<td>Resume by sequence rather than regenerating</td>
+<td>The tokens were produced and billed once already; regenerating pays twice and gives a different answer.</td>
+</tr>
+<tr>
+<td>Markdown is parsed from accumulated text, not per chunk</td>
+<td>Parsing each chunk alone produces flicker as unclosed syntax opens and closes.</td>
+</tr>
+<tr>
+<td>An aborted request is not an error</td>
+<td>Showing a failure for something the user asked for reads as a bug.</td>
+</tr>
+<tr>
+<td>The identity guard is the only path into message state</td>
+<td>One write that skips it is enough to reintroduce interleaving.</td>
+</tr>
+<tr>
+<td>The reader's lock is released on every path</td>
+<td>Otherwise an aborted stream leaves the connection held.</td>
+</tr>
+</tbody>
+</table>
+<h2>6. Data contracts</h2>
+<p>What the client requires of the server, and why each item exists:</p>
+<div class="hl"><pre><span></span><code>event names     start, delta, done, error — a fixed, closed set
+sequence        monotonic per stream; the client sends it back to resume
+terminal        exactly one done or error; its absence means the stream dropped
+errors          a code, never prose — the client maps it to a message it controls
+</code></pre></div>
+
+<p>If the server does not provide a sequence number, resume is impossible and every
+dropped mobile connection costs a second generation. That is a server change, not
+something the client can work around — worth saying plainly during Step 2 rather
+than building an expensive approximation.</p>
+<h2>7. Build order</h2>
+<ol>
+<li><strong>Read and render a stream of fixed text from the server</strong> — with incremental
+   decoding from the first version, and a test using a multi-byte string split
+   across chunk boundaries. It is one argument, and retrofitting it means
+   debugging replacement characters first.</li>
+<li><strong>Frame buffering</strong>, with a test that splits a frame across two chunks.</li>
+<li><strong>The identity guard and abort</strong>, then a test that sends twice in quick
+   succession and asserts the two answers never interleave.</li>
+<li><strong>The stop button</strong>, with a test asserting the request was aborted rather than
+   the output hidden.</li>
+<li><strong>Terminal events and the drop case</strong>, with a test that ends a stream without
+   one.</li>
+<li><strong>Resume from the last sequence.</strong></li>
+<li><strong>Scroll following and incremental markdown.</strong></li>
+</ol>
+<p>Step 3 before the interface work because it is the only bug here that a user finds
+before a developer does, and it needs a test that deliberately races.</p>
+<h2>8. Blocks to pull in</h2>
+<p>Nothing here is a prerequisite. These are adjacent problems, by name only —
+resolve them separately if they apply.</p>
+<ul>
+<li>Streaming model responses over SSE — the server this consumes, and the contract it must provide</li>
+<li>JWT access token authentication — the header <code>EventSource</code> cannot send</li>
+<li>Error envelope — the shape of the rejection that arrives before the stream starts</li>
+<li>FastAPI WebSocket endpoint — the alternative when the client must send during generation</li>
+</ul>
+<h2>9. Metrics</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Replacement characters in rendered output</td>
+<td>0, including in non-Latin scripts</td>
+</tr>
+<tr>
+<td>Interleaved answers when sending twice quickly</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Server generations continuing after the user pressed stop</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Dropped streams presented as finished answers</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Regenerations caused by a reconnect that could have resumed</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Frames per second during rendering</td>
+<td>Steady; no flicker from re-parsed markdown</td>
+</tr>
+<tr>
+<td>Time from first byte to first visible character</td>
+<td>&lt; 100 ms</td>
+</tr>
+</tbody>
+</table>
+<h2>10. Failure modes</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Replacement characters appear in Cyrillic, CJK or emoji output</td>
+<td>Chunks decoded independently, splitting a multi-byte character</td>
+<td>Decode in incremental mode</td>
+</tr>
+<tr>
+<td>Two answers mix together, and only for fast users</td>
+<td>A second stream started while the first was still writing state</td>
+<td>An identity per stream, checked at every write</td>
+</tr>
+<tr>
+<td>A finished answer is overwritten by an older one</td>
+<td>Same cause; abort stopped the transport but not a scheduled callback</td>
+<td>The identity guard, not abort alone</td>
+</tr>
+<tr>
+<td>The stop button hides the text and the bill is unchanged</td>
+<td>Stop was implemented as a rendering change</td>
+<td>Abort the request</td>
+</tr>
+<tr>
+<td>An answer ends early and looks complete</td>
+<td>The stream dropped and the client had no terminal event to require</td>
+<td>Require a terminal event; treat its absence as a drop</td>
+</tr>
+<tr>
+<td>Every dropped connection produces a full second generation</td>
+<td>The client retries from the start</td>
+<td>Resume from the last sequence</td>
+</tr>
+<tr>
+<td>The view jumps to the bottom while the user is reading</td>
+<td>Scroll forced on every token</td>
+<td>Follow only while the user is at the bottom, with a threshold</td>
+</tr>
+<tr>
+<td>The view stops following for no visible reason</td>
+<td>Bottom detected by exact equality, defeated by sub-pixel layout</td>
+<td>Use a threshold</td>
+</tr>
+<tr>
+<td>Text flickers and reflows as it arrives</td>
+<td>Markdown re-parsed per chunk, so unclosed syntax opens and closes</td>
+<td>Parse from accumulated text</td>
+</tr>
+<tr>
+<td>A failed stream discards everything already shown</td>
+<td>The error handler resets the message</td>
+<td>Keep the partial text; mark it failed</td>
+</tr>
+<tr>
+<td>Pressing stop shows an error</td>
+<td>The abort was treated as a failure</td>
+<td>Detect the abort and return quietly</td>
+</tr>
+<tr>
+<td>Streaming works on desktop and truncates on mobile</td>
+<td>The OS suspended the tab and killed the connection</td>
+<td>Resume on foreground from the last sequence</td>
+</tr>
+</tbody>
+</table>
+<h2>11. Definition of done</h2>
+<ul>
+<li class="task">A response containing multi-byte characters renders correctly when the byte stream is split at every possible position, covered by a test that iterates the split points</li>
+<li class="task">An event frame split across two chunks is parsed once and correctly, covered by a test</li>
+<li class="task">Sending a second message before the first completes never mixes their text, covered by a test that starts both deliberately</li>
+<li class="task">Pressing stop aborts the HTTP request, asserted by observing the request state rather than the rendered output</li>
+<li class="task">An aborted stream produces no error in the interface, covered by a test</li>
+<li class="task">A stream ending without a terminal event is presented as interrupted, not as complete, covered by a test</li>
+<li class="task">After a drop, the client resumes from its last sequence and the recovered text matches an uninterrupted run, covered by a test</li>
+<li class="task">A mid-stream error keeps the text already received and marks the message failed, covered by a test</li>
+<li class="task">The view follows new output only while the user is at the bottom, and stops following after the user scrolls up — both covered</li>
+<li class="task">Markdown is rendered from accumulated text with no re-parse per chunk, verified by a render-count assertion</li>
+<li class="task">No component outside the streaming hook writes streamed text into state, checked by a lint rule or a grep in CI</li>
+<li class="task">The stream reader's lock is released on the success, error and abort paths, covered by a test</li>
+</ul>
+  </article>
+
+  <aside class="tailpiece">
+    <h2>Use this blueprint</h2>
+    <p>
+      Copy the file into your project and point your agent at it. It works with Claude Code,
+      Cursor, Copilot, ChatGPT and anything else that reads a file — there is nothing to install.
+    </p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/llm-streaming-client" target="_blank" rel="noopener">Open on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Browse all blueprints</a>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p><a href="/">Awesome Blueprints</a> — same request, same architecture, every time.</p>
+    <p class="dim">MIT · awesomeblueprints.com</p>
+  </div>
+</footer>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'neutral' });
+</script>
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const now = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', now);
+    try { localStorage.setItem('ab-theme', now); } catch (e) {}
+    location.reload();   // the diagram is themed at render time
+  });
+</script>
+
+</body>
+</html>

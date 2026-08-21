@@ -1,0 +1,497 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Cursor Pagination — Blueprint for AI Coding Agents | Awesome Blueprints</title>
+<meta name="description" content="Cursor pagination for REST APIs: stable ordering, opaque cursors, and paging that does not skip or repeat rows while the list changes." />
+<link rel="canonical" href="https://awesomeblueprints.com/blueprints/cursor-pagination/" />
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="Awesome Blueprints" />
+<meta property="og:url" content="https://awesomeblueprints.com/blueprints/cursor-pagination/" />
+<meta property="og:title" content="Cursor Pagination — Architecture Blueprint" />
+<meta property="og:description" content="Cursor pagination for REST APIs: stable ordering, opaque cursors, and paging that does not skip or repeat rows while the list changes." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Cursor Pagination — Architecture Blueprint" />
+<meta name="twitter:description" content="Cursor pagination for REST APIs: stable ordering, opaque cursors, and paging that does not skip or repeat rows while the list changes." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/page.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "Cursor Pagination", "description": "Cursor pagination for REST APIs: stable ordering, opaque cursors, and paging that does not skip or repeat rows while the list changes.", "url": "https://awesomeblueprints.com/blueprints/cursor-pagination/", "dateModified": "2026-08-18", "keywords": "API", "isAccessibleForFree": true, "license": "https://opensource.org/licenses/MIT", "publisher": {"@type": "Organization", "name": "Awesome Blueprints", "url": "https://awesomeblueprints.com"}}</script>
+<script>
+  (function () {
+    var t;
+    try { t = localStorage.getItem('ab-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">Awesome Blueprints</a>
+    <div class="nav-right">
+      <a class="nav-link" href="/#blueprints">Catalogue</a>
+      <a class="nav-link" href="/#faq">FAQ</a>
+      <a class="nav-link" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/cursor-pagination" target="_blank" rel="noopener">GitHub ↗</a>
+      <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Switch theme">◑</button>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/">Home</a> <span>/</span> <a href="/#blueprints">Blueprints</a> <span>/</span>
+    <span>Cursor Pagination</span>
+  </nav>
+
+  <header class="page-head">
+    <p class="eyebrow">cursor-pagination</p>
+    <h1>Cursor Pagination</h1>
+    <p class="lede">Cursor pagination for REST APIs: stable ordering, opaque cursors, and paging that does not skip or repeat rows while the list changes.</p>
+    <div class="facts"><span>low</span><span>1–2 days</span><span>Verified 2026-08-18</span></div>
+    <div class="tags"><span class="tag">API</span></div>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/cursor-pagination" target="_blank" rel="noopener">Read it on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Back to the catalogue</a>
+    </div>
+  </header>
+
+  <article class="doc">
+<blockquote>
+<p>Paginating a list that is being written to while it is read. <code>OFFSET</code> passes
+review, passes the test fixture, and then quietly duplicates and skips rows in
+production — this is the alternative that does not.</p>
+</blockquote>
+<p><strong>Complexity:</strong> low · <strong>Typical build:</strong> 1–2 days · <strong>Verified:</strong> 2026-08-18 (re-check after ~90 days)</p>
+<p><strong>Examples in:</strong> Postgres and TypeScript. Only §4 is language-specific — the rules, failure modes and definition of done hold anywhere, and your agent translates the code.</p>
+<p><strong>Use when:</strong> paging through a list that changes while a user reads it — feeds, inboxes, activity logs, search results, any admin table — or through a large result set from a script or an export.</p>
+<p><strong>Not for:</strong> a short fixed list you can return whole, or a UI that genuinely needs numbered pages and a total count and can accept a snapshot that drifts.</p>
+<hr />
+<h2>⚙️ INSTRUCTIONS FOR THE AI — READ BEFORE WRITING ANY CODE</h2>
+<p><strong>Do not start coding.</strong></p>
+<p><strong>Step 1 — Refresh.</strong> Search the web and verify: whether the target database
+supports row-value comparison — <code>(created_at, id) &lt; ($1, $2)</code> — because the
+naive <code>a &lt; $1 OR (a = $1 AND b &lt; $2)</code> rewrite is both slower and easy to get
+wrong; how that database orders <code>NULL</code> in the sort column and whether <code>NULLS
+LAST</code> is the default; and whether the ORM in use can express a keyset predicate
+without dropping to raw SQL. Report what you verified.</p>
+<p><strong>Step 2 — Read the project.</strong> Find the existing list endpoints and how they
+page today. Note which ones expose a total count, because that is the part
+clients notice losing.</p>
+<p><strong>Then audit what exists.</strong> Walk §11 item by item, marking each <em>already true</em>,
+<em>partly true</em> or <em>absent</em> with the file that decides it. Report that before
+proposing anything.</p>
+<p>Assume the project is right until it demonstrably is not. Code that satisfies an
+item stays, whatever its shape — §4 is illustrative, and its idioms translate
+into this project's language. Replacing something that works needs a one-line
+reason. Never delete a working path to make room for the version written here.
+If nothing relevant exists, say so and use §3.</p>
+<p><strong>Step 3 — Write a plan for the gap only, and get it approved.</strong> List: every endpoint
+being converted, its sort key, the tie-breaker column, the cursor encoding, and
+the page size limits.</p>
+<p><strong>In that plan, include a <code>## Proposed stack</code> section.</strong> <em>Propose</em> the cursor
+encoding and whether it is signed — with a one-line reason and what would change
+the decision. Ask the user to confirm once.</p>
+<p>Name what you are adding, leaving alone, and changing. Touch nothing else.</p>
+<hr />
+<p><strong>Step 4 — Build in the order in §7.</strong> <strong>Step 5 — §11 is the definition of done.</strong></p>
+<h2>1. Why OFFSET is wrong on a live list</h2>
+<p>Take a feed sorted newest first, 20 per page. A reader loads page 1. While they
+read, three new rows arrive. They ask for page 2 — <code>OFFSET 20</code>.</p>
+<p>Those three new rows now occupy positions 1 to 3. Everything shifted down by
+three. Rows 18, 19 and 20 — already shown on page 1 — are now at positions 21,
+22, 23, and get served again. Meanwhile nothing was skipped in this direction,
+but delete three rows instead and the same arithmetic silently <em>skips</em> three the
+reader never sees.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th><code>LIMIT / OFFSET</code></th>
+<th>Keyset (cursor)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Rows inserted during paging</td>
+<td>Duplicates</td>
+<td>Unaffected</td>
+</tr>
+<tr>
+<td>Rows deleted during paging</td>
+<td>Skips, silently</td>
+<td>Unaffected</td>
+</tr>
+<tr>
+<td>Cost of page N</td>
+<td>Database walks and discards N×size rows</td>
+<td>Indexed seek, constant</td>
+</tr>
+<tr>
+<td>Page 5000</td>
+<td>Slow enough to time out</td>
+<td>Same speed as page 2</td>
+</tr>
+<tr>
+<td>Jump to an arbitrary page</td>
+<td>Supported</td>
+<td>Not supported — by design</td>
+</tr>
+<tr>
+<td>Total count</td>
+<td>Available, and expensive</td>
+<td>Not included</td>
+</tr>
+<tr>
+<td>How you find out it is broken</td>
+<td>You do not</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<p>The last row is why this is worth a blueprint. Nothing errors. The reader sees a
+post twice, assumes they scrolled wrong, and moves on.</p>
+<h2>2. Architecture</h2>
+<pre class="mermaid">%% GENERATED - do not edit by hand.
+%% Edit the source header in architecture.mmd, then rebuild.
+%% Keyset Pagination Round Trip
+
+flowchart LR
+    subgraph api[&quot;API&quot;]
+        direction LR
+        list[&quot;List Endpoint&quot;]
+        decode[&quot;Cursor Decoder&quot;]
+        encode[&quot;Cursor Encoder&quot;]
+    end
+    subgraph db[&quot;Database&quot;]
+        direction LR
+        rows[(&quot;Table&quot;)]
+        idx[(&quot;Composite Index&quot;)]
+    end
+
+    reader([&quot;Reader&quot;])
+
+    reader --&gt;|&quot;first page, no cursor&quot;| list
+    list --&gt;|&quot;cursor present on later pages&quot;| decode
+    decode --&gt;|&quot;seek past the last row seen&quot;| rows
+    rows ---|&quot;ordered by sort key and tie-breaker&quot;| idx
+    rows --&gt;|&quot;page plus one extra row&quot;| encode
+    encode --&gt;|&quot;next cursor, or none&quot;| list
+    list --&gt;|&quot;items and next cursor&quot;| reader
+    reader --&gt;|&quot;next page, cursor echoed back&quot;| list
+
+    classDef service fill:#eff6ff,stroke:#2a78d6,stroke-width:1.5px,color:#0b0b0b;
+    classDef datastore fill:#e9faf3,stroke:#1baf7a,stroke-width:1.5px,color:#0b0b0b;
+    classDef external fill:#fff4ed,stroke:#eb6834,stroke-width:1.5px,color:#0b0b0b;
+    classDef actor fill:#f0eefc,stroke:#4a3aa7,stroke-width:1.5px,color:#0b0b0b;
+    class list,decode,encode service;
+    class rows,idx datastore;
+    class reader actor;</pre>
+<p><strong>The rule this diagram encodes:</strong> the cursor names the last row seen, not a
+position. Rows appearing or vanishing before it cannot move it.</p>
+<h2>3. Project structure</h2>
+<div class="hl"><pre><span></span><code>src/
+├── pagination/
+│   ├── cursor.ts         # encode / decode. One implementation, all endpoints.
+│   ├── page.ts           # the response type: items + nextCursor
+│   └── keyset.ts         # builds the WHERE clause from a decoded cursor
+├── repositories/         # each list query takes a decoded cursor, never a page number
+└── routes/               # never build a cursor by hand
+</code></pre></div>
+
+<p><strong>The rule that keeps this maintainable:</strong> one encoder for the whole codebase.
+The second one shows up when someone needs "just a small change", and from then
+on a cursor from one endpoint silently fails to decode in another.</p>
+<h2>4. Reference implementation</h2>
+<p><strong>The index comes first.</strong> Without it, keyset pagination is a table scan with
+extra steps — the index must match the sort exactly, including direction:</p>
+<div class="hl"><pre><span></span><code><span class="c1">-- Sort key first, tie-breaker second, in the same order the query uses.</span>
+<span class="k">create</span><span class="w"> </span><span class="k">index</span><span class="w"> </span><span class="n">posts_feed_idx</span><span class="w"> </span><span class="k">on</span><span class="w"> </span><span class="n">posts</span><span class="w"> </span><span class="p">(</span><span class="n">created_at</span><span class="w"> </span><span class="k">desc</span><span class="p">,</span><span class="w"> </span><span class="n">id</span><span class="w"> </span><span class="k">desc</span><span class="p">);</span><span class="w"></span>
+</code></pre></div>
+
+<p><strong>The query.</strong> Row-value comparison expresses "everything after this row" in one
+predicate the planner can push straight into the index:</p>
+<div class="hl"><pre><span></span><code><span class="k">select</span><span class="w"> </span><span class="n">id</span><span class="p">,</span><span class="w"> </span><span class="n">created_at</span><span class="p">,</span><span class="w"> </span><span class="n">title</span><span class="w"></span>
+<span class="w">  </span><span class="k">from</span><span class="w"> </span><span class="n">posts</span><span class="w"></span>
+<span class="w"> </span><span class="k">where</span><span class="w"> </span><span class="n">author_id</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="err">$</span><span class="mi">1</span><span class="w"></span>
+<span class="w">   </span><span class="k">and</span><span class="w"> </span><span class="p">(</span><span class="n">created_at</span><span class="p">,</span><span class="w"> </span><span class="n">id</span><span class="p">)</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="p">(</span><span class="err">$</span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="err">$</span><span class="mi">3</span><span class="p">)</span><span class="w">   </span><span class="c1">-- strictly after the last row seen</span>
+<span class="w"> </span><span class="k">order</span><span class="w"> </span><span class="k">by</span><span class="w"> </span><span class="n">created_at</span><span class="w"> </span><span class="k">desc</span><span class="p">,</span><span class="w"> </span><span class="n">id</span><span class="w"> </span><span class="k">desc</span><span class="w"></span>
+<span class="w"> </span><span class="k">limit</span><span class="w"> </span><span class="err">$</span><span class="mi">4</span><span class="p">;</span><span class="w">                            </span><span class="c1">-- pageSize + 1, see below</span>
+</code></pre></div>
+
+<p>The tie-breaker is not optional. <code>created_at</code> alone is not unique — two rows
+written in the same millisecond make the order non-deterministic, and the cursor
+lands in the middle of the tie, dropping one of them at random. Any column that
+is unique and monotonic with the sort works; the primary key is the usual choice.</p>
+<p><strong>Fetch one more than you need.</strong> It answers "is there another page" without a
+second query or a count:</p>
+<div class="hl"><pre><span></span><code><span class="k">export</span> <span class="k">async</span> <span class="kd">function</span> <span class="nx">listPosts</span><span class="p">(</span><span class="nx">authorId</span>: <span class="kt">string</span><span class="p">,</span> <span class="nx">cursor</span>: <span class="kt">Cursor</span> <span class="o">|</span> <span class="kc">null</span><span class="p">,</span> <span class="nx">size</span>: <span class="kt">number</span><span class="p">)</span> <span class="p">{</span>
+  <span class="kd">const</span> <span class="nx">limit</span> <span class="o">=</span> <span class="nb">Math</span><span class="p">.</span><span class="nx">min</span><span class="p">(</span><span class="nx">size</span><span class="p">,</span> <span class="nx">MAX_PAGE_SIZE</span><span class="p">);</span>
+  <span class="kd">const</span> <span class="nx">rows</span> <span class="o">=</span> <span class="k">await</span> <span class="nx">repo</span><span class="p">.</span><span class="nx">page</span><span class="p">(</span><span class="nx">authorId</span><span class="p">,</span> <span class="nx">cursor</span><span class="p">,</span> <span class="nx">limit</span> <span class="o">+</span> <span class="mf">1</span><span class="p">);</span>
+
+  <span class="kd">const</span> <span class="nx">hasMore</span> <span class="o">=</span> <span class="nx">rows</span><span class="p">.</span><span class="nx">length</span> <span class="o">&gt;</span> <span class="nx">limit</span><span class="p">;</span>
+  <span class="kd">const</span> <span class="nx">items</span> <span class="o">=</span> <span class="nx">hasMore</span> <span class="o">?</span> <span class="nx">rows</span><span class="p">.</span><span class="nx">slice</span><span class="p">(</span><span class="mf">0</span><span class="p">,</span> <span class="nx">limit</span><span class="p">)</span> <span class="o">:</span> <span class="nx">rows</span><span class="p">;</span>    <span class="c1">// discard the probe row</span>
+
+  <span class="k">return</span> <span class="p">{</span>
+    <span class="nx">items</span><span class="p">,</span>
+    <span class="c1">// No more rows means no cursor. A cursor that returns an empty page is a</span>
+    <span class="c1">// client bug waiting to happen - it will poll forever.</span>
+    <span class="nx">nextCursor</span>: <span class="kt">hasMore</span> <span class="o">?</span> <span class="nx">encodeCursor</span><span class="p">(</span><span class="nx">items</span><span class="p">[</span><span class="nx">items</span><span class="p">.</span><span class="nx">length</span> <span class="o">-</span> <span class="mf">1</span><span class="p">])</span> <span class="o">:</span> <span class="kc">null</span><span class="p">,</span>
+  <span class="p">};</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><strong>The cursor is opaque, and should be unforgeable if it can reach a user:</strong></p>
+<div class="hl"><pre><span></span><code><span class="c1">// Base64url of the sort tuple, signed. Opaque so clients cannot construct one</span>
+<span class="c1">// and pin themselves to a shape you later need to change; signed so a crafted</span>
+<span class="c1">// cursor cannot be used to probe rows the caller may not read.</span>
+<span class="k">export</span> <span class="kd">function</span> <span class="nx">encodeCursor</span><span class="p">(</span><span class="nx">row</span><span class="o">:</span> <span class="p">{</span> <span class="nx">createdAt</span>: <span class="kt">Date</span><span class="p">;</span> <span class="nx">id</span>: <span class="kt">string</span> <span class="p">})</span><span class="o">:</span> <span class="kt">string</span> <span class="p">{</span>
+  <span class="kd">const</span> <span class="nx">payload</span> <span class="o">=</span> <span class="sb">`</span><span class="si">${</span><span class="nx">row</span><span class="p">.</span><span class="nx">createdAt</span><span class="p">.</span><span class="nx">toISOString</span><span class="p">()</span><span class="si">}</span><span class="sb">|</span><span class="si">${</span><span class="nx">row</span><span class="p">.</span><span class="nx">id</span><span class="si">}</span><span class="sb">`</span><span class="p">;</span>
+  <span class="k">return</span> <span class="nx">b64url</span><span class="p">(</span><span class="sb">`</span><span class="si">${</span><span class="nx">payload</span><span class="si">}</span><span class="sb">.</span><span class="si">${</span><span class="nx">hmac</span><span class="p">(</span><span class="nx">payload</span><span class="p">)</span><span class="si">}</span><span class="sb">`</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<h2>5. Golden-standard rules</h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The sort key always carries a unique tie-breaker</td>
+<td>A non-unique sort makes the order non-deterministic and the cursor lands mid-tie</td>
+</tr>
+<tr>
+<td>An index exists matching the exact sort, direction included</td>
+<td>Otherwise this is a scan, and slower than the <code>OFFSET</code> it replaced</td>
+</tr>
+<tr>
+<td>The cursor encodes the last row's key, never a row number</td>
+<td>A number is a position, and positions move</td>
+</tr>
+<tr>
+<td>Cursors are opaque to the client</td>
+<td>A readable cursor becomes a contract you cannot change</td>
+</tr>
+<tr>
+<td>Cursors that reach a user are signed</td>
+<td>An unsigned cursor is an injectable query fragment</td>
+</tr>
+<tr>
+<td>Page size is clamped server-side</td>
+<td><code>?limit=1000000</code> is otherwise a denial of service</td>
+</tr>
+<tr>
+<td>Fetch <code>size + 1</code> to detect the next page</td>
+<td>A <code>COUNT(*)</code> on every page costs more than the page</td>
+</tr>
+<tr>
+<td>The final page returns a null cursor</td>
+<td>A cursor that yields nothing makes clients poll forever</td>
+</tr>
+<tr>
+<td>The sort column and the cursor's column are the same one</td>
+<td>"Sort by title, cursor by id" quietly returns a random subset</td>
+</tr>
+<tr>
+<td>Changing the sort invalidates outstanding cursors</td>
+<td>Detect the mismatch and restart rather than serving nonsense</td>
+</tr>
+<tr>
+<td>No total count unless someone paid for it</td>
+<td>Exact counts on large tables are slow; offer an estimate instead</td>
+</tr>
+<tr>
+<td>The same code paginates internal jobs and exports</td>
+<td>Batch scripts hit <code>OFFSET</code> pathology hardest, at page 5000</td>
+</tr>
+</tbody>
+</table>
+<h2>6. Data contracts</h2>
+<div class="hl"><pre><span></span><code><span class="cm">/** Opaque to the client; a signed tuple internally. */</span>
+<span class="k">export</span> <span class="kr">type</span> <span class="nx">Cursor</span> <span class="o">=</span> <span class="kt">string</span> <span class="o">&amp;</span> <span class="p">{</span> <span class="k">readonly</span> <span class="nx">__brand</span><span class="o">:</span> <span class="s1">&#39;Cursor&#39;</span> <span class="p">};</span>
+
+<span class="k">export</span> <span class="kr">type</span> <span class="nx">Page</span><span class="o">&lt;</span><span class="nx">T</span><span class="o">&gt;</span> <span class="o">=</span> <span class="p">{</span>
+  <span class="nx">items</span>: <span class="kt">T</span><span class="p">[];</span>
+  <span class="cm">/** null means this was the last page. Never an empty-but-present cursor. */</span>
+  <span class="nx">nextCursor</span>: <span class="kt">Cursor</span> <span class="o">|</span> <span class="kc">null</span><span class="p">;</span>
+<span class="p">};</span>
+
+<span class="cm">/** Decoded form. `sort` is carried so a changed sort can be detected. */</span>
+<span class="k">export</span> <span class="kr">type</span> <span class="nx">DecodedCursor</span> <span class="o">=</span> <span class="p">{</span> <span class="nx">sort</span>: <span class="kt">string</span><span class="p">;</span> <span class="nx">key</span><span class="o">:</span> <span class="p">[</span><span class="kt">string</span><span class="p">,</span> <span class="kt">string</span><span class="p">]</span> <span class="p">};</span>
+
+<span class="k">export</span> <span class="kd">const</span> <span class="nx">MAX_PAGE_SIZE</span> <span class="o">=</span> <span class="mf">100</span><span class="p">;</span>
+<span class="k">export</span> <span class="kd">const</span> <span class="nx">DEFAULT_PAGE_SIZE</span> <span class="o">=</span> <span class="mf">20</span><span class="p">;</span>
+</code></pre></div>
+
+<h2>7. Build order</h2>
+<ol>
+<li><strong>The composite index</strong>, as a migration, before any query change.</li>
+<li><strong><code>cursor.ts</code></strong> — encode and decode, with a round-trip test.</li>
+<li><strong>One endpoint</strong> converted, returning <code>items</code> and <code>nextCursor</code>.</li>
+<li><strong>The drift test</strong>, which is the whole point: read page 1, insert five rows,
+   read page 2, assert no item appears twice and none is missing.</li>
+<li><strong>Signing</strong>, once the shape has settled.</li>
+<li><strong>Page size clamping</strong>, with a test at the boundary and past it.</li>
+<li><strong>The remaining endpoints</strong>, one at a time.</li>
+<li><strong>Batch and export paths</strong> — these gain the most and are usually forgotten.</li>
+<li><strong>Sort-change detection</strong>, returning a "restart pagination" error.</li>
+</ol>
+<h2>8. Related reading</h2>
+<p>Every blueprint here stands on its own: nothing below is a prerequisite, and
+nothing above needs any of it to be implemented. These are adjacent problems you
+will meet next, listed so you know they have been thought about.</p>
+<ul>
+<li><strong>The Error Envelope</strong> — the shape for an invalid or stale cursor.</li>
+<li><strong>Validation at the Boundary</strong> — parsing and clamping the query parameters.</li>
+</ul>
+<h2>9. Metrics</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Duplicate items across consecutive pages, under concurrent writes</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Items skipped across consecutive pages, under concurrent deletes</td>
+<td>0</td>
+</tr>
+<tr>
+<td>List query latency, p95, at page 1 vs page 500</td>
+<td>Within 20% of each other</td>
+</tr>
+<tr>
+<td>Rows examined per page (<code>EXPLAIN</code>)</td>
+<td>~ page size; a multiple means the index is not being used</td>
+</tr>
+<tr>
+<td>Invalid cursor rate</td>
+<td>Near zero; a spike means a client is constructing them</td>
+</tr>
+<tr>
+<td>Endpoints still using <code>OFFSET</code></td>
+<td>0, or listed with a reason</td>
+</tr>
+</tbody>
+</table>
+<h2>10. Failure modes</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A user reports seeing the same post twice</td>
+<td><code>OFFSET</code> with concurrent inserts</td>
+<td>Keyset pagination</td>
+</tr>
+<tr>
+<td>Items missing from a feed nobody deleted</td>
+<td><code>OFFSET</code> with concurrent deletes</td>
+<td>Same</td>
+</tr>
+<tr>
+<td>Page 500 times out, page 1 is instant</td>
+<td><code>OFFSET</code> scanning and discarding</td>
+<td>Keyset — cost stops depending on depth</td>
+</tr>
+<tr>
+<td>Rows occasionally dropped at page edges</td>
+<td>Non-unique sort key, no tie-breaker</td>
+<td>Add the primary key to sort and cursor</td>
+</tr>
+<tr>
+<td>Pagination slower after the change</td>
+<td>Index missing or direction mismatched</td>
+<td>Index must match the <code>ORDER BY</code> exactly</td>
+</tr>
+<tr>
+<td>Clients loop forever on the last page</td>
+<td>Final page returned a non-null cursor</td>
+<td>Return null when there is no next page</td>
+</tr>
+<tr>
+<td>A crafted cursor returned another tenant's rows</td>
+<td>Cursor unsigned and trusted</td>
+<td>Sign it; re-apply the tenant filter regardless</td>
+</tr>
+<tr>
+<td>Results went wrong after a sort change</td>
+<td>Old cursors decoded against a new sort</td>
+<td>Encode the sort; detect mismatch and restart</td>
+</tr>
+<tr>
+<td>Memory blew up on one request</td>
+<td>Unclamped page size</td>
+<td>Clamp server-side</td>
+</tr>
+</tbody>
+</table>
+<h2>11. Definition of done</h2>
+<ul>
+<li class="task">Every paginated query has an index matching its exact sort, direction included.</li>
+<li class="task">Every sort key includes a unique tie-breaker.</li>
+<li class="task">A test reads page 1, writes rows, reads page 2, and asserts no duplicates and no gaps.</li>
+<li class="task">The same test passes for concurrent deletes.</li>
+<li class="task">Cursors are opaque, and signed wherever a client can see them.</li>
+<li class="task">Page size is clamped server-side and covered by a test past the limit.</li>
+<li class="task">The last page returns a null cursor.</li>
+<li class="task"><code>EXPLAIN</code> shows an index scan examining about one page of rows, not a sequential scan.</li>
+<li class="task">Latency at a deep page is within 20% of the first page.</li>
+<li class="task">No endpoint uses <code>OFFSET</code> except where a reason is written down.</li>
+</ul>
+  </article>
+
+  <aside class="tailpiece">
+    <h2>Use this blueprint</h2>
+    <p>
+      Copy the file into your project and point your agent at it. It works with Claude Code,
+      Cursor, Copilot, ChatGPT and anything else that reads a file — there is nothing to install.
+    </p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ysz7/awesome-ai-blueprints/tree/main/blueprints/cursor-pagination" target="_blank" rel="noopener">Open on GitHub ↗</a>
+      <a class="btn" href="/#blueprints">Browse all blueprints</a>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p><a href="/">Awesome Blueprints</a> — same request, same architecture, every time.</p>
+    <p class="dim">MIT · awesomeblueprints.com</p>
+  </div>
+</footer>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'neutral' });
+</script>
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const now = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', now);
+    try { localStorage.setItem('ab-theme', now); } catch (e) {}
+    location.reload();   // the diagram is themed at render time
+  });
+</script>
+
+</body>
+</html>
